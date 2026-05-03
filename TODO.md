@@ -1,6 +1,6 @@
-# REMI — Responsive Embedded Machine Intelligence
+# S.T.A.R.L.I.N.G. — Speech‑Triggered Autonomous Reasoning & Local Intelligence Node Generator
 
-A voice-driven, REMI-style web interface powered by a local LLM via Ollama.
+A voice-driven, S.T.A.R.L.I.N.G.-style web interface powered by a local LLM via Ollama.
 
 ---
 
@@ -14,7 +14,7 @@ A voice-driven, REMI-style web interface powered by a local LLM via Ollama.
 - [x] Add `LICENSE` file (MIT)
 
 ```
-remi-local/
+starling-local/
 ├── frontend/           # HTML/CSS/JS or React app
 │   ├── index.html
 │   ├── style.css
@@ -42,7 +42,7 @@ remi-local/
 - [x] Test the REST API manually: confirmed working (`llama3.1:8b` responds correctly)
 - [x] Document recommended models + VRAM requirements in README
 - [x] Add model config to `.env` (model name, API base URL, temperature, system prompt)
-- [x] Optionally write a system prompt to give the AI a "REMI" persona
+- [x] Optionally write a system prompt to give the AI a "S.T.A.R.L.I.N.G." persona
 
 ---
 
@@ -68,13 +68,13 @@ remi-local/
 ### Option A — Browser SpeechSynthesis (easiest)
 - [ ] Implement `SpeechSynthesisUtterance` in `app.js`
 - [ ] Let user pick voice from available system voices
-- [ ] Tune `rate`, `pitch`, and `volume` for a robotic REMI feel
+- [ ] Tune `rate`, `pitch`, and `volume` for a robotic S.T.A.R.L.I.N.G. feel
 
 ### Option B — Kokoro TTS (best local quality)
 - [ ] Install Kokoro: `pip install kokoro-onnx`
 - [ ] Write `backend/tts.py` with a `/synthesize` POST endpoint
 - [ ] Return audio as WAV/MP3, play via `<audio>` element in frontend
-- [ ] Pick a voice that fits the REMI aesthetic
+- [ ] Pick a voice that fits the S.T.A.R.L.I.N.G. aesthetic
 
 ### Option C — Piper TTS (fastest, lower quality)
 - [ ] Download Piper binary from GitHub releases
@@ -129,7 +129,7 @@ remi-local/
 - [ ] Add settings panel: switch models, change voice, adjust temperature
 - [ ] Add conversation export (save chat to .txt or .md)
 - [ ] Add auto-scroll to bottom of chat on new messages
-- [ ] Optional: wake word detection ("Hey REMI") using Web Audio API
+- [ ] Optional: wake word detection ("Hey STARLING") using Web Audio API
 - [ ] Optional: sound effects on mic activate / response start
 
 ---

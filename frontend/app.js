@@ -1,15 +1,15 @@
 // ── Config ────────────────────────────────────────────────────────────────────
 const OLLAMA_BASE  = 'http://localhost:11434';
 const BACKEND_BASE = 'http://localhost:8000';
-const MODEL        = localStorage.getItem('remi_model') || 'llama3.1:8b';
+const MODEL        = localStorage.getItem('starling_model') || 'llama3.1:8b';
 const SYSTEM_PROMPT =
-  'You are REMI (Responsive Embedded Machine Intelligence), a highly capable local AI assistant. Be concise, precise, and direct. Avoid unnecessary pleasantries.';
+  'You are S.T.A.R.L.I.N.G. (Speech‑Triggered Autonomous Reasoning & Local Intelligence Node Generator), a highly capable local AI assistant. Be concise, precise, and direct. Avoid unnecessary pleasantries.';
 
 // ── Conversation state ────────────────────────────────────────────────────────
 let conversationHistory = [{ role: 'system', content: SYSTEM_PROMPT }];
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
-const remiEl     = document.getElementById('remi');
+const starlingEl = document.getElementById('starling');
 const chatInner  = document.getElementById('chat-inner');
 const micBtn     = document.getElementById('mic-btn');
 const textInput  = document.getElementById('text-input');
@@ -82,8 +82,8 @@ const ALL_STATE_CLASSES = ['state-listening', 'state-thinking', 'state-speaking'
 
 function setState(name) {
   const s = STATE_CFG[name] ?? STATE_CFG.idle;
-  ALL_STATE_CLASSES.forEach(c => remiEl.classList.remove(c));
-  if (s.cls) remiEl.classList.add(s.cls);
+  ALL_STATE_CLASSES.forEach(c => starlingEl.classList.remove(c));
+  if (s.cls) starlingEl.classList.add(s.cls);
   ringIcon.textContent   = s.icon;
   ringState.textContent  = s.label;
   statStatus.textContent = s.status;
@@ -96,7 +96,7 @@ function appendMessage(role, content) {
 
   const lbl = document.createElement('span');
   lbl.className   = 'msg-lbl';
-  lbl.textContent = role === 'user' ? 'YOU' : 'R.E.M.I.';
+  lbl.textContent = role === 'user' ? 'YOU' : 'S.T.A.R.L.I.N.G.';
 
   const txt = document.createElement('span');
   txt.className   = 'msg-text';
@@ -279,5 +279,5 @@ document.addEventListener('keyup', e => {
 // ── Init ──────────────────────────────────────────────────────────────────────
 statModel.textContent = MODEL;
 appendMessage('assistant',
-  `All systems nominal. REMI online — running ${MODEL} on GPU via Ollama. How can I assist?`);
+  `All systems nominal. S.T.A.R.L.I.N.G. online — running ${MODEL} on GPU via Ollama. How can I assist?`);
 setState('idle');

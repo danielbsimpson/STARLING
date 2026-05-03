@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-app = FastAPI(title="REMI Backend")
+app = FastAPI(title="S.T.A.R.L.I.N.G. Backend")
 
 app.add_middleware(
     CORSMiddleware,
