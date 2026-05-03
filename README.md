@@ -6,7 +6,7 @@ A voice-driven, S.T.A.R.L.I.N.G. (Speech‑Triggered Autonomous Reasoning & Loca
 Microphone → Speech-to-Text → Ollama (LLM on GPU) → Text-to-Speech → Browser UI
 ```
 
-![S.T.A.R.L.I.N.G. UI](assets/images/REMI_UI_example.png)
+![S.T.A.R.L.I.N.G. UI](assets/images/REMI_UI_example2.png)
 
 ---
 
