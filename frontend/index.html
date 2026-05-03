@@ -3,19 +3,106 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>JARVIS — Local AI</title>
+  <title>J.A.R.V.I.S. — Local AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;600&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div id="app">
-    <h1>J.A.R.V.I.S.</h1>
-    <div id="status">Initializing...</div>
-    <div id="chat-window"></div>
-    <div id="controls">
-      <button id="mic-btn">&#127908; Hold to Speak</button>
-      <input type="text" id="text-input" placeholder="Or type a message..." />
-      <button id="send-btn">Send</button>
+  <div class="jarvis" id="jarvis">
+
+    <!-- Decorative background -->
+    <div class="grid-bg"></div>
+    <div class="corner tl"></div>
+    <div class="corner tr"></div>
+    <div class="corner bl"></div>
+    <div class="corner br"></div>
+
+    <!-- Header -->
+    <header class="hdr">
+      <div class="hdr-title">
+        <div class="hdr-system">LOCAL AI SYSTEM v2.0</div>
+        <div class="hdr-name">J.A.R.V.I.S.</div>
+      </div>
+      <div class="hdr-stats">
+        <div class="stat">
+          <div class="stat-lbl">GPU</div>
+          <div class="stat-val" id="stat-gpu">RTX 4060</div>
+        </div>
+        <div class="stat">
+          <div class="stat-lbl">MODEL</div>
+          <div class="stat-val" id="stat-model">—</div>
+        </div>
+        <div class="stat">
+          <div class="stat-lbl">STATUS</div>
+          <div class="stat-val" id="stat-status">INIT</div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Ring + waveform -->
+    <div class="ring-section">
+      <div class="ring-wrap">
+        <div class="pulse-ring"></div>
+        <div class="pulse-ring"></div>
+        <svg class="ring-svg" viewBox="0 0 160 160" aria-hidden="true">
+          <!-- Outer ring -->
+          <circle cx="80" cy="80" r="68" fill="none" stroke="rgba(0,212,255,0.07)" stroke-width="2"/>
+          <circle cx="80" cy="80" r="68" fill="none" stroke="#00d4ff" stroke-width="2"
+            stroke-dasharray="427" stroke-dashoffset="107" stroke-linecap="round"
+            transform="rotate(-90 80 80)" opacity="0.65"/>
+          <!-- Middle ring -->
+          <circle cx="80" cy="80" r="56" fill="none" stroke="rgba(0,255,204,0.07)" stroke-width="1.5"/>
+          <circle cx="80" cy="80" r="56" fill="none" stroke="#00ffcc" stroke-width="1.5"
+            stroke-dasharray="352" stroke-dashoffset="176" stroke-linecap="round"
+            transform="rotate(-90 80 80)" opacity="0.45"/>
+          <!-- Inner dashed ring -->
+          <circle cx="80" cy="80" r="44" fill="none" stroke="rgba(0,212,255,0.05)" stroke-width="1"/>
+          <circle cx="80" cy="80" r="44" fill="none" stroke="rgba(0,212,255,0.18)" stroke-width="1"
+            stroke-dasharray="3 9" transform="rotate(-90 80 80)"/>
+        </svg>
+        <div class="ring-center">
+          <div class="ring-icon" id="ring-icon">🎙</div>
+          <div class="ring-state" id="ring-state">READY</div>
+        </div>
+      </div>
+      <!-- Waveform bars injected by JS -->
+      <div class="waveform" id="waveform" aria-hidden="true"></div>
     </div>
+
+    <!-- Chat -->
+    <div class="chat-panel">
+      <div class="chat-inner" id="chat-inner"></div>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls">
+      <button class="mic-btn" id="mic-btn" title="Hold to speak — or hold Space">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="9" y="2" width="6" height="12" rx="3"/>
+          <path d="M5 10a7 7 0 0 0 14 0"/>
+          <line x1="12" y1="19" x2="12" y2="22"/>
+          <line x1="8" y1="22" x2="16" y2="22"/>
+        </svg>
+      </button>
+      <div class="input-wrap">
+        <input class="text-input" id="text-input" type="text"
+          placeholder="or type a command..." autocomplete="off" spellcheck="false" />
+      </div>
+      <button class="send-btn" id="send-btn">SEND ↗</button>
+      <button class="clear-btn" id="clear-btn" title="Clear conversation">⌀</button>
+    </div>
+
+    <!-- Footer -->
+    <footer class="ftr">
+      <div class="ftr-item">OLLAMA <span>localhost:11434</span></div>
+      <div class="ftr-item">STT <span>Whisper (local)</span></div>
+      <div class="ftr-item">TTS <span>Web Speech</span></div>
+      <div class="ftr-item">SPACE <span>push-to-talk</span></div>
+    </footer>
+
   </div>
   <script src="app.js"></script>
 </body>

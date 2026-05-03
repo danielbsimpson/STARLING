@@ -48,19 +48,18 @@ jarvis-local/
 
 ## Phase 3 — Speech-to-Text (STT)
 
-### Option A — Browser Web Speech API (easiest)
-- [ ] Implement `webkitSpeechRecognition` in `app.js`
-- [ ] Add push-to-talk button with visual feedback
-- [ ] Handle `onresult`, `onerror`, and `onend` events
-- [ ] Test cross-browser compatibility (Chrome recommended)
+### Option A — Browser Web Speech API ~~(easiest)~~
+- [x] ~~Implement `webkitSpeechRecognition`~~ — skipped, sends audio to Google (not local)
+- [x] ~~Handle `onresult`, `onerror`, and `onend` events~~ — replaced by MediaRecorder approach
+- [x] Push-to-talk button with visual feedback (hold to record, release to send)
 
-### Option B — Local Whisper (higher accuracy)
-- [ ] Install faster-whisper: `pip install faster-whisper`
-- [ ] Write `backend/stt.py` with a `/transcribe` POST endpoint
-- [ ] Accept audio blob from frontend (MediaRecorder API)
-- [ ] Return transcript as JSON
-- [ ] Choose model size: `tiny` (fast) → `base` → `small` → `medium`
-- [ ] Confirm GPU acceleration is working for Whisper
+### Option B — Local Whisper (higher accuracy) ✅ CHOSEN
+- [x] Install faster-whisper: installed into `.venv` (v1.2.1)
+- [x] Write `backend/stt.py` with a `/transcribe` POST endpoint
+- [x] Accept audio blob from frontend (MediaRecorder API)
+- [x] Return transcript as JSON
+- [x] Model size: `base` (configurable via `WHISPER_MODEL_SIZE` in `.env`)
+- [x] Confirm GPU acceleration is working for Whisper (CUDA device count: 1 ✅)
 
 ---
 
@@ -86,16 +85,16 @@ jarvis-local/
 
 ## Phase 5 — Frontend UI
 
-- [ ] Build base HTML layout with the HUD aesthetic (dark bg, cyan tones)
-- [ ] Add animated waveform bars (CSS + JS animation)
-- [ ] Add arc reactor / ring SVG animation
-- [ ] Display live streamed LLM response text (token by token)
-- [ ] Show STT transcript in real time as user speaks
-- [ ] Add status indicators (GPU, model name, STT/TTS engine)
-- [ ] Wire mic button: start recording → STT → send to LLM → TTS
-- [ ] Add text input fallback for when mic is unavailable
-- [ ] Make UI responsive for different screen sizes
-- [ ] Add keyboard shortcut (e.g. spacebar) to trigger mic
+- [x] Build base HTML layout with the HUD aesthetic (dark bg, cyan tones)
+- [x] Add animated waveform bars (CSS + JS animation, real AudioAnalyser during recording)
+- [x] Add arc reactor / ring SVG animation (idle drift + fast spin when thinking, glow when listening)
+- [x] Display live streamed LLM response text (token by token with blinking cursor)
+- [x] Show STT transcript in real time as user speaks (transcript appended on stop)
+- [x] Add status indicators (GPU, model name, STT/TTS engine in footer; status in header)
+- [x] Wire mic button: start recording → STT → send to LLM → TTS
+- [x] Add text input fallback for when mic is unavailable
+- [x] Make UI responsive for different screen sizes (clamp-based sizing)
+- [x] Add keyboard shortcut (spacebar push-to-talk)
 
 ---
 
