@@ -58,7 +58,7 @@ Change the active model by setting `OLLAMA_MODEL` in `.env` or `localStorage.set
 ## Project Structure
 
 ```
-starling-local/
+llm-speech-UI/
 ├── frontend/           # UI — HTML/CSS/JS (or React + Vite)
 │   ├── index.html
 │   ├── style.css
@@ -97,8 +97,8 @@ ollama run llama3
 ### 2. Clone the repo
 
 ```bash
-git clone https://github.com/yourname/starling-local.git
-cd starling-local
+git clone https://github.com/danielbsimpson/llm-speech-UI.git
+cd llm-speech-UI
 ```
 
 ### 3a. Frontend only (easiest — no Python needed)
