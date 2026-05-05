@@ -14,16 +14,13 @@ _WHISPER_MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "base")
 _DEVICE = os.getenv("WHISPER_DEVICE", "cuda")
 
 # Pre-validate CUDA availability so we don't get a noisy crash on first inference.
-# faster-whisper needs ctranslate2's CUDA support + cublas64_12.dll on Windows.
 def _resolve_device(requested: str) -> str:
     if requested != "cuda":
         return requested
     try:
         import ctranslate2
         if ctranslate2.get_cuda_device_count() < 1:
-            raise RuntimeError("no CUDA devices")
-        # Quick dummy encode to surface missing DLL before the first real request.
-        _test = ctranslate2.StorageView([1], dtype=ctranslate2.DataType.int8, device="cuda")
+            raise RuntimeError("no CUDA devices visible to ctranslate2")
         return "cuda"
     except Exception as exc:
         logger.warning("CUDA unavailable for Whisper (%s) — using CPU/int8.", exc)

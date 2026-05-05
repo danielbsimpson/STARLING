@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import io
 import logging
+import os
 from pathlib import Path
 
+import onnxruntime as _ort
 import soundfile as sf
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse, Response
@@ -15,6 +17,14 @@ from pydantic import BaseModel
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/synthesize", tags=["tts"])
 
+# ── Log active ONNX provider at import time so it shows in server startup output ─
+_onnx_provider = os.getenv("ONNX_PROVIDER")
+_available = _ort.get_available_providers()
+if _onnx_provider:
+    log.info("Kokoro ONNX provider (from env): %s", _onnx_provider)
+else:
+    log.info("Kokoro ONNX provider (auto): %s — set ONNX_PROVIDER to override", _available[0])
+
 # ── Model file paths ───────────────────────────────────────────────────────────
 _MODEL_DIR   = Path(__file__).parent.parent / "models"
 _ONNX_PATH   = _MODEL_DIR / "kokoro-v1.0.onnx"
@@ -22,19 +32,31 @@ _VOICES_PATH = _MODEL_DIR / "voices-v1.0.bin"
 
 # ── Lazy singleton — loaded on first request ───────────────────────────────────
 _kokoro: Kokoro | None = None
+_gpu_failed: bool = False  # set True after a GPU inference error; forces CPU reload
+
+
+def _build_kokoro(provider: str | None) -> Kokoro:
+    """Instantiate Kokoro, overriding ONNX_PROVIDER if needed."""
+    if provider is not None:
+        os.environ["ONNX_PROVIDER"] = provider
+    elif "ONNX_PROVIDER" in os.environ:
+        del os.environ["ONNX_PROVIDER"]
+    k = Kokoro(str(_ONNX_PATH), str(_VOICES_PATH))
+    log.info("Kokoro TTS ready — session providers: %s", k.sess.get_providers())
+    return k
 
 
 def _get_kokoro() -> Kokoro:
-    global _kokoro
+    global _kokoro, _gpu_failed
     if _kokoro is None:
         if not _ONNX_PATH.exists() or not _VOICES_PATH.exists():
             raise RuntimeError(
                 "Kokoro model files not found in models/. "
                 "Run: python scripts/download_models.py"
             )
-        log.info("Loading Kokoro TTS model (first request)…")
-        _kokoro = Kokoro(str(_ONNX_PATH), str(_VOICES_PATH))
-        log.info("Kokoro TTS ready.")
+        log.info("Loading Kokoro TTS model (first request)\u2026")
+        provider = None if _gpu_failed else _onnx_provider
+        _kokoro = _build_kokoro(provider)
     return _kokoro
 
 
@@ -95,9 +117,24 @@ async def synthesize(req: TTSRequest):
 
     try:
         lang = _VOICE_MAP[req.voice]["lang"]
-        samples, sample_rate = kokoro.create(
-            req.text, voice=req.voice, speed=req.speed, lang=lang
-        )
+        try:
+            samples, sample_rate = kokoro.create(
+                req.text, voice=req.voice, speed=req.speed, lang=lang
+            )
+        except Exception as gpu_exc:
+            global _kokoro, _gpu_failed
+            if _gpu_failed:
+                raise  # already on CPU — nothing left to try
+            log.warning(
+                "Kokoro GPU inference failed (%s) — reloading on CPUExecutionProvider.",
+                gpu_exc,
+            )
+            _gpu_failed = True
+            _kokoro = None  # force reload on next _get_kokoro() call
+            kokoro = _get_kokoro()  # rebuilds with CPUExecutionProvider
+            samples, sample_rate = kokoro.create(
+                req.text, voice=req.voice, speed=req.speed, lang=lang
+            )
         buf = io.BytesIO()
         sf.write(buf, samples, sample_rate, format="WAV")
         return Response(content=buf.getvalue(), media_type="audio/wav")
