@@ -6,17 +6,15 @@ A voice-driven, S.T.A.R.L.I.N.G.-style web interface powered by a local LLM via 
 
 ## Current Issues
 
-| # | Component | Description | Suspected Cause |
+| # | Component | Description | Status |
 |---|---|---|---|
-| 1 | TTS (Kokoro) | Speech playback is noticeably lagged behind text appearing in the UI — the full LLM response streams and renders, then a long pause occurs before audio begins | Kokoro synthesis runs synchronously on the full response string after streaming completes; cold-start ONNX inference on CPU takes 2–8 s per call |
-| 2 | TTS / STT GPU utilisation | CPU usage spikes sharply during Kokoro synthesis and Whisper transcription but GPU VRAM/utilisation shows no change — neither pipeline appears to be dispatching work to the GPU | `kokoro-onnx[gpu]` requires `onnxruntime-gpu` with matching CUDA/cuDNN versions; Whisper CUDA fell back to CPU at startup due to missing `cublas64_12.dll` (CUDA 12 library absent from this install). Both are currently running on CPU/int8 |
+| 1 | TTS (Kokoro) | Speech playback is lagged ~3–4 s behind text appearing in the UI — full response completes before audio begins | ✅ Resolved — all pipelines migrated to GPU; delay reduced from 2–8 s to ~3–4 s. Sentence-chunked TTS (Phase 7) remains as a further improvement |
+| 2 | TTS / STT GPU utilisation | CPU usage spiked during synthesis and transcription; neither pipeline was dispatching to the GPU | ✅ Resolved — Kokoro and Whisper now run on GPU; `onnxruntime-gpu` and CUDA libraries confirmed working |
 
 **Potential fixes to investigate:**
 - **TTS lag**: implement sentence-chunked TTS — split the streamed response on `.`, `?`, `!` boundaries and synthesise + play each sentence as it completes rather than waiting for the full response (see Phase 7)
-- **GPU for Kokoro**: verify `onnxruntime-gpu` version matches installed CUDA runtime; may need `onnxruntime-gpu==1.17.x` pinned to CUDA 11.8, or install CUDA 12.x + cuDNN 9.x to match what `kokoro-onnx[gpu]` expects
-- **GPU for Whisper**: install `cublas64_12.dll` (part of CUDA Toolkit 12.x) or downgrade `faster-whisper` to a build targeting CUDA 11.8
 
-**Monitoring**: The `/system-status` endpoint and footer device badges (added May 2026) now surface GPU vs CPU state for all three pipelines in real time after each exchange, making it easy to verify when GPU dispatch is fixed.
+**Monitoring**: The `/system-status` endpoint and footer device badges surface GPU vs CPU state for all three pipelines in real time after each exchange.
 
 ---
 
@@ -150,10 +148,16 @@ starling-local/
 - [x] Show error messages in UI (model not found, Ollama offline, STT/TTS errors)
 - [x] Add auto-scroll to bottom of chat on new messages
 - [x] Per-model GPU/CPU device indicators in footer (Whisper / Kokoro / Ollama badges, updated after each exchange)
-- [ ] Add settings panel: switch models, change voice, adjust temperature
-- [ ] Add conversation export (save chat to .txt or .md)
+- [x] Add settings panel: change voice
+- [ ] Add settings panel: switch models, adjust temperature
 - [ ] Optional: wake word detection ("Hey STARLING") using Web Audio API
 - [ ] Optional: sound effects on mic activate / response start
+
+### Design improvements
+- [x] Full-width layout — remove side margins/borders so the interface fills the entire browser window
+- [x] Borderless chat bubbles — remove visible borders from STARLING and user message containers for a cleaner look
+- [x] Chat bubble alignment — user messages aligned to the right, STARLING messages aligned to the left
+- [x] Monochrome theme — rework colour palette to blacks, greys, and whites; replace cyan accent tones with light-grey/white highlights
 
 ---
 
@@ -171,7 +175,7 @@ starling-local/
 ## Stretch Goals
 
 - [ ] Add tool use / function calling (weather, web search, calendar)
-- [ ] Visualize GPU/CPU load live in the HUD
+- [X] Visualize GPU/CPU load live in the HUD
 - [ ] Add multiple AI "modes" (assistant, coder, analyst) with different system prompts
 - [ ] Package as an Electron desktop app for no-browser-needed launch
 - [ ] Add local RAG (retrieval-augmented generation) with a document folder
