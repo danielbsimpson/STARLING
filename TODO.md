@@ -11,6 +11,7 @@ A voice-driven, S.T.A.R.L.I.N.G.-style web interface powered by a local LLM via 
 | 1 | TTS (Kokoro) | Speech playback is lagged ~3–4 s behind text appearing in the UI — full response completes before audio begins | ✅ Resolved — all pipelines migrated to GPU; delay reduced from 2–8 s to ~3–4 s. Sentence-chunked TTS (Phase 7) remains as a further improvement |
 | 2 | TTS / STT GPU utilisation | CPU usage spiked during synthesis and transcription; neither pipeline was dispatching to the GPU | ✅ Resolved — Kokoro and Whisper now run on GPU; `onnxruntime-gpu` and CUDA libraries confirmed working |
 | 3 | STT (listening mode) | Recording stops too early — silence detection cuts off the user mid-sentence before they have finished speaking | 🔴 Open |
+| 4 | TTS (Kokoro) | LLM responses containing markdown/punctuation symbols are vocalised literally — e.g. `*` is spoken as "asterisk", `.` as "dot", `#` as "hash" — making speech sound unnatural and robotic | 🔴 Open |
 
 **Potential fixes to investigate:**
 - **TTS lag**: implement sentence-chunked TTS — split the streamed response on `.`, `?`, `!` boundaries and synthesise + play each sentence as it completes rather than waiting for the full response (see Phase 7)
@@ -22,6 +23,12 @@ A voice-driven, S.T.A.R.L.I.N.G.-style web interface powered by a local LLM via 
   - **Streaming chunked STT**: stream audio to the backend in small chunks via WebSocket; transcribe each chunk with Whisper and only finalise when a real pause is detected rather than relying on the frontend to decide when to stop recording
   - **Push-to-talk only mode**: remove automatic stop entirely — user holds spacebar/button for the full utterance; eliminates all VAD false-positives at the cost of requiring deliberate release
   - **Configurable silence timeout in settings panel**: expose the silence threshold (ms) as a slider in the settings panel so users can tune it for their microphone / speaking style without a code change
+- **Symbol vocalisation (Issue #4)** — approaches ranked by effort:
+  - **Frontend text sanitiser (lowest effort)**: before passing the LLM response text to the TTS endpoint, run a `sanitiseForSpeech()` function in `app.js` that strips or rewrites common markdown/punctuation symbols — remove `*`, `**`, `_`, `` ` ``, `#`; replace ` — ` with a pause comma; replace `:` at end of a phrase with nothing; etc. This catches the most common cases with zero backend changes
+  - **Backend sanitiser in `tts.py`**: apply the same regex cleanup in the `/synthesize` endpoint before passing text to Kokoro — ensures the fix applies regardless of which client calls the API
+  - **LLM system-prompt instruction**: add an explicit instruction to the STARLING system prompt telling the model never to use markdown formatting in its responses ("respond in plain prose only, no bullet points, no asterisks, no headers") — reduces the problem at the source but does not eliminate it entirely since the model may ignore it
+  - **SSML-aware TTS**: switch to a TTS engine that accepts SSML input (e.g. XTTS-v2, edge-tts) and map markdown structures to SSML pause/emphasis tags — most natural output but highest effort
+  - **Sentence-chunked pipeline synergy**: combining with sentence-chunked TTS (Issue #1 follow-up) means the sanitiser runs per-sentence before synthesis, making it easier to test and tune incrementally
 
 **Monitoring**: The `/system-status` endpoint and footer device badges surface GPU vs CPU state for all three pipelines in real time after each exchange.
 
@@ -176,13 +183,15 @@ The 👂 emoji clashes with the HUD aesthetic. The indicator should still clearl
 - **Dot-matrix text label**: replace the emoji with a monospaced, letter-spaced `LISTENING…` label in a small caps style that blinks or fades in/out — purely typographic, fits the HUD font language
 - **Corner bracket blink**: flash the four corner-bracket elements (if present in the layout) in sync with the recording state — subtle, structural, no icons required
 - **Mic button state transform**: morph the mic button icon into a minimalist animated waveform SVG (three vertical bars of varying height) only while recording, returning to the static icon when idle
-- **Living black sphere** ⭐: replace the flat ring entirely with a 3-D sphere rendered on a `<canvas>` or via a WebGL/Three.js scene. The sphere sits in the same central position and has the following layered behaviours:
-  - *Base appearance*: a near-perfect matte black sphere with a very subtle specular highlight — appears almost featureless until the light source moves
-  - *Ambient light drift*: a single diffuse point light orbits the sphere on a slow, randomised path (e.g. a Lissajous or Perlin-noise-driven trajectory) — as it moves, it grazes the sphere's limb and casts a soft gradient that shifts around the silhouette, giving the impression the sphere is alive without being animated in an obvious way
-  - *Idle state*: light drift only; sphere surface is perfectly smooth and still
-  - *Thinking state*: light orbit speed increases slightly; a faint internal glow pulses from the centre outward (emissive bloom)
-  - *Listening state*: the sphere surface deforms in real time using microphone input — audio amplitude values from the `AnalyserNode` are mapped to vertex displacement on the sphere mesh, so the surface ripples and bulges as the user speaks, as if the sound waves are physically striking it; deformation snaps back to smooth when audio energy drops
-  - *Implementation options*: Three.js `SphereGeometry` with per-vertex displacement driven by `getByteFrequencyData`; alternatively a GLSL fragment shader using a normal-map perturbation + rim-lighting trick for a lower-overhead approach that still reads convincingly as a 3-D sphere without true geometry deformation
+- **Living black sphere** ⭐ ✅ **Implemented**: replaced the flat ring with a Three.js scene featuring a matte black `MeshPhongMaterial` sphere with per-vertex audio-driven displacement, a 4-state machine (idle / listening / thinking / speaking), and 5 orbiting PointLight orbs:
+  - *Base appearance*: ✅ matte black sphere with subtle specular highlight
+  - *Ambient light drift*: ✅ 5 PointLight orbs orbit on independently tilted planes (varied `tiltX` / `tiltZ`) — smooth, continuous motion using a delta-time accumulator
+  - *Idle state*: ✅ orbs glow white at standard speed; sphere surface is smooth
+  - *Thinking state*: ✅ state-machine drives CSS class transition; sphere deformation off
+  - *Listening state*: ✅ orbs shift to blue (`#88bbff`), orbit speed ramps to 1.6× via smooth lerp; sphere surface deforms in real time driven by `AnalyserNode` frequency data
+  - *Speaking state*: ✅ orbs shift to warm yellow (`#ffdd88`), orbit speed ramps to 1.4×; signals TTS playback
+  - *Orb glow on sphere*: ✅ PointLight `distance=0, decay=0` for unlimited-range illumination; intensity 8 (idle) / 10 (speaking) / 12 (listening)
+  - *Orb count*: ✅ 5 orbs (increased from 3) with distinct speeds, phases, and orbital planes
 
 #### Conversation window — bubbleless layout
 Remove background/border styling from message containers so text floats freely. Ideas to differentiate STARLING vs USER without bubbles:
