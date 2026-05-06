@@ -15,8 +15,7 @@ const micBtn      = document.getElementById('mic-btn');
 const textInput   = document.getElementById('text-input');
 const sendBtn     = document.getElementById('send-btn');
 const clearBtn    = document.getElementById('clear-btn');
-const ringIcon    = document.getElementById('ring-icon');
-const ringState   = document.getElementById('ring-state');
+
 const statModel   = document.getElementById('stat-model');
 const statStatus  = document.getElementById('stat-status');
 const waveformEl  = document.getElementById('waveform');
@@ -27,6 +26,10 @@ const ftrTts      = document.getElementById('ftr-tts');
 const ftrWhisperDev = document.getElementById('ftr-whisper-dev');
 const ftrKokoroDev  = document.getElementById('ftr-kokoro-dev');
 const ftrOllamaDev  = document.getElementById('ftr-ollama-dev');
+
+// ── Sphere shared state ─────────────────────────────────────────────────────────────
+const sphereStateRef    = { current: 'idle' };
+const sphereAnalyserRef = { an: null, data: null };
 
 // ── System status ────────────────────────────────────────────────────────────
 async function fetchSystemStatus() {
@@ -77,6 +80,8 @@ function startAudioViz(stream) {
   an.fftSize = 128;
   src.connect(an);
   const data = new Uint8Array(an.frequencyBinCount);
+  sphereAnalyserRef.an   = an;
+  sphereAnalyserRef.data = data;
   function tick() {
     an.getByteFrequencyData(data);
     bars.forEach((b, i) => {
@@ -89,18 +94,174 @@ function startAudioViz(stream) {
 }
 function stopAudioViz() {
   cancelAnimationFrame(analyserRaf);
+  sphereAnalyserRef.an   = null;
+  sphereAnalyserRef.data = null;
   idleActive = true;
   idleTick();
 }
 
+// ── Three.js living sphere ─────────────────────────────────────────────────────────────
+function initSphere() {
+  if (typeof THREE === 'undefined') {
+    console.warn('S.T.A.R.L.I.N.G.: Three.js not loaded — sphere unavailable');
+    return;
+  }
+  const canvas = document.getElementById('sphere-canvas');
+  if (!canvas) return;
+
+  const SIZE = 210;
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setSize(SIZE, SIZE);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  if (THREE.SRGBColorSpace) renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+  const scene  = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+  camera.position.z = 6.2;
+
+  // Very dim ambient — keeps the sphere face close to black
+  scene.add(new THREE.AmbientLight(0xffffff, 0.025));
+
+  // ── 5 orbiting light orbs ──────────────────────────────────────────────────
+  // Each orb is a small visible sphere (MeshBasicMaterial so it always glows)
+  // plus a PointLight that illuminates the main sphere.
+  // Each orb orbits at a fixed radius in a plane tilted by tiltX / tiltZ —
+  // distance from centre is always exactly r, so they can never enter the sphere.
+  const ORB_WHITE  = new THREE.Color(0xffffff);
+  const ORB_BLUE   = new THREE.Color(0x88bbff);
+  const ORB_YELLOW = new THREE.Color(0xffdd88);
+
+  const orbDefs = [
+    { r: 1.65, speed: 0.19, phase: 0.0, tiltX: 0.30, tiltZ: 0.00  },
+    { r: 1.65, speed: 0.14, phase: 2.1, tiltX: 1.15, tiltZ: 0.50  },
+    { r: 1.65, speed: 0.23, phase: 4.2, tiltX: 0.70, tiltZ: -0.90 },
+    { r: 1.65, speed: 0.17, phase: 1.1, tiltX: -0.55, tiltZ: 1.20 },
+    { r: 1.65, speed: 0.21, phase: 3.5, tiltX: -1.00, tiltZ: -0.40 },
+  ];
+
+  let orbSpeedMult = 1.0; // smoothly interpolated speed multiplier
+  let orbTimeAccum  = 0;   // accumulated orbit time (scaled by multiplier)
+  let _lastT        = null;
+
+  const orbs = orbDefs.map(() => {
+    const mat   = new THREE.MeshBasicMaterial({ color: ORB_WHITE.clone() });
+    const mesh  = new THREE.Mesh(new THREE.SphereGeometry(0.065, 10, 10), mat);
+    const light = new THREE.PointLight(0xffffff, 10, 0, 0);
+    scene.add(mesh);
+    scene.add(light);
+    return { mesh, mat, light, color: ORB_WHITE.clone() };
+  });
+
+  // ── Main sphere ────────────────────────────────────────────────────────────
+  const SEG = 56;
+  const sphereGeo  = new THREE.SphereGeometry(1, SEG, SEG);
+  const origPos    = sphereGeo.attributes.position.array.slice();
+  const numVerts   = origPos.length / 3;
+  const dispSmooth = new Float32Array(numVerts);
+
+  const sphereMat  = new THREE.MeshPhongMaterial({
+    color:     0x060606,
+    specular:  0x888888,
+    shininess: 38,
+  });
+  const sphereMesh = new THREE.Mesh(sphereGeo, sphereMat);
+  scene.add(sphereMesh);
+
+  function animate() {
+    requestAnimationFrame(animate);
+    const t     = Date.now() * 0.001;
+    const delta = _lastT === null ? 0 : t - _lastT;
+    _lastT      = t;
+    const state        = sphereStateRef.current;
+    const isListening  = state === 'listening';
+    const isSpeaking   = state === 'speaking';
+    const targetColor  = isListening ? ORB_BLUE : isSpeaking ? ORB_YELLOW : ORB_WHITE;
+
+    // Smoothly ramp orbit speed up during active states
+    const targetSpeedMult = isListening ? 1.6 : isSpeaking ? 1.4 : 1.0;
+    orbSpeedMult += (targetSpeedMult - orbSpeedMult) * 0.03;
+    orbTimeAccum += delta * orbSpeedMult;
+
+    // ── Update orb positions and colours ────────────────────────────────────
+    orbDefs.forEach((p, i) => {
+      const angle = p.speed * orbTimeAccum + p.phase;
+      // Point on circle in local XY plane
+      const lx = p.r * Math.cos(angle);
+      const ly = p.r * Math.sin(angle);
+      // Rotate around X axis by tiltX
+      const mx = lx;
+      const my = ly * Math.cos(p.tiltX);
+      const mz = ly * Math.sin(p.tiltX);
+      // Rotate around Z axis by tiltZ
+      const fx = mx * Math.cos(p.tiltZ) - my * Math.sin(p.tiltZ);
+      const fy = mx * Math.sin(p.tiltZ) + my * Math.cos(p.tiltZ);
+      const fz = mz;
+
+      const orb = orbs[i];
+      orb.mesh.position.set(fx, fy, fz);
+      orb.light.position.set(fx, fy, fz);
+
+      // Smooth colour transition
+      orb.color.lerp(targetColor, 0.04);
+      orb.mat.color.copy(orb.color);
+      orb.light.color.copy(orb.color);
+
+      // Slightly higher intensity while listening
+      orb.light.intensity = isListening ? 12 : isSpeaking ? 10 : 8;
+    });
+
+    // ── Sphere surface deformation (audio-driven in listening mode) ──────────
+    const positions = sphereGeo.attributes.position.array;
+    if (isListening && sphereAnalyserRef.an && sphereAnalyserRef.data) {
+      sphereAnalyserRef.an.getByteFrequencyData(sphereAnalyserRef.data);
+      const audioData = sphereAnalyserRef.data;
+      const dataLen   = audioData.length;
+      for (let i = 0; i < numVerts; i++) {
+        const bin    = Math.floor((i / numVerts) * dataLen);
+        const target = (audioData[bin] / 255) * 0.13;
+        dispSmooth[i] += (target - dispSmooth[i]) * 0.32;
+        const scale = 1 + dispSmooth[i];
+        positions[i * 3]     = origPos[i * 3]     * scale;
+        positions[i * 3 + 1] = origPos[i * 3 + 1] * scale;
+        positions[i * 3 + 2] = origPos[i * 3 + 2] * scale;
+      }
+      sphereGeo.attributes.position.needsUpdate = true;
+    } else {
+      // Smoothly return vertices to resting position
+      let anyChange = false;
+      for (let i = 0; i < numVerts; i++) {
+        if (Math.abs(dispSmooth[i]) > 0.0005) {
+          dispSmooth[i] *= 0.87;
+          const scale = 1 + dispSmooth[i];
+          positions[i * 3]     = origPos[i * 3]     * scale;
+          positions[i * 3 + 1] = origPos[i * 3 + 1] * scale;
+          positions[i * 3 + 2] = origPos[i * 3 + 2] * scale;
+          anyChange = true;
+        } else if (dispSmooth[i] !== 0) {
+          dispSmooth[i]        = 0;
+          positions[i * 3]     = origPos[i * 3];
+          positions[i * 3 + 1] = origPos[i * 3 + 1];
+          positions[i * 3 + 2] = origPos[i * 3 + 2];
+          anyChange = true;
+        }
+      }
+      if (anyChange) sphereGeo.attributes.position.needsUpdate = true;
+    }
+
+    renderer.render(scene, camera);
+  }
+
+  animate();
+}
+
 // ── UI state machine ──────────────────────────────────────────────────────────
 const STATE_CFG = {
-  idle:         { cls: null,              icon: '🎙', label: 'READY',        status: 'ONLINE'  },
-  listening:    { cls: 'state-listening', icon: '👂', label: 'LISTENING',    status: 'HEARING' },
-  transcribing: { cls: 'state-thinking',  icon: '⚙️', label: 'TRANSCRIBING', status: 'PROC...' },
-  thinking:     { cls: 'state-thinking',  icon: '⚙️', label: 'THINKING',     status: 'PROC...' },
-  speaking:     { cls: 'state-speaking',  icon: '🔊', label: 'SPEAKING',     status: 'ONLINE'  },
-  error:        { cls: 'state-error',     icon: '⚠️', label: 'ERROR',        status: 'ERROR'   },
+  idle:         { cls: null,              label: 'READY',        status: 'ONLINE'  },
+  listening:    { cls: 'state-listening', label: 'LISTENING',    status: 'HEARING' },
+  transcribing: { cls: 'state-thinking',  label: 'TRANSCRIBING', status: 'PROC...' },
+  thinking:     { cls: 'state-thinking',  label: 'THINKING',     status: 'PROC...' },
+  speaking:     { cls: 'state-speaking',  label: 'SPEAKING',     status: 'ONLINE'  },
+  error:        { cls: 'state-error',     label: 'ERROR',        status: 'ERROR'   },
 };
 const ALL_STATE_CLASSES = ['state-listening', 'state-thinking', 'state-speaking', 'state-error'];
 
@@ -108,9 +269,8 @@ function setState(name) {
   const s = STATE_CFG[name] ?? STATE_CFG.idle;
   ALL_STATE_CLASSES.forEach(c => starlingEl.classList.remove(c));
   if (s.cls) starlingEl.classList.add(s.cls);
-  ringIcon.textContent   = s.icon;
-  ringState.textContent  = s.label;
   statStatus.textContent = s.status;
+  sphereStateRef.current = name;
 }
 
 // ── Append message ────────────────────────────────────────────────────────────
@@ -410,6 +570,7 @@ document.addEventListener('keyup', e => {
 });
 
 // ── Init ──────────────────────────────────────────────────────────────────────
+initSphere();
 statModel.textContent = MODEL;
 _applyTtsMode();
 loadVoices();

@@ -10,9 +10,18 @@ A voice-driven, S.T.A.R.L.I.N.G.-style web interface powered by a local LLM via 
 |---|---|---|---|
 | 1 | TTS (Kokoro) | Speech playback is lagged ~3–4 s behind text appearing in the UI — full response completes before audio begins | ✅ Resolved — all pipelines migrated to GPU; delay reduced from 2–8 s to ~3–4 s. Sentence-chunked TTS (Phase 7) remains as a further improvement |
 | 2 | TTS / STT GPU utilisation | CPU usage spiked during synthesis and transcription; neither pipeline was dispatching to the GPU | ✅ Resolved — Kokoro and Whisper now run on GPU; `onnxruntime-gpu` and CUDA libraries confirmed working |
+| 3 | STT (listening mode) | Recording stops too early — silence detection cuts off the user mid-sentence before they have finished speaking | 🔴 Open |
 
 **Potential fixes to investigate:**
 - **TTS lag**: implement sentence-chunked TTS — split the streamed response on `.`, `?`, `!` boundaries and synthesise + play each sentence as it completes rather than waiting for the full response (see Phase 7)
+- **STT early cutoff** — several approaches ranked by effort:
+  - **Extend silence timeout**: increase the silence/inactivity threshold in the MediaRecorder stop logic (e.g. from ~500 ms to 1 500–2 000 ms) — lowest effort, try first
+  - **Energy-based VAD in the browser**: use the Web Audio API `AnalyserNode` to compute the RMS of the mic signal in real time; only trigger stop when the energy stays below a threshold for a sustained window (avoids cutting off on short inter-word pauses)
+  - **Silero VAD (backend)**: run the lightweight Silero VAD model server-side on each incoming audio chunk; it is specifically trained to distinguish speech from silence and is far more accurate than a fixed timeout
+  - **`faster-whisper` VAD filter tuning**: `faster-whisper` exposes `vad_filter=True` with tunable `vad_parameters` (min silence duration, speech pad, etc.) — tighten the post-recording filter so short pauses within a sentence are not treated as end-of-speech
+  - **Streaming chunked STT**: stream audio to the backend in small chunks via WebSocket; transcribe each chunk with Whisper and only finalise when a real pause is detected rather than relying on the frontend to decide when to stop recording
+  - **Push-to-talk only mode**: remove automatic stop entirely — user holds spacebar/button for the full utterance; eliminates all VAD false-positives at the cost of requiring deliberate release
+  - **Configurable silence timeout in settings panel**: expose the silence threshold (ms) as a slider in the settings panel so users can tune it for their microphone / speaking style without a code change
 
 **Monitoring**: The `/system-status` endpoint and footer device badges surface GPU vs CPU state for all three pipelines in real time after each exchange.
 
@@ -158,6 +167,35 @@ starling-local/
 - [x] Borderless chat bubbles — remove visible borders from STARLING and user message containers for a cleaner look
 - [x] Chat bubble alignment — user messages aligned to the right, STARLING messages aligned to the left
 - [x] Monochrome theme — rework colour palette to blacks, greys, and whites; replace cyan accent tones with light-grey/white highlights
+
+#### Listening state indicator — replace ear emoji
+The 👂 emoji clashes with the HUD aesthetic. The indicator should still clearly communicate that STARLING is actively listening. Ideas to explore:
+- **Animated ring pulse**: repurpose the existing arc-reactor ring with a slow, steady radial pulse (CSS `scale` keyframe) in a distinct colour (e.g. a dim amber or cool white) to signal the listening state — reuses existing infrastructure with zero new assets
+- **Waveform border glow**: animate a soft glow on the waveform bars that is always visible during recording, using a CSS `box-shadow` / `filter: drop-shadow` cycle — ties the "listening" visual directly to the audio input element
+- **Scanning line / sweep animation**: a horizontal scan-line that sweeps across the mic button area at a steady cadence, evoking a radar or sonar sweep
+- **Dot-matrix text label**: replace the emoji with a monospaced, letter-spaced `LISTENING…` label in a small caps style that blinks or fades in/out — purely typographic, fits the HUD font language
+- **Corner bracket blink**: flash the four corner-bracket elements (if present in the layout) in sync with the recording state — subtle, structural, no icons required
+- **Mic button state transform**: morph the mic button icon into a minimalist animated waveform SVG (three vertical bars of varying height) only while recording, returning to the static icon when idle
+- **Living black sphere** ⭐: replace the flat ring entirely with a 3-D sphere rendered on a `<canvas>` or via a WebGL/Three.js scene. The sphere sits in the same central position and has the following layered behaviours:
+  - *Base appearance*: a near-perfect matte black sphere with a very subtle specular highlight — appears almost featureless until the light source moves
+  - *Ambient light drift*: a single diffuse point light orbits the sphere on a slow, randomised path (e.g. a Lissajous or Perlin-noise-driven trajectory) — as it moves, it grazes the sphere's limb and casts a soft gradient that shifts around the silhouette, giving the impression the sphere is alive without being animated in an obvious way
+  - *Idle state*: light drift only; sphere surface is perfectly smooth and still
+  - *Thinking state*: light orbit speed increases slightly; a faint internal glow pulses from the centre outward (emissive bloom)
+  - *Listening state*: the sphere surface deforms in real time using microphone input — audio amplitude values from the `AnalyserNode` are mapped to vertex displacement on the sphere mesh, so the surface ripples and bulges as the user speaks, as if the sound waves are physically striking it; deformation snaps back to smooth when audio energy drops
+  - *Implementation options*: Three.js `SphereGeometry` with per-vertex displacement driven by `getByteFrequencyData`; alternatively a GLSL fragment shader using a normal-map perturbation + rim-lighting trick for a lower-overhead approach that still reads convincingly as a 3-D sphere without true geometry deformation
+
+#### Conversation window — bubbleless layout
+Remove background/border styling from message containers so text floats freely. Ideas to differentiate STARLING vs USER without bubbles:
+- **Typeface contrast**: STARLING uses a monospaced font (e.g. `JetBrains Mono`, `IBM Plex Mono`) to suggest machine output; USER uses a proportional sans-serif — immediately distinguishable at a glance
+- **Colour split**: STARLING text in a light-grey/off-white (`#e0e0e0`); USER text in a dimmer mid-grey (`#888`) — or reverse with USER slightly brighter to feel more "present"
+- **Speaker label style**: replace bold `STARLING` / `YOU` headers with small-caps, letter-spaced labels (`S T A R L I N G`, `U S E R`) in a muted tone, sitting above the message text at reduced font size; rename `YOU` → `USER` throughout
+- **Left-edge rule for STARLING**: a 2 px vertical rule (`border-left`) in a neutral grey on STARLING messages only — provides visual anchor without a full bubble
+- **Indent differentiation**: USER messages indented further right with a larger `padding-left`/`margin-left`, creating natural white-space separation without any background
+- **Opacity layering**: STARLING messages at full opacity; USER messages at ~70 % opacity — visually recedes the user text relative to the AI response, emphasising the output
+- **Font weight**: STARLING in `font-weight: 300` (light); USER in `font-weight: 400` (regular) — subtle but readable contrast
+- [ ] Rename speaker label `YOU` → `USER` in frontend (`app.js` / `index.html`)
+- [ ] Remove bubble background/border styles from message containers in `style.css`
+- [ ] Implement chosen typographic differentiation scheme (typeface, colour, or weight contrast)
 
 ---
 

@@ -45,28 +45,7 @@
     <!-- Ring + waveform -->
     <div class="ring-section">
       <div class="ring-wrap">
-        <div class="pulse-ring"></div>
-        <div class="pulse-ring"></div>
-        <svg class="ring-svg" viewBox="0 0 160 160" aria-hidden="true">
-          <!-- Outer ring -->
-          <circle cx="80" cy="80" r="68" fill="none" stroke="rgba(200,200,200,0.06)" stroke-width="2"/>
-          <circle cx="80" cy="80" r="68" fill="none" stroke="#c8c8c8" stroke-width="2"
-            stroke-dasharray="427" stroke-dashoffset="107" stroke-linecap="round"
-            transform="rotate(-90 80 80)" opacity="0.55"/>
-          <!-- Middle ring -->
-          <circle cx="80" cy="80" r="56" fill="none" stroke="rgba(200,200,200,0.06)" stroke-width="1.5"/>
-          <circle cx="80" cy="80" r="56" fill="none" stroke="#f0f0f0" stroke-width="1.5"
-            stroke-dasharray="352" stroke-dashoffset="176" stroke-linecap="round"
-            transform="rotate(-90 80 80)" opacity="0.35"/>
-          <!-- Inner dashed ring -->
-          <circle cx="80" cy="80" r="44" fill="none" stroke="rgba(200,200,200,0.04)" stroke-width="1"/>
-          <circle cx="80" cy="80" r="44" fill="none" stroke="rgba(200,200,200,0.12)" stroke-width="1"
-            stroke-dasharray="3 9" transform="rotate(-90 80 80)"/>
-        </svg>
-        <div class="ring-center">
-          <div class="ring-icon" id="ring-icon">🎙</div>
-          <div class="ring-state" id="ring-state">READY</div>
-        </div>
+        <canvas id="sphere-canvas" aria-hidden="true"></canvas>
       </div>
       <!-- Waveform bars injected by JS -->
       <div class="waveform" id="waveform" aria-hidden="true"></div>
@@ -89,6 +68,7 @@
     <!-- Controls -->
     <div class="controls">
       <button class="mic-btn" id="mic-btn" title="Hold to speak — or hold Space">
+        <div class="mic-sweep" aria-hidden="true"></div>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <rect x="9" y="2" width="6" height="12" rx="3"/>
@@ -114,6 +94,7 @@
     </footer>
 
   </div>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

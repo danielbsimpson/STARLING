@@ -98,65 +98,28 @@ html, body {
   margin-bottom: 10px;
 }
 .ring-wrap {
-  position: relative; width: 148px; height: 148px; margin-bottom: 10px;
-}
-.ring-svg { width: 148px; height: 148px; transition: filter 0.4s; }
-
-/* Slow idle rotation on the whole ring */
-.ring-svg { animation: ring-drift 30s linear infinite; }
-@keyframes ring-drift { to { transform: rotate(360deg); } }
-
-/* Override: fast spin while thinking */
-.starling.state-thinking .ring-svg {
-  filter: drop-shadow(0 0 10px rgba(255,255,255,0.18));
-  animation: ring-spin 2.4s linear infinite;
-}
-@keyframes ring-spin { to { transform: rotate(360deg); } }
-
-/* Glow while listening */
-.starling.state-listening .ring-svg {
-  filter: drop-shadow(0 0 16px rgba(200,200,200,0.28));
-  animation-duration: 8s; /* slow drift while listening */
+  position: relative; width: 210px; height: 210px; margin-bottom: 10px;
 }
 
-/* Pulse rings */
-.pulse-ring {
-  position: absolute; border-radius: 50%;
-  border: 1px solid rgba(200,200,200,0.07); pointer-events: none;
-}
-.pulse-ring:nth-child(1) { inset: -14px; animation: pulse 3.4s ease-out 0s infinite; }
-.pulse-ring:nth-child(2) { inset: -28px; animation: pulse 3.4s ease-out 1.1s infinite; }
-@keyframes pulse {
-  0%   { opacity: 0.65; transform: scale(0.93); }
-  100% { opacity: 0;    transform: scale(1.08); }
-}
-.starling.state-listening .pulse-ring {
-  border-color: rgba(200,200,200,0.22);
-  animation-duration: 1.3s;
+/* ── Sphere canvas ───────────────────────────────────────────────────────── */
+#sphere-canvas {
+  display: block;
+  border-radius: 50%;
 }
 
-/* Ring center */
+/* Ring center — state label overlaid on sphere */
 .ring-center {
   position: absolute; inset: 0;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 5px; pointer-events: none;
 }
-.ring-icon {
-  font-size: 26px; line-height: 1;
-  filter: drop-shadow(0 0 8px rgba(200,200,200,0.4));
-  transition: transform 0.3s, filter 0.3s;
-}
-.starling.state-listening .ring-icon {
-  filter: drop-shadow(0 0 18px rgba(220,220,220,0.9));
-  transform: scale(1.14);
-}
 .ring-state {
   font-family: 'Share Tech Mono', monospace;
   font-size: 8px; letter-spacing: 3px;
-  color: rgba(200,200,200,0.38); text-transform: uppercase;
+  color: rgba(200,200,200,0.22); text-transform: uppercase;
   transition: color 0.3s;
 }
-.starling.state-listening .ring-state { color: var(--c); }
+.starling.state-listening .ring-state { color: rgba(180, 210, 255, 0.65); }
 .starling.state-thinking  .ring-state { color: var(--g); }
 .starling.state-speaking  .ring-state { color: var(--g); }
 
@@ -171,7 +134,8 @@ html, body {
   opacity: 0.15; min-height: 3px;
   transition: height 0.07s ease, opacity 0.3s;
 }
-.starling.state-listening .bar { opacity: 0.88; }
+.starling.state-listening .bar { opacity: 0.88; box-shadow: 0 0 5px rgba(180, 210, 255, 0.5); }
+.starling.state-listening .waveform { filter: drop-shadow(0 0 7px rgba(180, 210, 255, 0.3)); transition: filter 0.3s; }
 .starling.state-thinking  .bar { opacity: 0.25; }
 .starling.state-speaking  .bar {
   opacity: 0.55;
@@ -268,6 +232,7 @@ html, body {
   cursor: pointer; flex-shrink: 0; padding: 0;
   user-select: none; -webkit-user-select: none;
   transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+  position: relative; overflow: hidden;
 }
 .mic-btn svg { width: 19px; height: 19px; pointer-events: none; }
 .mic-btn:hover {
@@ -281,6 +246,40 @@ html, body {
 @keyframes mic-pulse {
   0%,100% { box-shadow: 0 0 5px rgba(200,200,200,0.12); }
   50%     { box-shadow: 0 0 22px rgba(200,200,200,0.45), 0 0 44px rgba(200,200,200,0.07); }
+}
+
+/* ── Radar sweep on mic button ──────────────────────────────────────────── */
+.mic-sweep {
+  position: absolute; inset: 0; border-radius: 50%;
+  pointer-events: none; opacity: 0;
+  transition: opacity 0.3s;
+}
+.mic-btn.recording .mic-sweep {
+  opacity: 1;
+  animation: radar-sweep 1.8s linear infinite;
+}
+@keyframes radar-sweep {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.mic-sweep::before {
+  content: '';
+  position: absolute; inset: 0; border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    rgba(180, 210, 255, 0.20) 52deg,
+    transparent 82deg
+  );
+}
+.mic-sweep::after {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 47%; height: 1px;
+  background: linear-gradient(to right, rgba(180, 210, 255, 0.9), transparent);
+  transform-origin: left center;
+  transform: translateY(-50%);
 }
 
 /* Text input */
