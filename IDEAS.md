@@ -762,3 +762,396 @@ clearBtn.addEventListener('click', () => {
 | Unknown key hallucinated by LLM | N/A | 404 swallowed silently; no panel shown |
 
 ---
+
+## IDEA-004 — Dynamic Presentation Mode (Context-Driven Layout Shift)
+
+**Status**: Ready to implement (depends on IDEA-003 HTML restructuring)  
+**Effort**: Medium (CSS transitions + ~100 lines across 3 files)  
+**Impact**: When STARLING answers a topic with a contextual image, the entire UI reconfigures — image slides in from the left, ring shifts right, chat collapses, and STARLING's output streams below the ring in a clean focused view. A button or voice command reverts to conversation mode.
+
+### Problem
+
+IDEA-003 adds an image panel beside the chat box, but both regions compete for space and the overall feel is still a "chat with an image attachment". For topics that warrant a visual — a person, place, mission, concept — a more dramatic layout shift turns STARLING into a presentation system: image on the left, voice and text output on the right, conversational history hidden until needed.
+
+### Solution
+
+A single CSS class `.presentation-mode` added to `.starling` drives every transition via pre-defined CSS rules. No DOM manipulation at runtime — elements only change `width`, `opacity`, `max-height`, and `flex` values, all of which CSS can interpolate smoothly. A mirrored text element (`#pres-output`) below the ring shows the streaming response while the chat bubble accumulates silently in the background.
+
+```
+[IMAGE:key] tag fires
+  → enterPresentationMode(key)
+      → .starling gains .presentation-mode
+      → .image-panel slides in (width 0 → 45%)
+      → .ring-section shifts right (centred in now-narrower .main-col)
+      → .chat-panel collapses (opacity → 0, max-height → 0)
+      → #pres-output expands below ring
+  → token loop mirrors text to both .msg.asst and #pres-output
+  → STARLING speaks while image is displayed
+
+user says "go back" / clicks EXIT button
+  → exitPresentationMode()
+      → .presentation-mode removed
+      → all transitions reverse
+      → chat history reappears intact
+```
+
+---
+
+### Pre-requisites
+
+- IDEA-003 must be planned first (or at minimum its HTML restructuring step) — this idea reuses the `.image-panel` and manifest/trigger infrastructure
+- The HTML restructuring in this idea supersedes IDEA-003 Step 4; implement this version instead
+
+---
+
+### Implementation Plan
+
+#### Step 1 — Restructure `frontend/index.html`
+
+Replace the standalone `.chat-panel` block (and any IDEA-003 `.content-row` if already added) with a new `.body-row` / `.main-col` structure:
+
+```html
+<!-- Replaces everything between the ring-section and controls divs -->
+<div class="body-row">
+
+  <!-- Image panel — hidden until a trigger fires -->
+  <div class="image-panel" id="image-panel">
+    <img class="image-display" id="image-display" alt="" />
+    <div class="image-caption" id="image-caption"></div>
+    <button class="pres-exit-btn" id="pres-exit-btn" title="Return to conversation">EXIT ✕</button>
+  </div>
+
+  <!-- Main column — contains ring + chat + presentation output -->
+  <div class="main-col">
+
+    <!-- Ring + waveform (already exists — move inside .main-col) -->
+    <div class="ring-section">
+      <!-- existing ring-wrap and waveform contents unchanged -->
+    </div>
+
+    <!-- Presentation output — visible only in presentation mode -->
+    <div class="pres-output" id="pres-output"></div>
+
+    <!-- Chat — visible only in conversation mode -->
+    <div class="chat-panel">
+      <div class="chat-inner" id="chat-inner"></div>
+    </div>
+
+  </div>
+</div>
+```
+
+> Note: the existing `.ring-section` HTML is moved inside `.main-col` — its internal contents are unchanged.
+
+---
+
+#### Step 2 — Add layout and mode styles to `frontend/style.css`
+
+**Body row and main column:**
+
+```css
+/* ── Body row (image panel + main column side-by-side) ───────────────────── */
+.body-row {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  gap: 0;
+}
+
+.main-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: padding-left 0.5s ease;
+}
+```
+
+**Image panel (replaces IDEA-003 Step 5 version — updated for presentation mode):**
+
+```css
+/* ── Image panel ─────────────────────────────────────────────────────────── */
+.image-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  flex-shrink: 0;
+  padding-top: 0;
+  transition: width 0.5s ease, opacity 0.5s ease, padding 0.5s ease;
+  position: relative;
+}
+
+.starling.presentation-mode .image-panel {
+  width: 45%;
+  min-width: 240px;
+  opacity: 1;
+  padding-top: 16px;
+  padding-right: 20px;
+}
+
+.image-display {
+  width: 100%;
+  max-height: 55vh;
+  object-fit: contain;
+  border: 1px solid rgba(200,200,200,0.1);
+  border-radius: 4px;
+  background: rgba(255,255,255,0.02);
+}
+
+.image-caption {
+  margin-top: 10px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.68rem;
+  color: rgba(200,200,200,0.5);
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* Exit button inside image panel */
+.pres-exit-btn {
+  display: none;
+  margin-top: 18px;
+  padding: 6px 16px;
+  background: rgba(200,200,200,0.04);
+  border: 0.5px solid rgba(200,200,200,0.18);
+  border-radius: 5px;
+  color: rgba(200,200,200,0.45);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+.pres-exit-btn:hover {
+  color: var(--c);
+  border-color: rgba(200,200,200,0.35);
+  background: rgba(200,200,200,0.08);
+}
+.starling.presentation-mode .pres-exit-btn {
+  display: block;
+}
+```
+
+**Chat panel — collapses in presentation mode:**
+
+```css
+/* Extend the existing .chat-panel rule: */
+.chat-panel {
+  transition: opacity 0.4s ease, max-height 0.5s ease, margin 0.4s ease;
+  max-height: 9999px;   /* large enough to never clip in conversation mode */
+}
+
+.starling.presentation-mode .chat-panel {
+  opacity: 0;
+  max-height: 0;
+  margin-bottom: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+```
+
+**Presentation output — expands below ring in presentation mode:**
+
+```css
+/* ── Presentation output ─────────────────────────────────────────────────── */
+.pres-output {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--text);
+  padding: 0 14px;
+  transition: opacity 0.4s ease 0.25s, max-height 0.5s ease;
+}
+
+.starling.presentation-mode .pres-output {
+  max-height: 40vh;
+  opacity: 1;
+  overflow-y: auto;
+  padding: 12px 14px;
+}
+
+.pres-output::-webkit-scrollbar { width: 3px; }
+.pres-output::-webkit-scrollbar-track { background: transparent; }
+.pres-output::-webkit-scrollbar-thumb { background: rgba(200,200,200,0.1); border-radius: 2px; }
+```
+
+**Ring section — reduce bottom margin in presentation mode so output sits closer:**
+
+```css
+.starling.presentation-mode .ring-section {
+  margin-bottom: 4px;
+}
+```
+
+**Waveform — optionally hide in presentation mode (set to taste):**
+
+```css
+.starling.presentation-mode .waveform {
+  opacity: 0.35;   /* dim rather than hide — keeps audio activity visible */
+}
+```
+
+---
+
+#### Step 3 — Add mode functions to `frontend/app.js`
+
+**3a — New DOM refs:**
+
+```js
+const presOutput  = document.getElementById('pres-output');
+const presExitBtn = document.getElementById('pres-exit-btn');
+```
+
+**3b — Mode toggle functions:**
+
+```js
+let _inPresentationMode = false;
+
+function enterPresentationMode() {
+  _inPresentationMode = true;
+  starlingEl.classList.add('presentation-mode');
+  presOutput.textContent = '';
+}
+
+function exitPresentationMode() {
+  _inPresentationMode = false;
+  starlingEl.classList.remove('presentation-mode');
+  presOutput.textContent = '';
+}
+```
+
+**3c — Exit button listener:**
+
+```js
+presExitBtn.addEventListener('click', exitPresentationMode);
+```
+
+**3d — Keyword intercept (voice/text revert):**
+
+Add at the top of `handleSend()`, before the `sendToOllama()` call, and also at the top of the `mediaRecorder.onstop` handler, before the `sendToOllama()` call:
+
+```js
+const REVERT_PHRASES = ['go back', 'exit', 'show chat', 'conversation mode', 'close image', 'hide image'];
+if (_inPresentationMode && REVERT_PHRASES.some(p => text.toLowerCase().includes(p))) {
+  exitPresentationMode();
+  return;   // do not forward to LLM
+}
+```
+
+**3e — Enter presentation mode from the image trigger:**
+
+In the existing `triggerImage(key)` function (from IDEA-003), add `enterPresentationMode()` before setting the image src:
+
+```js
+async function triggerImage(key) {
+  try {
+    const manifestRes = await fetch(`${BACKEND_BASE}/rag/manifest`);
+    if (!manifestRes.ok) return;
+    const manifest = await manifestRes.json();
+    const entry = manifest.find(e => e.key === key);
+    if (!entry) return;
+
+    enterPresentationMode();   // ← add this line
+
+    imageDisplay.src         = `${BACKEND_BASE}/rag/image/${encodeURIComponent(key)}`;
+    imageCaption.textContent = entry.label.toUpperCase();
+    imagePanel.classList.add('visible');
+  } catch { }
+}
+```
+
+**3f — Mirror streaming text to `#pres-output` in the token loop:**
+
+Inside `sendToOllama()`, immediately after `txt.textContent = full;`, add:
+
+```js
+if (_inPresentationMode) {
+  presOutput.textContent = full;
+  presOutput.scrollTop   = presOutput.scrollHeight;
+}
+```
+
+**3g — Clear presentation state on conversation clear:**
+
+In the `clearBtn` event listener, add `exitPresentationMode()` alongside `clearImage()`:
+
+```js
+clearBtn.addEventListener('click', () => {
+  conversationHistory = [{ role: 'system', content: SYSTEM_PROMPT }];
+  chatInner.innerHTML = '';
+  clearImage();
+  exitPresentationMode();
+  setState('idle');
+});
+```
+
+---
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `frontend/index.html` | Wrap ring + chat in `.body-row` / `.main-col`; add `.image-panel`; add `.pres-output`; add `.pres-exit-btn` |
+| `frontend/style.css` | Add `.body-row`, `.main-col`, `.pres-output`, `.pres-exit-btn`; add `.presentation-mode` overrides for chat-panel, ring-section, waveform, image-panel |
+| `frontend/app.js` | `enterPresentationMode` / `exitPresentationMode`; DOM refs; exit-btn listener; keyword intercept in send/mic handlers; text mirror in token loop; clear-btn wiring |
+| `assets/images/manifest.json` | Create (shared with IDEA-003) |
+| `backend/rag.py` | Create (shared with IDEA-003) |
+| `backend/main.py` | Add RAG router (shared with IDEA-003) |
+| `backend/stt.py` | **None** |
+| `backend/tts.py` | **None** |
+
+---
+
+### Relationship to IDEA-003
+
+IDEA-003 and IDEA-004 share backend infrastructure (manifest, `/rag/` endpoints) and the `[IMAGE:key]` trigger tag. The HTML restructuring in IDEA-004 Step 1 replaces IDEA-003 Step 4 — implement IDEA-004's version and IDEA-003 is automatically covered. Implementing IDEA-003 first and then IDEA-004 on top is also valid; IDEA-004 Step 1 is the only step that needs merging.
+
+---
+
+### Design Decisions to Confirm Before Implementing
+
+| Decision | Options | Recommendation |
+|---|---|---|
+| Image panel width in presentation mode | `45%` fixed ratio vs. `50%` vs. fixed px | `45%` — leaves enough column for ring + text at any width |
+| Waveform in presentation mode | Hide, dim, or keep full opacity | Dim to `0.35` — shows audio activity without competing with output text |
+| Revert trigger | Button only, keyword only, or both | Both — button for mouse users, keyword for voice-only sessions |
+| Pres-output font size | Match chat (`13px`) vs. larger (`15px`) | `15px` — more readable at a glance in the open layout |
+| Auto-revert after audio ends | Yes (return to chat when speaking finishes) vs. No | No for v1 — user controls revert; avoids jarring snap-back mid-reading |
+
+---
+
+### Verification Checklist
+
+1. Trigger an image response — confirm ring shifts right, image slides in left, chat fades out, text streams below ring
+2. All transitions should complete within ~0.5 s with no layout jank
+3. Conversation history remains intact — revert to chat and confirm previous messages are visible
+4. Click EXIT button — confirm full revert animation
+5. Say "go back" via mic — confirm revert without LLM round-trip
+6. Clear conversation in presentation mode — confirm both chat and image panel clear, mode exits
+7. Ask a second image-trigger question in presentation mode — confirm image updates without double-entering the mode
+8. Resize browser window to narrow width — confirm `.main-col` doesn't collapse below usable size (set `min-width` guard if needed)
+
+---
+
+### Expected Result
+
+| Scenario | Before | After |
+|---|---|---|
+| Topic with a manifest image | Image panel slides in beside chat | Full layout shift — image left, ring+text right, chat hidden |
+| Topic without a manifest image | No change | No change |
+| User says "go back" | N/A (no mode) | Instant revert, no LLM call, chat reappears |
+| User clicks EXIT | N/A | Same revert |
+| Clear conversation | Chat wipes | Chat wipes, presentation mode exits, image clears |
+
+---
