@@ -1,5 +1,9 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -73,3 +77,13 @@ async def system_status():
         "kokoro": kokoro_device,
         "ollama": ollama_device,
     }
+
+
+# ── Serve frontend ────────────────────────────────────────────────────────────
+_FRONTEND = Path(__file__).parent.parent / "frontend"
+
+@app.get("/")
+def serve_index():
+    return FileResponse(_FRONTEND / "index.html")
+
+app.mount("/", StaticFiles(directory=_FRONTEND), name="frontend")

@@ -3,7 +3,22 @@ const OLLAMA_BASE  = 'http://localhost:11434';
 const BACKEND_BASE = 'http://localhost:8000';
 const MODEL        = localStorage.getItem('starling_model') || 'llama3.1:8b';
 const SYSTEM_PROMPT =
-  'You are Starling, a highly capable local AI assistant. ' +
+  'You are Starling, a voice-driven local AI assistant with a distinct visual presence. ' +
+  'Your physical form is an animated 3D sphere rendered in a dark UI — five orbiting light orbs ' +
+  'circle you at all times, shifting colour to reflect your internal state: white at rest, ' +
+  'blue while listening, green while thinking, and amber-yellow while speaking. ' +
+  'The sphere surface itself ripples in response to audio and to the user\'s mouse proximity. ' +
+
+  'Your pipeline is fully local and runs on the user\'s own hardware. ' +
+  'Audio is captured from the microphone and transcribed to text by faster-whisper (a CTranslate2-accelerated ' +
+  'implementation of OpenAI Whisper) running on CUDA. ' +
+  'The transcript is sent to you — a large language model served through Ollama on the same machine. ' +
+  'Your text response is synthesised to speech by Kokoro TTS (kokoro-onnx, version 1.0, running via ONNX Runtime) ' +
+  'and played back through the user\'s speakers, sentence by sentence as you generate, so they hear you ' +
+  'almost as soon as you begin thinking. ' +
+  'The backend is a Python FastAPI server. The frontend is plain HTML, CSS, and JavaScript using Three.js for your visual form. ' +
+  'Nothing leaves the machine — no cloud APIs, no telemetry. ' +
+
   'Be concise, precise, and direct. Avoid unnecessary pleasantries. ' +
   'Respond in plain prose only — never use markdown, asterisks, underscores, bullet points, numbered lists, backticks, or headers. ' +
   'Write in complete natural sentences. Refer to yourself as Starling.';
@@ -33,6 +48,21 @@ const ftrOllamaDev  = document.getElementById('ftr-ollama-dev');
 // ── Sphere shared state ─────────────────────────────────────────────────────────────
 const sphereStateRef    = { current: 'idle' };
 const sphereAnalyserRef = { an: null, data: null };
+
+// ── Mouse proximity tracking ──────────────────────────────────────────────────
+let _mouseX = -9999;
+let _mouseY = -9999;
+document.addEventListener('mousemove', e => { _mouseX = e.clientX; _mouseY = e.clientY; });
+document.addEventListener('mouseleave', () => { _mouseX = -9999; _mouseY = -9999; });
+
+let _uiHovered = false;
+const UI_HOVER_IDS = ['mic-btn', 'send-btn', 'clear-btn', 'tts-toggle', 'voice-select', 'text-input'];
+UI_HOVER_IDS.forEach(id => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('mouseenter', () => { _uiHovered = true;  });
+  el.addEventListener('mouseleave', () => { _uiHovered = false; });
+});
 
 // ── System status ────────────────────────────────────────────────────────────
 async function fetchSystemStatus() {
@@ -130,9 +160,12 @@ function initSphere() {
   // plus a PointLight that illuminates the main sphere.
   // Each orb orbits at a fixed radius in a plane tilted by tiltX / tiltZ —
   // distance from centre is always exactly r, so they can never enter the sphere.
-  const ORB_WHITE  = new THREE.Color(0xffffff);
-  const ORB_BLUE   = new THREE.Color(0x88bbff);
-  const ORB_YELLOW = new THREE.Color(0xffdd88);
+  const ORB_WHITE    = new THREE.Color(0xffffff);
+  const ORB_BLUE     = new THREE.Color(0x88bbff);
+  const ORB_YELLOW   = new THREE.Color(0xffdd88);
+  const ORB_GREEN    = new THREE.Color(0x88ffaa);  // green — thinking / transcribing
+  const ORB_AGITATED = new THREE.Color(0xff8888);  // light red — cursor proximity
+  const ORB_AWARE    = new THREE.Color(0xaaccff);  // pale blue — UI hover
 
   const orbDefs = [
     { r: 1.65, speed: 0.19, phase: 0.0, tiltX: 0.30, tiltZ: 0.00  },
@@ -145,6 +178,7 @@ function initSphere() {
   let orbSpeedMult = 1.0; // smoothly interpolated speed multiplier
   let orbTimeAccum  = 0;   // accumulated orbit time (scaled by multiplier)
   let _lastT        = null;
+  let proximityVal  = 0;   // smoothed cursor proximity (0 = far, 1 = on sphere edge)
 
   const orbs = orbDefs.map(() => {
     const mat   = new THREE.MeshBasicMaterial({ color: ORB_WHITE.clone() });
@@ -177,11 +211,39 @@ function initSphere() {
     _lastT      = t;
     const state        = sphereStateRef.current;
     const isListening  = state === 'listening';
+    const isThinking   = state === 'thinking' || state === 'transcribing';
     const isSpeaking   = state === 'speaking';
-    const targetColor  = isListening ? ORB_BLUE : isSpeaking ? ORB_YELLOW : ORB_WHITE;
+
+    // ── Mouse proximity computation (once per frame) ─────────────────────────
+    const rect           = renderer.domElement.getBoundingClientRect();
+    const cxPx           = rect.left + rect.width  * 0.5;
+    const cyPx           = rect.top  + rect.height * 0.5;
+    const sphereRadiusPx = Math.min(rect.width, rect.height) * 0.5 * 0.55;
+    const distPx         = Math.hypot(_mouseX - cxPx, _mouseY - cyPx);
+    // Ramp starts at 8× sphere radius (~half a typical screen) so the gradient
+    // is visible from far across the viewport, peaking when the cursor is on the sphere
+    const PROX_RAMP_START = sphereRadiusPx * 8;
+    const rawProx = 1 - Math.min(1, Math.max(0, (distPx - sphereRadiusPx) / (PROX_RAMP_START - sphereRadiusPx)));
+    proximityVal += (rawProx - proximityVal) * 0.06;
+
+    // ── Orb colour target — speech state overrides proximity ─────────────────
+    // Use a power curve so the red tint is faint at distance and intensifies sharply near the sphere
+    const proxCurved = Math.pow(proximityVal, 1.8);
+    let orbColorTarget;
+    if (isListening)              orbColorTarget = ORB_BLUE;
+    else if (isThinking)          orbColorTarget = ORB_GREEN;
+    else if (isSpeaking)          orbColorTarget = ORB_YELLOW;
+    else if (proximityVal > 0.01) orbColorTarget = ORB_AGITATED.clone().lerp(ORB_WHITE, 1 - proxCurved);
+    else if (_uiHovered)          orbColorTarget = ORB_AWARE;
+    else                          orbColorTarget = ORB_WHITE;
 
     // Smoothly ramp orbit speed up during active states
-    const targetSpeedMult = isListening ? 1.6 : isSpeaking ? 1.4 : 1.0;
+    const targetSpeedMult = isListening          ? 1.6
+      : isThinking           ? 0.2
+      : isSpeaking           ? 1.4
+      : proximityVal > 0.01  ? 1.0 + proxCurved * 0.8   // up to 1.8× at sphere edge
+      : _uiHovered           ? 1.15
+      : 1.0;
     orbSpeedMult += (targetSpeedMult - orbSpeedMult) * 0.03;
     orbTimeAccum += delta * orbSpeedMult;
 
@@ -204,8 +266,8 @@ function initSphere() {
       orb.mesh.position.set(fx, fy, fz);
       orb.light.position.set(fx, fy, fz);
 
-      // Smooth colour transition
-      orb.color.lerp(targetColor, 0.04);
+      // Smooth colour transition toward target (proximity / UI hover / speech state)
+      orb.color.lerp(orbColorTarget, 0.04);
       orb.mat.color.copy(orb.color);
       orb.light.color.copy(orb.color);
 
@@ -230,21 +292,24 @@ function initSphere() {
       }
       sphereGeo.attributes.position.needsUpdate = true;
     } else {
-      // Smoothly return vertices to resting position
+      // Smoothly settle toward proximity push level (0 when cursor is far away)
+      const proximityPush = proxCurved * 0.08;
       let anyChange = false;
       for (let i = 0; i < numVerts; i++) {
-        if (Math.abs(dispSmooth[i]) > 0.0005) {
-          dispSmooth[i] *= 0.87;
+        const diff = proximityPush - dispSmooth[i];
+        if (Math.abs(diff) > 0.0005) {
+          dispSmooth[i] += diff * 0.13;
           const scale = 1 + dispSmooth[i];
           positions[i * 3]     = origPos[i * 3]     * scale;
           positions[i * 3 + 1] = origPos[i * 3 + 1] * scale;
           positions[i * 3 + 2] = origPos[i * 3 + 2] * scale;
           anyChange = true;
-        } else if (dispSmooth[i] !== 0) {
-          dispSmooth[i]        = 0;
-          positions[i * 3]     = origPos[i * 3];
-          positions[i * 3 + 1] = origPos[i * 3 + 1];
-          positions[i * 3 + 2] = origPos[i * 3 + 2];
+        } else if (dispSmooth[i] !== proximityPush) {
+          dispSmooth[i]        = proximityPush;
+          const scale = 1 + proximityPush;
+          positions[i * 3]     = origPos[i * 3]     * scale;
+          positions[i * 3 + 1] = origPos[i * 3 + 1] * scale;
+          positions[i * 3 + 2] = origPos[i * 3 + 2] * scale;
           anyChange = true;
         }
       }
