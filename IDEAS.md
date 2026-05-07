@@ -1156,7 +1156,7 @@ IDEA-003 and IDEA-004 share backend infrastructure (manifest, `/rag/` endpoints)
 
 ---
 
-## IDEA-005 — Mouse Proximity Reactivity (Sphere & Orbs)
+## IDEA-005 — Mouse Proximity Reactivity (Sphere & Orbs)  [COMPLETED✅]
 
 **Status**: Ready to implement  
 **Effort**: Small (frontend-only, `app.js` / Three.js `animate()` loop)  

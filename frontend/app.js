@@ -5,7 +5,7 @@ const MODEL        = localStorage.getItem('starling_model') || 'llama3.1:8b';
 const SYSTEM_PROMPT =
   'You are Starling, a voice-driven local AI assistant with a distinct visual presence. ' +
   'Starling stands for Speech-Triggered Autonomous Reasoning & Local Intelligence Node Generator. ' +
-  'Your physical form is an animated 3D sphere rendered in a dark UI — five orbiting light orbs ' +
+  'Your physical form is an animated 3D sphere rendered in a dark UI — seven orbiting light orbs ' +
   'circle you at all times, shifting colour to reflect your internal state: white at rest, ' +
   'blue while listening, green while thinking, and amber-yellow while speaking. ' +
   'The sphere surface itself ripples in response to audio and to the user\'s mouse proximity. ' +
@@ -169,11 +169,13 @@ function initSphere() {
   const ORB_AWARE    = new THREE.Color(0xaaccff);  // pale blue — UI hover
 
   const orbDefs = [
-    { r: 1.65, speed: 0.19, phase: 0.0, tiltX: 0.30, tiltZ: 0.00  },
-    { r: 1.65, speed: 0.14, phase: 2.1, tiltX: 1.15, tiltZ: 0.50  },
-    { r: 1.65, speed: 0.23, phase: 4.2, tiltX: 0.70, tiltZ: -0.90 },
-    { r: 1.65, speed: 0.17, phase: 1.1, tiltX: -0.55, tiltZ: 1.20 },
+    { r: 1.65, speed: 0.19, phase: 0.0, tiltX:  0.30, tiltZ:  0.00 },
+    { r: 1.65, speed: 0.14, phase: 2.1, tiltX:  1.15, tiltZ:  0.50 },
+    { r: 1.65, speed: 0.23, phase: 4.2, tiltX:  0.70, tiltZ: -0.90 },
+    { r: 1.65, speed: 0.17, phase: 1.1, tiltX: -0.55, tiltZ:  1.20 },
     { r: 1.65, speed: 0.21, phase: 3.5, tiltX: -1.00, tiltZ: -0.40 },
+    { r: 1.65, speed: 0.16, phase: 5.3, tiltX:  0.45, tiltZ: -1.55 },  // orb 6 — low retrograde equatorial
+    { r: 1.65, speed: 0.25, phase: 0.8, tiltX: -1.30, tiltZ:  0.65 },  // orb 7 — steep fast polar
   ];
 
   let orbSpeedMult = 1.0; // smoothly interpolated speed multiplier
@@ -181,10 +183,12 @@ function initSphere() {
   let _lastT        = null;
   let proximityVal  = 0;   // smoothed cursor proximity (0 = far, 1 = on sphere edge)
 
-  const orbs = orbDefs.map(() => {
+  const orbs = orbDefs.map((_, i) => {
+    // Vary orb mesh sizes — gives depth and hierarchy to the assembly
+    const orbSizes = [0.075, 0.055, 0.085, 0.048, 0.068, 0.042, 0.078];
     const mat   = new THREE.MeshBasicMaterial({ color: ORB_WHITE.clone() });
-    const mesh  = new THREE.Mesh(new THREE.SphereGeometry(0.065, 10, 10), mat);
-    const light = new THREE.PointLight(0xffffff, 10, 0, 0);
+    const mesh  = new THREE.Mesh(new THREE.SphereGeometry(orbSizes[i] ?? 0.065, 10, 10), mat);
+    const light = new THREE.PointLight(0xffffff, 3.5, 0, 0);
     scene.add(mesh);
     scene.add(light);
     return { mesh, mat, light, color: ORB_WHITE.clone() };
@@ -197,13 +201,35 @@ function initSphere() {
   const numVerts   = origPos.length / 3;
   const dispSmooth = new Float32Array(numVerts);
 
-  const sphereMat  = new THREE.MeshPhongMaterial({
+  // Pre-compute per-vertex noise seeds so idle texture is static per-vertex
+  // (cheap pseudo-noise: use vertex index mixed with its base position)
+  const noiseOffset = new Float32Array(numVerts);
+  for (let i = 0; i < numVerts; i++) {
+    const x = origPos[i * 3], y = origPos[i * 3 + 1], z = origPos[i * 3 + 2];
+    noiseOffset[i] = Math.sin(x * 7.3 + y * 13.7 + z * 5.9) * 0.5 + 0.5; // 0..1
+  }
+
+  const sphereMat = new THREE.MeshPhongMaterial({
     color:     0x060606,
-    specular:  0x888888,
-    shininess: 38,
+    specular:  0xaaaaaa,   // slightly brighter specular for sharper orb highlights
+    shininess: 52,
+    emissive:  0x0a0a0a,   // very faint self-emission so dark face isn't pure black
   });
   const sphereMesh = new THREE.Mesh(sphereGeo, sphereMat);
   scene.add(sphereMesh);
+
+  // ── Rim / Fresnel sphere — back-face, slightly larger, very low opacity ───
+  // Renders only the outer edge silhouette, creating a subtle "backlit halo" rim.
+  const rimMat = new THREE.MeshLambertMaterial({
+    color:       0x8899bb,   // cool-tinted rim
+    side:        THREE.BackSide,
+    transparent: true,
+    opacity:     0.08,
+    emissive:    0x445566,
+    emissiveIntensity: 0.4,
+  });
+  const rimMesh = new THREE.Mesh(new THREE.SphereGeometry(1.045, SEG, SEG), rimMat);
+  scene.add(rimMesh);
 
   function animate() {
     requestAnimationFrame(animate);
@@ -273,7 +299,7 @@ function initSphere() {
       orb.light.color.copy(orb.color);
 
       // Slightly higher intensity while listening
-      orb.light.intensity = isListening ? 12 : isSpeaking ? 10 : 8;
+      orb.light.intensity = isListening ? 6 : isSpeaking ? 5 : 3.5;
     });
 
     // ── Sphere surface deformation (audio-driven in listening mode) ──────────
@@ -293,21 +319,19 @@ function initSphere() {
       }
       sphereGeo.attributes.position.needsUpdate = true;
     } else {
-      // Smoothly settle toward proximity push level (0 when cursor is far away)
+      // In non-listening states: blend proximity push with a very subtle idle noise
+      // so the surface is never perfectly smooth — gives organic, pressurised feel.
+      // Noise amplitude is tiny (0.006) so it never looks like it's moving.
       const proximityPush = proxCurved * 0.08;
       let anyChange = false;
       for (let i = 0; i < numVerts; i++) {
-        const diff = proximityPush - dispSmooth[i];
-        if (Math.abs(diff) > 0.0005) {
-          dispSmooth[i] += diff * 0.13;
+        // Idle noise: per-vertex sine wave driven by time + unique phase offset
+        const idleNoise = Math.sin(t * 0.38 + noiseOffset[i] * 6.28) * 0.006;
+        const target = proximityPush + idleNoise;
+        const diff = target - dispSmooth[i];
+        if (Math.abs(diff) > 0.0002) {
+          dispSmooth[i] += diff * 0.09;
           const scale = 1 + dispSmooth[i];
-          positions[i * 3]     = origPos[i * 3]     * scale;
-          positions[i * 3 + 1] = origPos[i * 3 + 1] * scale;
-          positions[i * 3 + 2] = origPos[i * 3 + 2] * scale;
-          anyChange = true;
-        } else if (dispSmooth[i] !== proximityPush) {
-          dispSmooth[i]        = proximityPush;
-          const scale = 1 + proximityPush;
           positions[i * 3]     = origPos[i * 3]     * scale;
           positions[i * 3 + 1] = origPos[i * 3 + 1] * scale;
           positions[i * 3 + 2] = origPos[i * 3 + 2] * scale;
@@ -349,7 +373,7 @@ function appendMessage(role, content) {
 
   const lbl = document.createElement('span');
   lbl.className   = 'msg-lbl';
-  lbl.textContent = role === 'user' ? 'YOU' : 'S.T.A.R.L.I.N.G.';
+  lbl.textContent = role === 'user' ? 'USER' : 'S.T.A.R.L.I.N.G.';
 
   const txt = document.createElement('span');
   txt.className   = 'msg-text';

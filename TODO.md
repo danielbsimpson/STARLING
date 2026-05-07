@@ -200,7 +200,7 @@ The 👂 emoji clashes with the HUD aesthetic. The indicator should still clearl
   - *Listening state*: ✅ orbs shift to blue (`#88bbff`), orbit speed ramps to 1.6× via smooth lerp; sphere surface deforms in real time driven by `AnalyserNode` frequency data
   - *Speaking state*: ✅ orbs shift to warm yellow (`#ffdd88`), orbit speed ramps to 1.4×; signals TTS playback
   - *Orb glow on sphere*: ✅ PointLight `distance=0, decay=0` for unlimited-range illumination; intensity 8 (idle) / 10 (speaking) / 12 (listening)
-  - *Orb count*: ✅ 5 orbs (increased from 3) with distinct speeds, phases, and orbital planes
+  - *Orb count*: ✅ 7 orbs (increased from 5) with distinct speeds, phases, and orbital planes
 
 #### Conversation window — bubbleless layout
 Remove background/border styling from message containers so text floats freely. Ideas to differentiate STARLING vs USER without bubbles:
@@ -211,9 +211,9 @@ Remove background/border styling from message containers so text floats freely. 
 - **Indent differentiation**: USER messages indented further right with a larger `padding-left`/`margin-left`, creating natural white-space separation without any background
 - **Opacity layering**: STARLING messages at full opacity; USER messages at ~70 % opacity — visually recedes the user text relative to the AI response, emphasising the output
 - **Font weight**: STARLING in `font-weight: 300` (light); USER in `font-weight: 400` (regular) — subtle but readable contrast
-- [ ] Rename speaker label `YOU` → `USER` in frontend (`app.js` / `index.html`)
-- [ ] Remove bubble background/border styles from message containers in `style.css`
-- [ ] Implement chosen typographic differentiation scheme (typeface, colour, or weight contrast)
+- [x] Rename speaker label `YOU` → `USER` in frontend (`app.js` / `index.html`)
+- [x] Remove bubble background/border styles from message containers in `style.css`
+- [x] Implement chosen typographic differentiation scheme (typeface, colour, or weight contrast)
 
 ---
 
