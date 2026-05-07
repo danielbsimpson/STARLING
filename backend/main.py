@@ -84,6 +84,9 @@ _FRONTEND = Path(__file__).parent.parent / "frontend"
 
 @app.get("/")
 def serve_index():
-    return FileResponse(_FRONTEND / "index.html")
+    return FileResponse(
+        _FRONTEND / "index.html",
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+    )
 
 app.mount("/", StaticFiles(directory=_FRONTEND), name="frontend")

@@ -350,6 +350,7 @@ function initSphere() {
 // ── UI state machine ──────────────────────────────────────────────────────────
 const STATE_CFG = {
   idle:         { cls: null,              label: 'READY',        status: 'ONLINE'  },
+  warmup:       { cls: 'state-thinking',  label: 'WARMING UP',   status: 'INIT...' },
   listening:    { cls: 'state-listening', label: 'LISTENING',    status: 'HEARING' },
   transcribing: { cls: 'state-thinking',  label: 'TRANSCRIBING', status: 'PROC...' },
   thinking:     { cls: 'state-thinking',  label: 'THINKING',     status: 'PROC...' },
@@ -802,11 +803,34 @@ document.addEventListener('keyup', e => {
   }
 });
 
+// ── Greeting & model warm-up ─────────────────────────────────────────────────
+const GREETING_TEXT =
+  `All systems nominal. S.T.A.R.L.I.N.G. online — running ${MODEL} on GPU via Ollama. How can I assist?`;
+
+// Synthesise the greeting to pre-heat Kokoro, then POST the returned WAV to
+// /transcribe so the Whisper CUDA session is initialised before the user ever
+// presses the mic.  If TTS mode is 'kokoro' the greeting is also spoken aloud.
+async function warmupModels() {
+  setState('warmup');
+  try {
+    const blob = await _fetchTTSBlob(_sanitiseForTTS(GREETING_TEXT));
+    if (!blob) return;
+
+    // Warm up Whisper — POST the real speech WAV and discard the transcript.
+    const fd = new FormData();
+    fd.append('audio', new File([blob], 'warmup.wav', { type: 'audio/wav' }));
+    fetch(`${BACKEND_BASE}/transcribe/`, { method: 'POST', body: fd }).catch(() => {});
+    // Note: we intentionally do NOT play the greeting here. audio.play() is blocked
+    // by the browser autoplay policy until the user has made a gesture on the page.
+    // The greeting text is already visible in the chat window.
+  } catch { /* warm-up failures are non-fatal */ }
+  setState('idle');
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 initSphere();
 statModel.textContent = MODEL;
 _applyTtsMode();
 loadVoices();
-appendMessage('assistant',
-  `All systems nominal. S.T.A.R.L.I.N.G. online — running ${MODEL} on GPU via Ollama. How can I assist?`);
-setState('idle');
+appendMessage('assistant', GREETING_TEXT);
+warmupModels();  // async — heats Kokoro + Whisper in the background
