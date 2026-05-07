@@ -91,11 +91,36 @@ html, body {
   font-size: 12px; color: var(--g);
 }
 
+/* ── Two-column body layout ──────────────────────────────────────────────── */
+.body-cols {
+  flex: 1; min-height: 0;
+  display: flex; flex-direction: row;
+  position: relative; z-index: 1;
+}
+
+/* Left column — 50%, sphere vertically centred */
+.col-left {
+  width: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* Right column — 50%, conversation fills full height */
+.col-right {
+  width: 50%;
+  display: flex; flex-direction: column;
+  min-height: 0;
+}
+
+/* ── Full-width bottom bar (TTS + controls) ──────────────────────────────── */
+.bottom-bar {
+  flex-shrink: 0; position: relative; z-index: 1;
+  padding-top: 8px;
+}
+
 /* ── Ring section ────────────────────────────────────────────────────────── */
 .ring-section {
   display: flex; flex-direction: column; align-items: center;
-  flex-shrink: 0; position: relative; z-index: 1;
-  margin-bottom: 10px;
+  position: relative; z-index: 1;
 }
 .ring-wrap {
   position: relative; width: 210px; height: 210px; margin-bottom: 10px;
@@ -198,7 +223,7 @@ html, body {
   border: none;
   border-radius: 0; overflow: hidden;
   position: relative; z-index: 1;
-  margin-bottom: 12px;
+  /* no bottom margin — footer lives outside the column */
 }
 /* Fade at top */
 .chat-panel::before {
