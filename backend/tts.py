@@ -2,6 +2,7 @@
 # Model files (~300 MB total) are downloaded once by: python scripts/download_models.py
 from __future__ import annotations
 
+import asyncio
 import io
 import logging
 import os
@@ -123,10 +124,13 @@ async def synthesize(req: TTSRequest):
 
     try:
         lang = _VOICE_MAP[req.voice]["lang"]
+        loop = asyncio.get_event_loop()
+
+        def _run_synthesis():
+            return kokoro.create(req.text, voice=req.voice, speed=req.speed, lang=lang)
+
         try:
-            samples, sample_rate = kokoro.create(
-                req.text, voice=req.voice, speed=req.speed, lang=lang
-            )
+            samples, sample_rate = await loop.run_in_executor(None, _run_synthesis)
         except Exception as gpu_exc:
             global _kokoro, _gpu_failed
             if _gpu_failed:
@@ -138,9 +142,11 @@ async def synthesize(req: TTSRequest):
             _gpu_failed = True
             _kokoro = None  # force reload on next _get_kokoro() call
             kokoro = _get_kokoro()  # rebuilds with CPUExecutionProvider
-            samples, sample_rate = kokoro.create(
-                req.text, voice=req.voice, speed=req.speed, lang=lang
-            )
+
+            def _run_synthesis_cpu():
+                return kokoro.create(req.text, voice=req.voice, speed=req.speed, lang=lang)
+
+            samples, sample_rate = await loop.run_in_executor(None, _run_synthesis_cpu)
         buf = io.BytesIO()
         sf.write(buf, samples, sample_rate, format="WAV")
         return Response(content=buf.getvalue(), media_type="audio/wav")

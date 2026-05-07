@@ -315,6 +315,12 @@ async function sendToOllama(userText) {
     const reader  = res.body.getReader();
     const decoder = new TextDecoder();
     let full = '';
+    let sentBuf = '';              // accumulates tokens until a sentence boundary
+    let anySentenceEnqueued = false;
+
+    // Regex: sentence boundary = .?! followed by whitespace or end-of-string.
+    // Negative lookbehind skips decimal numbers (3.14) and ellipsis (...).
+    const sentenceRe = /[^.?!]*(?<![0-9])[.?!](?!\.)(\s|$)/g;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -323,16 +329,33 @@ async function sendToOllama(userText) {
         if (!line.trim()) continue;
         try {
           const token = JSON.parse(line)?.message?.content ?? '';
-          full += token;
-          txt.textContent = full;
-          chatInner.scrollTop = chatInner.scrollHeight;
+          if (!token) continue;
+          full    += token;
+          sentBuf += token;
+          txt.textContent      = full;
+          chatInner.scrollTop  = chatInner.scrollHeight;
+
+          // Flush complete sentences from the buffer
+          sentenceRe.lastIndex = 0;
+          let match;
+          let lastEnd = 0;
+          while ((match = sentenceRe.exec(sentBuf)) !== null) {
+            const sentence = match[0].trim();
+            if (sentence) { enqueueSpeak(sentence); anySentenceEnqueued = true; }
+            lastEnd = sentenceRe.lastIndex;
+          }
+          sentBuf = sentBuf.slice(lastEnd);
         } catch { /* partial JSON chunk — skip */ }
       }
     }
 
+    // Flush any remaining text that didn't end with punctuation
+    if (sentBuf.trim()) { enqueueSpeak(sentBuf.trim()); anySentenceEnqueued = true; }
+
     wrap.classList.remove('streaming');
     conversationHistory.push({ role: 'assistant', content: full });
-    setState('idle');
+    // Go idle now only if nothing was enqueued; otherwise audio chain handles it
+    if (ttsMode === 'off' || !anySentenceEnqueued) setState('idle');
     return full;
   } catch (err) {
     wrap.classList.remove('streaming');
@@ -406,28 +429,65 @@ async function loadVoices() {
 }
 
 // Active audio element (so we can cancel mid-speech)
-let _activeAudio = null;
+let _activeAudio    = null;
+let _playbackChain  = Promise.resolve();  // serial playback queue
+let _audioGeneration = 0;                 // increment on clear to discard stale callbacks
 
-async function _speakKokoro(text) {
-  setState('speaking');
+// Eagerly fetch the TTS WAV blob — starts immediately, not when playback is ready
+async function _fetchTTSBlob(text) {
   try {
     const res = await fetch(`${BACKEND_BASE}/synthesize/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, voice: ttsVoice, speed: 1.0 }),
     });
-    if (!res.ok) throw new Error(`TTS ${res.status}`);
-    const blob = await res.blob();
-    const url  = URL.createObjectURL(blob);
+    if (!res.ok) return null;
+    return await res.blob();
+  } catch { return null; }
+}
+
+// Play a pre-fetched blob promise; resolves when playback finishes
+async function _playBlob(blobPromise) {
+  setState('speaking');
+  return new Promise(async (resolve) => {
+    const blob = await blobPromise;
+    if (!blob) { setState('idle'); resolve(); return; }
+    const url   = URL.createObjectURL(blob);
     const audio = new Audio(url);
     _activeAudio = audio;
-    audio.onended = () => { URL.revokeObjectURL(url); _activeAudio = null; setState('idle'); };
-    audio.onerror = () => { URL.revokeObjectURL(url); _activeAudio = null; setState('idle'); };
-    await audio.play();
-  } catch (err) {
-    console.warn('Kokoro TTS failed, falling back to browser SpeechSynthesis:', err);
-    _speakBrowser(text);
+    const done = () => { URL.revokeObjectURL(url); _activeAudio = null; setState('idle'); resolve(); };
+    audio.onended = done;
+    audio.onerror = done;
+    audio.play().catch(done);
+  });
+}
+
+// Enqueue a sentence — synthesis starts NOW in parallel, playback waits its turn
+function enqueueSpeak(text) {
+  if (ttsMode === 'off') return;
+  if (ttsMode === 'browser') {
+    const gen = _audioGeneration;
+    _playbackChain = _playbackChain.then(() => {
+      if (_audioGeneration !== gen) return;
+      return new Promise(resolve => { _speakBrowser(text); resolve(); });
+    });
+    return;
   }
+  // Kick off synthesis immediately so it overlaps with the current sentence playing
+  const blobPromise = _fetchTTSBlob(text);
+  const gen = _audioGeneration;
+  _playbackChain = _playbackChain.then(() => {
+    if (_audioGeneration !== gen) return;   // queue was cleared — discard
+    return _playBlob(blobPromise);
+  });
+}
+
+// Stop all current and queued audio immediately
+function clearAudioQueue() {
+  _audioGeneration++;                       // invalidates all enqueued callbacks
+  _playbackChain = Promise.resolve();
+  if (_activeAudio) { _activeAudio.pause(); _activeAudio = null; }
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
 }
 
 function _speakBrowser(text) {
@@ -458,13 +518,11 @@ async function speak(text) {
 async function handleSend() {
   const text = textInput.value.trim();
   if (!text) return;
+  clearAudioQueue();  // stop any in-progress speech before new request
   textInput.value = '';
   appendMessage('user', text);
-  const response = await sendToOllama(text);
-  if (response) {
-    await speak(response);
-    fetchSystemStatus();
-  }
+  await sendToOllama(text);
+  fetchSystemStatus();
 }
 
 sendBtn.addEventListener('click', handleSend);
@@ -474,6 +532,7 @@ textInput.addEventListener('keydown', e => {
 
 // ── Clear conversation ────────────────────────────────────────────────────────
 clearBtn.addEventListener('click', () => {
+  clearAudioQueue();
   conversationHistory = [{ role: 'system', content: SYSTEM_PROMPT }];
   chatInner.innerHTML = '';
   setState('idle');
@@ -485,6 +544,7 @@ let audioChunks   = [];
 
 async function startRecording() {
   if (mediaRecorder && mediaRecorder.state !== 'inactive') return; // guard
+  clearAudioQueue();  // interrupt any ongoing speech
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     startAudioViz(stream);
@@ -517,11 +577,9 @@ async function startRecording() {
         const { transcript } = await r.json();
         if (!transcript) { setState('idle'); return; }
         appendMessage('user', transcript);
-        const response = await sendToOllama(transcript);
-        if (response) {
-          await speak(response);
-          fetchSystemStatus();
-        }
+        clearAudioQueue();  // stop any in-progress speech before new request
+        await sendToOllama(transcript);
+        fetchSystemStatus();
       } catch (err) {
         appendMessage('assistant', `[STT error: ${err.message}]`);
         setState('error');
