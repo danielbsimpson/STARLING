@@ -809,21 +809,28 @@ const GREETING_TEXT =
 
 // Synthesise the greeting to pre-heat Kokoro, then POST the returned WAV to
 // /transcribe so the Whisper CUDA session is initialised before the user ever
-// presses the mic.  If TTS mode is 'kokoro' the greeting is also spoken aloud.
-async function warmupModels() {
+// presses the mic.
+// greetingEl: the <span> holding the placeholder text — updated to the full
+// greeting once the warm-up sequence has fully completed.
+async function warmupModels(greetingEl) {
   setState('warmup');
   try {
     const blob = await _fetchTTSBlob(_sanitiseForTTS(GREETING_TEXT));
-    if (!blob) return;
-
-    // Warm up Whisper — POST the real speech WAV and discard the transcript.
-    const fd = new FormData();
-    fd.append('audio', new File([blob], 'warmup.wav', { type: 'audio/wav' }));
-    fetch(`${BACKEND_BASE}/transcribe/`, { method: 'POST', body: fd }).catch(() => {});
-    // Note: we intentionally do NOT play the greeting here. audio.play() is blocked
-    // by the browser autoplay policy until the user has made a gesture on the page.
-    // The greeting text is already visible in the chat window.
+    if (blob) {
+      // Warm up Whisper — POST the real speech WAV and discard the transcript.
+      // Awaited so fetchSystemStatus() below reflects the post-init GPU state.
+      const fd = new FormData();
+      fd.append('audio', new File([blob], 'warmup.wav', { type: 'audio/wav' }));
+      await fetch(`${BACKEND_BASE}/transcribe/`, { method: 'POST', body: fd }).catch(() => {});
+      // Note: we intentionally do NOT play the greeting here. audio.play() is blocked
+      // by the browser autoplay policy until the user has made a gesture on the page.
+    }
   } catch { /* warm-up failures are non-fatal */ }
+  // Both Kokoro and Whisper have now completed their first inference pass — poll
+  // system-status so the GPU badges in the footer are populated before the user speaks.
+  await fetchSystemStatus();
+  // Reveal the full greeting only once everything is ready.
+  if (greetingEl) greetingEl.textContent = GREETING_TEXT;
   setState('idle');
 }
 
@@ -832,5 +839,5 @@ initSphere();
 statModel.textContent = MODEL;
 _applyTtsMode();
 loadVoices();
-appendMessage('assistant', GREETING_TEXT);
-warmupModels();  // async — heats Kokoro + Whisper in the background
+const { txt: _greetingTxt } = appendMessage('assistant', 'INITIALISING…');
+warmupModels(_greetingTxt);  // async — heats Kokoro + Whisper, then reveals greeting
