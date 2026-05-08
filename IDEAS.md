@@ -730,113 +730,72 @@ On exit, removing `.pres-mode` reverses all transitions simultaneously — the b
 
 **Status**: 🔴 Not started — implement after Phase 2 is verified  
 **Effort**: Medium (CSS layout transitions + JS state updates)  
-**Goal**: When the dossier is opened, the entire UI reconfigures into presentation mode. The conversation window disappears. The sphere and orbs shift slightly left. The panel repositions to be more centred. A structured dossier-style text panel appears to the right of the image, using filler text for now.
+**Goal**: When the dossier trigger fires, the entire UI shifts into a four-zone presentation layout. The conversation window does **not** disappear — it repositions under the sphere in the left column. The sphere shifts up and left. The neon image panel appears near centre. The dossier text panel appears on the right. Everything reverses cleanly on exit. Filler text used in this phase; real data arrives in Phase 4.
 
 #### Layout in presentation mode
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  [header — full width, unchanged]                       │
-├──────────────────────────────────────────────────────────┤
-│                                                          │
-│   ●  ← sphere shifts slightly left                      │
-│                                                          │
-│         ┌──────────────────┐  ┌──────────────────────┐  │
-│         │  [neon border]   │  │  SUBJECT             │  │
-│         │                  │  │  ─────────────────   │  │
-│         │   [image]        │  │  Lorem ipsum...      │  │
-│         │                  │  │                      │  │
-│         └──────────────────┘  │  FIELD    VALUE      │  │
-│                                │  FIELD    VALUE      │  │
-│                                └──────────────────────┘  │
-├──────────────────────────────────────────────────────────┤
-│  [bottom bar — mic, input, send — unchanged]             │
-│  [footer — unchanged]                                    │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│  [header — full width, unchanged]                                        │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  ● sphere (up-left)    ┌──────────────┐   ┌─────────────────────────┐   │
+│                        │  [neon image]│   │  SUBJECT TITLE          │   │
+│  ┌────────────────┐    │              │   │  ────────────────────── │   │
+│  │  [chat window] │    │   [image]    │   │  Summary text...        │   │
+│  │  repositioned  │    │              │   │                         │   │
+│  │  below sphere  │    └──────────────┘   │  FIELD   VALUE          │   │
+│  └────────────────┘                       │  FIELD   VALUE          │   │
+│                                           └─────────────────────────┘   │
+├──────────────────────────────────────────────────────────────────────────┤
+│  [bottom bar — mic, input, send — unchanged]                             │
+│  [footer — unchanged]                                                    │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
 #### What changes
 
-**Sphere / left column**: `translateX` shift of ~30–40 px left via CSS transform on `.col-left` in `.pres-mode`. The sphere stays in the left column; it just moves slightly toward the edge to make visual space.
+**Overall layout**: `.body-cols` transitions from a 2-column (50/50) flex row to a 4-zone layout in `pres-mode`. This is driven entirely by CSS — no DOM reordering required.
 
-**Conversation column**: `.chat-panel` transitions to `opacity: 0; max-height: 0; pointer-events: none` — fully hidden but still in the DOM (history is preserved for when the user exits).
+**HTML restructure** (one-time change, applied in this phase): Move `.chat-panel` from `.col-right` into `.col-left` as a flex sibling beneath `.ring-section`. Promote `.pres-panel` and the new `.pres-dossier` to be direct children of `.body-cols` rather than children of `.col-right`. `.col-right` becomes an empty shell that shrinks to `width: 0` in pres-mode.
 
-**Panel repositions**: `.pres-panel` transitions from `height: 55%` (Phase 0–2) to a more centred, fixed-height layout. The panel is split into two sub-regions side-by-side: `.pres-image-wrap` (left, holds the neon border + image) and `.pres-dossier` (right, holds structured text).
-
-**Dossier text panel**: `.pres-dossier` appears to the right of the image with a HUD-style layout — a title, a horizontal rule, a body paragraph, and a key/value metadata grid. All populated with filler text in this phase.
-
-#### CSS additions
-
-```css
-/* Sphere shifts left in presentation mode */
-.starling.pres-mode .col-left {
-  transform: translateX(-36px);
-  transition: transform 0.5s ease;
-}
-
-/* Panel becomes a flex row in presentation mode */
-.starling.pres-mode .pres-panel {
-  display: flex;
-  flex-direction: row;
-  gap: 20px;
-  padding: 16px;
-  height: 60%;
-  align-items: stretch;
-}
-
-/* Image wrap — left side of panel */
-.pres-image-wrap {
-  position: relative;
-  flex: 1;
-}
-
-/* Dossier text — right side of panel */
-.pres-dossier {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  opacity: 0;
-  transition: opacity 0.4s ease 0.85s;
-  overflow: hidden;
-}
-.starling.pres-mode .pres-dossier { opacity: 1; }
-
-.pres-dossier-title {
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 14px;
-  letter-spacing: 4px;
-  color: #e0e0e0;
-  text-transform: uppercase;
-  border-bottom: 0.5px solid rgba(0, 170, 255, 0.4);
-  padding-bottom: 8px;
-}
-.pres-dossier-body {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 11px;
-  color: rgba(200,200,200,0.65);
-  line-height: 1.75;
-}
-.pres-dossier-meta {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 4px 16px;
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 9px;
-  letter-spacing: 1.5px;
-}
-.pres-dossier-meta .key { color: rgba(0,170,255,0.6); text-transform: uppercase; }
-.pres-dossier-meta .val { color: rgba(200,200,200,0.55); }
+```
+.body-cols
+  ├── .col-left            ← sphere + waveform + chat-panel (flex-column)
+  ├── .pres-panel          ← neon border + image  (zero-width in normal mode)
+  ├── .pres-dossier        ← structured text      (zero-width in normal mode)
+  └── .col-right           ← empty shell; shrinks to 0 in pres-mode
 ```
 
-#### HTML additions
+**Sphere**: shifts up-left via `transform: translate(-28px, -18px)` on `.col-left`. The sphere lifts slightly and moves toward the left edge, freeing vertical space for the conversation window to appear below it.
 
-Restructure `.pres-panel` interior:
+**Conversation window**: In normal mode, `.chat-panel` inside `.col-left` is `max-height: 0; opacity: 0; overflow: hidden` — invisible. In `pres-mode` it transitions to a visible height below the sphere. Chat history is fully preserved throughout; `appendMessage()` targets `#chat-inner` by ID, which doesn't move.
+
+**Neon image panel** (`.pres-panel`): in normal mode `width: 0; overflow: hidden`. In `pres-mode` it grows to ~32% of `.body-cols` width. The border animation (Phase 1) and image (Phase 2) are already inside it.
+
+**Dossier text panel** (`.pres-dossier`): same — `width: 0` normally, grows to ~28% in `pres-mode` and fades in after the border animation completes (~850 ms delay).
+
+#### HTML changes (`frontend/index.html`)
+
+Restructure `.body-cols`:
 
 ```html
-<div class="pres-panel" id="pres-panel">
-  <!-- Image region (neon border + image) -->
-  <div class="pres-image-wrap">
+<div class="body-cols">
+
+  <!-- Left column: sphere + chat repositioned below in pres-mode -->
+  <div class="col-left">
+    <div class="ring-section">
+      <!-- sphere canvas, halo — unchanged -->
+    </div>
+    <div class="waveform" id="waveform"></div>
+    <!-- Chat panel lives here so it slides in below sphere in pres-mode -->
+    <div class="chat-panel">
+      <div class="chat-inner" id="chat-inner"></div>
+    </div>
+  </div>
+
+  <!-- Neon image panel — zero-width in normal mode -->
+  <div class="pres-panel" id="pres-panel">
     <span class="edge edge-top"></span>
     <span class="edge edge-left"></span>
     <span class="edge edge-right"></span>
@@ -844,55 +803,226 @@ Restructure `.pres-panel` interior:
     <img class="pres-image" id="pres-image" src="" alt="" />
   </div>
 
-  <!-- Dossier text region -->
+  <!-- Dossier text panel — zero-width in normal mode -->
   <div class="pres-dossier" id="pres-dossier">
     <div class="pres-dossier-title" id="pres-dossier-title">SUBJECT UNKNOWN</div>
-    <div class="pres-dossier-body" id="pres-dossier-body">
+    <div class="pres-dossier-body"  id="pres-dossier-body">
       Awaiting intelligence data. No records on file for this subject.
-      Cross-referencing local knowledge base.
     </div>
-    <div class="pres-dossier-meta">
+    <div class="pres-dossier-meta" id="pres-dossier-meta">
       <span class="key">STATUS</span><span class="val">UNCLASSIFIED</span>
       <span class="key">SOURCE</span><span class="val">LOCAL KB</span>
       <span class="key">UPDATED</span><span class="val">—</span>
     </div>
   </div>
+
+  <!-- Right column: empty shell, shrinks to zero in pres-mode -->
+  <div class="col-right"></div>
+
 </div>
 ```
 
+> **Note**: `#chat-inner` keeps its ID. `appendMessage()` in `app.js` finds it by `getElementById` — no JS changes required.
+
+#### CSS changes (`frontend/style.css`)
+
+```css
+/* ── col-left becomes a flex-column so chat stacks below sphere ─────────── */
+.col-left {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 50%;
+  transition: transform 0.5s ease, width 0.5s ease;
+}
+
+.col-right {
+  width: 50%;
+  transition: width 0.5s ease;
+}
+
+/* pres-panel and pres-dossier: invisible and zero-width by default */
+.pres-panel {
+  position: relative;
+  width: 0;
+  overflow: hidden;
+  background: #000;
+  transition: width 0.5s ease;
+}
+
+.pres-dossier {
+  width: 0;
+  overflow: hidden;
+  opacity: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0;
+  box-sizing: border-box;
+  transition: width 0.5s ease, opacity 0.4s ease 0.85s, padding 0.5s ease;
+}
+
+/* Chat panel inside col-left: hidden until pres-mode */
+.col-left .chat-panel {
+  width: 100%;
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  flex-shrink: 0;
+  transition: max-height 0.5s ease 0.2s, opacity 0.4s ease 0.35s;
+}
+
+/* ── Pres-mode overrides ──────────────────────────────────────────────────── */
+.starling.pres-mode .col-left {
+  width: 22%;
+  transform: translate(-28px, -18px);
+}
+.starling.pres-mode .col-right {
+  width: 0;
+}
+.starling.pres-mode .pres-panel {
+  width: 32%;
+}
+.starling.pres-mode .pres-dossier {
+  width: 28%;
+  opacity: 1;
+  padding: 20px 16px;
+}
+
+/* Sphere ring nudges upward slightly */
+.starling.pres-mode .ring-section {
+  transform: translateY(-10px);
+  transition: transform 0.5s ease;
+}
+
+/* Chat reveals below sphere */
+.starling.pres-mode .col-left .chat-panel {
+  max-height: 38%;
+  opacity: 0.85;
+}
+
+/* ── Dossier text styles ─────────────────────────────────────────────────── */
+.pres-dossier-title {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 13px;
+  letter-spacing: 4px;
+  color: #e0e0e0;
+  text-transform: uppercase;
+  border-bottom: 0.5px solid rgba(0, 170, 255, 0.35);
+  padding-bottom: 8px;
+  flex-shrink: 0;
+}
+.pres-dossier-body {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10.5px;
+  color: rgba(200, 200, 200, 0.65);
+  line-height: 1.8;
+  overflow-y: auto;
+}
+.pres-dossier-meta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 5px 18px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  flex-shrink: 0;
+}
+.pres-dossier-meta .key { color: rgba(0, 170, 255, 0.6); text-transform: uppercase; }
+.pres-dossier-meta .val { color: rgba(200, 200, 200, 0.55); }
+```
+
+#### JS changes (`frontend/app.js`)
+
+None beyond Phase 0. The `.pres-mode` class cascade handles all layout transitions. `enterPresMode(subject)` and `exitPresMode()` remain unchanged.
+
 #### Verification
 
-- Trigger → sphere shifts left, conversation disappears, panel expands, neon border draws, image fades in, dossier text panel fades in alongside it
-- All transitions feel smooth and choreographed — adjust delays if elements clash visually
-- Exit → everything reverses cleanly, conversation reappears at full opacity, sphere returns to centre
-- Bottom bar (mic, input, send) and footer remain unchanged throughout
+- Trigger → sphere lifts and shifts left; chat window slides in below sphere; neon image panel grows from centre; dossier text panel fades in from the right — all in one choreographed motion over ~1 s
+- Exit → all four zones reverse; sphere returns to centre; chat collapses back to hidden; panels shrink to zero
+- Chat history preserved throughout — `#chat-inner` never moves in the DOM
+- New messages appended during pres-mode appear correctly in the repositioned chat window
+- Bottom bar and footer unchanged throughout
 
 #### Files changed
 
 | File | Change |
 |---|---|
-| `frontend/index.html` | Restructure `.pres-panel` interior; add `.pres-image-wrap` and `.pres-dossier` |
-| `frontend/style.css` | `.pres-mode` layout transitions; `.pres-dossier` styles; sphere shift |
-| `frontend/app.js` | Minor — update `enterPresMode`/`exitPresMode` if additional class/state logic is needed |
+| `frontend/index.html` | Restructure `.body-cols` — move `.chat-panel` into `.col-left`; promote `.pres-panel` and `.pres-dossier` as direct `.body-cols` children; empty `.col-right` shell |
+| `frontend/style.css` | Four-zone width transitions; sphere/ring shift; chat reveal in `.col-left`; `.pres-dossier` text styles |
+| `frontend/app.js` | **None** |
 | `backend/*` | **None** |
 
 ---
-
 ### Phase 4 — RAG Image and Text Population
 
 **Status**: 🔴 Not started — implement only after Phase 3 is visually complete and stable  
 **Effort**: Medium (backend manifest + API endpoints + prompt engineering)  
-**Goal**: Replace filler text and static test image with real data. When a trigger fires for a known subject, the correct image and structured dossier text are loaded from a local manifest. The LLM is optionally instructed to prepend a `[DOSSIER:key]` tag to responses about subjects in the manifest.
+**Goal**: Replace filler text and static test image with real data. When a trigger fires for a known subject, the correct image is loaded and **two sequential LLM calls** are made: one to generate the structured dossier panel, and one to feed that same data back into the normal S.T.A.R.L.I.N.G. prompt so the AI reads a summary aloud. The user sees the dossier on screen and hears STARLING describe it simultaneously.
 
 #### What this phase does
 
-- `assets/images/manifest.json` becomes the single source of truth — each entry has a key, display title, image filename, and metadata fields
+- `assets/images/manifest.json` is the single source of truth — each entry has a key, display title, image filename, raw text body, and metadata fields
 - A `backend/rag.py` router exposes `GET /rag/manifest` and `GET /rag/image/{key}`
-- `app.js` loads the manifest on startup and injects the key vocabulary into the system prompt
-- **Subject-to-key resolution**: `_presSubject` captured in Phase 0 is passed to `_resolveManifestKey(subject)` which fuzzy-matches against manifest titles and keys. This is the direct payoff of the Phase 0 regex design — the subject word(s) already arrive cleanly without needing to re-parse the transcript.
-- When a key is resolved, `_populatePresPanel(entry)` fills the image, dossier title, body, and metadata grid from the manifest entry
-- When `[DOSSIER:key]` appears in a streamed LLM response, `triggerPresMode(key)` fires — this is the LLM-initiated path, complementing the voice-initiated path
-- Voice triggers and LLM tags both call the same `_populatePresPanel(entry)` — one code path for both entry points
+- `app.js` loads the manifest on startup
+- **Subject-to-key resolution**: `_presSubject` (captured in Phase 0 from e.g. `"pull up the dossier on Daniel Simpson"`) is passed to `_resolveManifestKey(subject)` which fuzzy-matches against manifest titles and keys — the direct payoff of the Phase 0 regex design
+- **Dual LLM call sequence**: once a manifest entry is resolved, two requests fire:
+  1. **Dossier prompt** — raw manifest data + a few-shot template instructing the LLM to return structured dossier output (title, 2–3 sentence body, key/value metadata rows). The streamed response populates the `.pres-dossier` panel fields in real time.
+  2. **Verbal readout prompt** — the same raw manifest data is injected into the normal STARLING system prompt as context, and the LLM is asked to give a spoken briefing. This streams into the chat window and is read aloud via the normal sentence-chunked TTS pipeline.
+- The two calls are **independent** — the dossier prompt fires first and streams into the panel; the verbal readout fires immediately after (or in parallel) and streams into the chat as normal speech
+- Voice trigger path and `[DOSSIER:key]` LLM tag path both converge on the same `_activateDossier(key)` function
+
+#### Dual-prompt design
+
+```
+user says: "Pull up the dossier on Apollo 13"
+           │
+           ▼
+  _parseTrigger() → { matched: true, subject: "Apollo 13" }
+  _resolveManifestKey("Apollo 13") → entry = manifest["apollo_13"]
+  enterPresMode("apollo_13")       → panel visible, image loaded
+           │
+           ├─► Dossier prompt ──► streams into .pres-dossier panel (title, body, meta)
+           │
+           └─► Verbal prompt  ──► streams into chat + TTS reads aloud
+                                  "Apollo 13 was NASA's seventh crewed Moon mission..."
+```
+
+#### Dossier prompt template
+
+The dossier prompt is a separate system message, never shown in the main chat history:
+
+```
+You are a dossier formatter. Given raw subject data, output ONLY a JSON object with these exact fields:
+{
+  "title": "SUBJECT NAME IN CAPS",
+  "body": "2-3 sentence factual summary.",
+  "meta": [
+    { "key": "FIELD_LABEL", "val": "value" },
+    ...up to 5 rows
+  ]
+}
+No prose. No explanation. JSON only.
+
+Subject data:
+[manifest entry body text injected here]
+```
+
+The JSON response is parsed on arrival and used to populate `#pres-dossier-title`, `#pres-dossier-body`, and `#pres-dossier-meta`.
+
+#### Verbal readout prompt
+
+The verbal readout re-uses the existing `sendToLlm()` flow with an augmented system prompt:
+
+```
+[Normal STARLING system prompt]
+
+CONTEXT — Subject on screen: [manifest entry body text]
+When asked to brief on this subject, give a concise 3-5 sentence spoken summary.
+Do not describe the dossier panel or mention the screen layout.
+```
+
+This streams tokens into the chat window and through TTS exactly as a normal response would. The user hears STARLING speak about the subject while reading the structured dossier alongside the image.
 
 #### Manifest schema
 
@@ -902,25 +1032,27 @@ Restructure `.pres-panel` interior:
     "key": "apollo_13",
     "title": "APOLLO 13",
     "file": "apollo_13.jpg",
-    "body": "NASA's seventh crewed Moon mission, launched April 11 1970. An oxygen tank rupture on day two forced the crew to abort the lunar landing and use the Lunar Module as a lifeboat.",
+    "body": "NASA's seventh crewed Moon mission, launched April 11 1970. An oxygen tank rupture on day two forced the crew to abort the lunar landing and use the Lunar Module as a lifeboat. All three crew members returned safely on April 17 1970.",
     "meta": [
       { "key": "MISSION",  "val": "Apollo 13" },
       { "key": "DATE",     "val": "11 APR 1970" },
-      { "key": "STATUS",   "val": "ABORTED" },
+      { "key": "STATUS",   "val": "ABORTED — CREW SAFE" },
       { "key": "CREW",     "val": "Lovell / Swigert / Haise" }
     ]
   }
 ]
 ```
 
+The `body` field is the raw text fed to both prompts. The `meta` array is a fallback rendered directly if the dossier LLM call fails or is skipped.
+
 #### Files changed (Phase 4 only)
 
 | File | Change |
 |---|---|
 | `assets/images/manifest.json` | Create — full manifest |
-| `backend/rag.py` | Create — `/rag/manifest` and `/rag/image/{key}` |
+| `backend/rag.py` | Create — `GET /rag/manifest` and `GET /rag/image/{key}` |
 | `backend/main.py` | Register RAG router |
-| `frontend/app.js` | Manifest load on init; prompt injection; `_resolveManifestKey(subject)` fuzzy-matcher; `_populatePresPanel(entry)`; `[DOSSIER:key]` stream tag parser; `enterPresMode()` updated to call `_resolveManifestKey(_presSubject)` and populate panel |
+| `frontend/app.js` | Manifest load on init; `_resolveManifestKey(subject)`; `_activateDossier(key)` orchestrator; dossier prompt call → panel population; verbal readout call → chat + TTS; `[DOSSIER:key]` stream tag parser as secondary trigger path |
 | `frontend/style.css` | **None** — Phase 3 styles are sufficient |
 | `frontend/index.html` | **None** — Phase 3 HTML is sufficient |
 
