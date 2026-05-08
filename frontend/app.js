@@ -93,6 +93,23 @@ UI_HOVER_IDS.forEach(id => {
 // ── LLM metrics ────────────────────────────────────────────────────────────────────
 let _ctxLimit = null;  // fetched from /chat/context-limit at startup (llama backend only)
 
+// Known context window sizes for common models — used as a fallback when
+// /chat/context-limit is unavailable (llama-server not yet running at page load).
+const _KNOWN_CTX = {
+  'llama3.2-3b':  131072,
+  'llama3.2:3b':  131072,
+  'llama3.1-8b':  131072,
+  'llama3.1:8b':  131072,
+  'mistral-7b':    32768,
+  'mistral:7b':    32768,
+  'qwen2.5-7b':   131072,
+  'qwen2.5:7b':   131072,
+  'gemma3-4b':    131072,
+  'gemma3:4b':    131072,
+  'phi4-mini':    131072,
+  'phi4-mini:latest': 131072,
+};
+
 async function fetchContextLimit() {
   try {
     const res = await fetch(`${BACKEND_BASE}/chat/context-limit`);
@@ -100,6 +117,11 @@ async function fetchContextLimit() {
     const { n_ctx } = await res.json();
     if (n_ctx) _ctxLimit = n_ctx;
   } catch { /* endpoint absent (Ollama) or server not ready — ignore */ }
+  // If the endpoint didn't help, fall back to the known-sizes table.
+  if (!_ctxLimit) {
+    const modelKey = (localStorage.getItem('starling_model') || MODEL || '').toLowerCase();
+    _ctxLimit = _KNOWN_CTX[modelKey] ?? null;
+  }
 }
 
 function updateLlmMetrics(m) {
@@ -112,7 +134,10 @@ function updateLlmMetrics(m) {
     lmTime.textContent = m.predicted_ms < 1000
       ? `${Math.round(m.predicted_ms)}ms`
       : `${(m.predicted_ms / 1000).toFixed(1)}s`;
-  const used = m.prompt_tokens;
+  // prompt_tokens from usage (preferred); fall back to prompt_n from timings.
+  const used = m.prompt_tokens ?? m.prompt_n;
+  // If _ctxLimit still unknown, retry now that the server is clearly up.
+  if (used != null && !_ctxLimit) fetchContextLimit();
   if (used != null) {
     if (_ctxLimit) {
       const pct = Math.min(100, Math.round((used / _ctxLimit) * 100));

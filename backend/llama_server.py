@@ -43,7 +43,8 @@ async def _stream_as_ndjson(payload: dict):
     After the done sentinel, emits a {"metrics": {...}} line with timings and token
     usage so the frontend can display performance stats without a separate request.
     """
-    last_chunk: dict = {}  # final chunk before [DONE] — carries timings + usage
+    last_chunk: dict = {}   # stop chunk — carries timings
+    usage_chunk: dict = {}  # usage-only chunk emitted after the stop chunk when stream_options.include_usage=true
 
     async with httpx.AsyncClient(timeout=None) as client:
         async with client.stream(
@@ -57,11 +58,13 @@ async def _stream_as_ndjson(payload: dict):
                 data_str = line[6:].strip()
                 if data_str == "[DONE]":
                     yield json.dumps({"message": {"content": ""}, "done": True}) + "\n"
-                    # Emit metrics line using timings + usage captured from final chunk
+                    # Emit metrics line using timings from the stop chunk +
+                    # usage from the dedicated usage chunk (if llama-server sent one).
                     if last_chunk:
                         metrics: dict = {}
                         timings = last_chunk.get("timings", {})
-                        usage   = last_chunk.get("usage",   {})
+                        # Prefer usage from the dedicated usage chunk; fall back to the stop chunk.
+                        usage   = usage_chunk.get("usage") or last_chunk.get("usage", {})
                         if timings:
                             metrics.update({
                                 "prompt_n":             timings.get("prompt_n"),
@@ -73,15 +76,23 @@ async def _stream_as_ndjson(payload: dict):
                         if usage:
                             metrics["prompt_tokens"]     = usage.get("prompt_tokens")
                             metrics["completion_tokens"] = usage.get("completion_tokens")
+                        elif timings:
+                            # Fallback: llama-server didn't return usage — use timings counts.
+                            metrics["prompt_tokens"]     = timings.get("prompt_n")
+                            metrics["completion_tokens"] = timings.get("predicted_n")
                         if metrics:
                             yield json.dumps({"metrics": metrics}) + "\n"
                     return
                 try:
                     chunk = json.loads(data_str)
-                    # Track every chunk — the stop chunk carries timings + usage
-                    if chunk.get("choices", [{}])[0].get("finish_reason") == "stop":
+                    choices = chunk.get("choices", [])
+                    if choices and choices[0].get("finish_reason") == "stop":
+                        # Stop chunk — carries timings; store separately.
                         last_chunk = chunk
-                    content = chunk["choices"][0]["delta"].get("content", "")
+                    elif not choices and chunk.get("usage"):
+                        # Usage-only chunk sent after the stop chunk (stream_options behaviour).
+                        usage_chunk = chunk
+                    content = choices[0]["delta"].get("content", "") if choices else ""
                     if content:
                         yield json.dumps({"message": {"content": content}, "done": False}) + "\n"
                 except (json.JSONDecodeError, KeyError, IndexError):

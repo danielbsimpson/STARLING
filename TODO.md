@@ -211,6 +211,16 @@ Remove background/border styling from message containers so text floats freely. 
 
 ---
 
+## Phase 9 — DevEx & Tooling
+- [x] Write `scripts/setup.sh` to automate full install (venv, pip, model download)
+- [x] Add `Makefile` with targets: `make install`, `make backend`, `make frontend`, `make llama`, `make test`, `make lint`
+- [x] Add hot-reload for frontend (e.g. Vite or live-server) — `make frontend` launches `npx live-server frontend/`
+- [x] Add hot-reload for backend (`uvicorn --reload`) — `make backend` runs uvicorn with `--reload` and `--reload-dir`
+- [x] Write basic integration test: send text → verify LLM responds end-to-end — `scripts/test_integration.py`
+- [x] Document all `.env` variables in `.env.example`
+
+---
+
 ## Phase 10 — llama.cpp Migration (Remove Ollama Wrapper) ✅
 
 - [x] Research llama-server as a direct llama.cpp endpoint (OpenAI-compatible SSE)
@@ -224,13 +234,6 @@ Remove background/border styling from message containers so text floats freely. 
 - [x] Add `scripts/start_llama_server.bat` — CUDA launch helper pointing at Ollama blob path
 - [x] Add LLM performance metrics bar to UI — single row above TTS controls showing prompt tokens, generation speed, total time, and context window fill (with amber/red warnings at 70%/90%)
 - [x] Confirm noticeable speed improvement over Ollama — faster first-token latency, higher t/s observed in metrics bar
-
-## Phase 9 — DevEx & Tooling
-- [ ] Add `Makefile` with targets: `make start`, `make backend`, `make frontend`
-- [ ] Add hot-reload for frontend (e.g. Vite or live-server)
-- [ ] Add hot-reload for backend (`uvicorn --reload`)
-- [ ] Write basic integration test: send text → verify Ollama responds
-- [ ] Document all `.env` variables in `.env.example`
 
 ---
 
@@ -291,6 +294,13 @@ Replace flat vector RAG with [Microsoft GraphRAG](https://github.com/microsoft/g
 - [ ] Add a `MEMORY` button to the controls row that opens a simple panel listing: last indexed time, document count, top entities, and a manual "Re-index now" trigger
 - [ ] Display the active search mode (`LOCAL` / `GLOBAL`) in the footer alongside the TTS/STT labels
 
+#### Phase 9 maintenance notes (what needs updating when GraphRAG is implemented)
+
+- **`setup.sh`** — effectively set-and-forget; no changes needed unless a second model download step is added beyond Kokoro (e.g. downloading a GraphRAG embedding model)
+- **`Makefile`** — stable as-is; if a separate memory/indexing server needs launching, just add a new `make memory` target rather than rewriting existing ones
+- **`.env.example`** — add a documented entry for every new env var introduced (e.g. `GRAPHRAG_ROOT`, `GRAPHRAG_LLM_MODEL`); one line + comment per variable, 2 minutes each
+- **`scripts/test_integration.py`** — this is the one that needs active maintenance as the API grows: every new endpoint (`/memory/query`, `/memory/index`, `/memory/status`) needs a corresponding `async def test_xxx` function (~15–20 lines each, following the same pattern already there); existing tests only break if their endpoint's response shape changes (e.g. new required keys in `/system-status`)
+
 ---
 
 ## Closed Topics
@@ -323,9 +333,9 @@ Approaches considered for resolved issues — retained for reference in case iss
 
 | Layer | Tool | Notes |
 |---|---|---|
-| LLM runtime | Ollama | GPU-accelerated local inference |
-| LLM model | Llama 3 / Mistral / Gemma 2 | Pull via `ollama pull` |
-| STT | Web Speech API or faster-whisper | Browser = easy, Whisper = accurate |
-| TTS | SpeechSynthesis or Kokoro TTS | Browser = easy, Kokoro = quality |
-| Backend | FastAPI + uvicorn | Optional glue, needed for Whisper/Kokoro |
-| Frontend | Vanilla HTML/JS or React + Vite | Single file works fine to start |
+| LLM runtime | llama-server (llama.cpp) | Direct GPU inference — default; Ollama kept as fallback |
+| LLM model | Llama 3.2 3B / Llama 3.1 8B / Mistral 7B | GGUF blobs from Ollama cache |
+| STT | faster-whisper | CUDA-accelerated local transcription |
+| TTS | Kokoro TTS (kokoro-onnx) | GPU-accelerated via CUDA or DirectML |
+| Backend | FastAPI + uvicorn | Glue layer for STT, TTS, LLM relay |
+| Frontend | Vanilla HTML/CSS/JS + Three.js | Served by FastAPI at port 8000 |
