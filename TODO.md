@@ -303,6 +303,128 @@ Replace flat vector RAG with [Microsoft GraphRAG](https://github.com/microsoft/g
 
 ---
 
+### Stretch Goal — Electron Desktop App
+
+Package S.T.A.R.L.I.N.G. as a standalone desktop application — no browser, no terminal, no manual server launch. The user double-clicks an icon and the full stack (FastAPI backend + llama-server + frontend) starts automatically inside a single native window.
+
+**Architecture overview:**
+- **Electron main process** (`electron/main.js`) acts as the process supervisor: spawns the Python backend binary and optionally llama-server, polls until both are ready, then opens a `BrowserWindow` pointed at `http://localhost:8000`.
+- **Python backend** is frozen with PyInstaller into a single `backend.exe` / `backend` binary bundled inside the Electron app's `resources/` folder.
+- **llama-server** binary is also bundled in `resources/` and auto-launched with the same CUDA flags currently in `start_llama_server.bat`.
+- **Frontend** continues to be served by FastAPI (no change to `frontend/` code or asset paths).
+
+#### Step 1 — Add Electron scaffold
+
+- [ ] Create `electron/` folder at repo root with three files: `main.js`, `preload.js`, `package.json`
+- [ ] Add a root-level `package.json` (separate from any frontend tooling) with Electron as a dev dependency:
+  ```json
+  {
+    "name": "starling-local",
+    "version": "1.0.0",
+    "main": "electron/main.js",
+    "devDependencies": {
+      "electron": "^30.0.0",
+      "electron-builder": "^24.0.0"
+    }
+  }
+  ```
+- [ ] Run `npm install` to pull Electron into `node_modules/` — add `node_modules/` to `.gitignore` if not already present
+- [ ] Add a `make electron-dev` Makefile target: `npx electron .` — launches the app in dev mode (backend and llama-server still started manually, window loads `http://localhost:8000`)
+
+#### Step 2 — Electron main process: window + lifecycle
+
+- [ ] Write `electron/main.js` with the following responsibilities:
+  - `app.whenReady()` → call `spawnBackend()`, then `spawnLlamaServer()`, then `pollUntilReady()`, then `createWindow()`
+  - `createWindow()`: create a frameless (or default) `BrowserWindow` (1 280 × 800, min 900 × 600); load `http://localhost:8000`; show only after `did-finish-load` fires to avoid a white flash
+  - `app.on('before-quit')` and `app.on('window-all-closed')`: kill both child processes gracefully (`SIGTERM` → wait 2 s → `SIGKILL`)
+- [ ] Add a system tray icon: right-click menu with "Open", "Restart backend", "Quit"
+  - Tray icon asset: create a 16 × 16 and 32 × 32 PNG in `assets/images/tray-icon.png`
+- [ ] Wire `app.on('activate')` (macOS dock click) to re-show the window if it exists but is hidden
+
+#### Step 3 — Freeze the Python backend with PyInstaller
+
+- [ ] `pip install pyinstaller` into `.venv`
+- [ ] Create `scripts/build_backend.spec` — a PyInstaller spec file that:
+  - Sets `pathex` to `backend/`
+  - Includes all data files: `backend/` Python modules, `models/` ONNX files (as `datas`), `frontend/` static assets (so FastAPI's `StaticFiles` mount works from the frozen binary)
+  - Adds hidden imports for `faster_whisper`, `kokoro_onnx`, `onnxruntime`, `uvicorn`, `fastapi`, `anyio`
+  - Marks CUDA `.dll`/`.so` files as binaries so they are copied into the bundle
+  - `onefile=False` (directory bundle) — `onefile` is slower to start and harder to debug; use a folder bundle named `backend_dist/`
+- [ ] Add a `make build-backend` Makefile target: `pyinstaller scripts/build_backend.spec --distpath dist/backend`
+- [ ] Test the frozen binary standalone: `dist/backend/main/main.exe` should serve on port 8000 with no Python install present
+- [ ] Handle the `.env` file: copy it next to the binary at build time; Electron main process also writes a resolved `.env` before spawning the binary (so paths like `LLAMA_SERVER_URL` can be made absolute to the bundle root)
+
+#### Step 4 — Bundle and auto-launch llama-server
+
+- [ ] Download the official llama.cpp release binary for the target platform (CUDA build for Windows: `llama-<version>-win-cuda-cu12.x-x64.zip`) and place `llama-server.exe` in `resources/llama/`
+- [ ] Copy the GGUF model file into `resources/llama/models/` at build time (or provide a first-run download step — see Step 7)
+- [ ] Write `spawnLlamaServer(resourcesPath)` in `electron/main.js`:
+  ```js
+  const bin  = path.join(resourcesPath, 'llama', 'llama-server.exe');
+  const model = path.join(resourcesPath, 'llama', 'models', 'llama3.2-3b-q4_k_m.gguf');
+  llamaProc = spawn(bin, ['-m', model, '--port', '8080', '-ngl', '29', '--ctx-size', '4096'], {
+    env: { ...process.env, CUDA_VISIBLE_DEVICES: '0' }
+  });
+  ```
+- [ ] `spawnLlamaServer` skips launch if port 8080 is already in use (user may have llama-server running externally) — check with a quick `net.createServer` probe before spawning
+- [ ] Stream `llamaProc.stderr` to a log file at `app.getPath('logs')/llama-server.log` for debugging
+
+#### Step 5 — Readiness polling
+
+- [ ] Write `pollUntilReady(urls, timeoutMs)` in `electron/main.js`:
+  - Accepts an array of health-check URLs (e.g. `['http://localhost:8000/health', 'http://localhost:8080/health']`)
+  - Polls every 500 ms with `net.request` (Electron's native HTTP, works before the renderer is open)
+  - Resolves when all URLs return 200; rejects (shows error dialog) after `timeoutMs` (default 30 000 ms)
+- [ ] Display a native loading splash while polling: a small secondary `BrowserWindow` rendering `frontend/splash.html` (static HTML, no server needed) — close it once `pollUntilReady` resolves
+- [ ] On timeout: show `dialog.showErrorBox('Startup failed', '...')` with log file path, then `app.quit()`
+
+#### Step 6 — preload.js and IPC
+
+- [ ] Write `electron/preload.js` with `contextBridge.exposeInMainWorld('starling', {...})` exposing:
+  - `getAppVersion()` → `app.getVersion()` via IPC
+  - `openLogsFolder()` → `shell.openPath(app.getPath('logs'))` — lets the user inspect llama/backend logs from the UI settings panel
+  - `openDocumentFolder(path)` → `shell.openPath(path)` — for the future RAG document folder
+- [ ] Wire the "Open Logs" button (add to settings panel in a future pass) to call `window.starling.openLogsFolder()`
+- [ ] Keep `nodeIntegration: false` and `contextIsolation: true` in `BrowserWindow` webPreferences — never expose Node APIs directly to the renderer
+
+#### Step 7 — First-run model download (optional, if not bundling model)
+
+- [ ] If the GGUF model is too large to bundle in the installer (>2 GB), implement a first-run download flow:
+  - On first launch, check if model file exists in `app.getPath('userData')/models/`
+  - If not, show a modal (`BrowserWindow` or `dialog`) explaining the download (~2 GB), then stream it with `net.request` to `userData/models/` showing progress
+  - Write download progress back to the renderer via `ipcMain` → `webContents.send('download-progress', pct)`
+  - Once complete, proceed with normal startup; model path is written into the resolved `.env`
+
+#### Step 8 — Package with electron-builder
+
+- [ ] Add `build` section to root `package.json`:
+  ```json
+  "build": {
+    "appId": "com.starling.local",
+    "productName": "STARLING",
+    "directories": { "output": "dist/electron" },
+    "extraResources": [
+      { "from": "dist/backend", "to": "backend" },
+      { "from": "resources/llama", "to": "llama" }
+    ],
+    "win": { "target": "nsis", "icon": "assets/images/icon.ico" },
+    "mac": { "target": "dmg", "icon": "assets/images/icon.icns" },
+    "linux": { "target": "AppImage", "icon": "assets/images/icon.png" }
+  }
+  ```
+- [ ] Add a `make dist` Makefile target that runs the full chain: `make build-backend` → `npx electron-builder --win` (adjust platform flag per OS)
+- [ ] Test the NSIS installer on a clean Windows machine with no Python, Node, or CUDA toolkit installed — only the NVIDIA driver should be required
+- [ ] Add `electron-updater` (`npm install electron-updater`) and a `latest.yml` publish target pointing at a GitHub Releases feed — enables auto-update prompts on launch
+
+#### Phase 9 maintenance notes (Electron)
+
+- **`setup.sh`** — add `npm install` step at the end (skip if `node_modules/` already exists); add a check for Node ≥ 18
+- **`Makefile`** — add `electron-dev`, `build-backend`, and `dist` targets; document in `make help`
+- **`.env.example`** — add `ELECTRON_DEV=true` flag (when set, Electron skips spawning backend/llama-server and assumes they are already running — useful during development)
+- **`scripts/test_integration.py`** — no changes needed; integration tests continue to run against the standalone backend and are still valid for the frozen binary
+
+---
+
 ## Closed Topics
 
 Approaches considered for resolved issues — retained for reference in case issues resurface or interact with future work.
