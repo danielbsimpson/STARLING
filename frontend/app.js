@@ -62,11 +62,13 @@ async function enterPresMode(subject) {
   const dossier = await _loadDossier(key);
   if (dossier) {
     const metaLines = Object.entries(dossier.meta).map(([k, v]) => `${k}: ${v}`).join('\n');
-    const prompt =
-      `[DOSSIER ACTIVATED]\n\nSubject Profile:\n${metaLines}\n\nDescription:\n${dossier.body}\n\n` +
-      `Based on this dossier, deliver a concise spoken briefing — three to four sentences, spoken naturally — ` +
-      `as if presenting to an intelligence analyst. Summarise who this person is, what they do, and what is most notable about them.`;
-    sendToOllama(prompt);
+    // Inject dossier as a system context block so the model treats it as grounding data
+    // rather than content to echo. The user turn is then a clean short instruction only.
+    conversationHistory.push({
+      role: 'system',
+      content: `[DOSSIER CONTEXT — not spoken aloud]\nSubject Profile:\n${metaLines}\n\nDescription:\n${dossier.body}`
+    });
+    sendToOllama('Deliver a concise spoken briefing on this subject — three to four sentences, spoken naturally, as if presenting to an intelligence analyst.');
   }
 }
 
