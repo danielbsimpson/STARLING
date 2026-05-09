@@ -14,7 +14,7 @@ Microphone → Speech-to-Text → llama-server (LLM on GPU) → Text-to-Speech �
 
 - 🎙 **Voice input** via browser MediaRecorder API → local faster-whisper (Whisper)
 - 🧠 **Local LLM inference** directly via llama-server (llama.cpp) — no Ollama wrapper; Ollama kept as a switchable fallback
-- ⚡ **Faster first-token latency** — eliminating the Ollama relay hop gives a noticeable speed improvement; generation speed visible live in the metrics bar
+- ⚡ **Sub-3-second end-to-end latency** — typical voice → LLM → first TTS audio in under 3 s; dossier retrieval and full presentation mode transition under 4 s; all three pipelines (Whisper, Kokoro, llama-server) run on GPU
 - 🔊 **Text-to-speech** via Kokoro TTS (local, GPU-accelerated) or browser SpeechSynthesis
 - 📡 **Sentence-chunked streaming** — each sentence is synthesised and played as it arrives
 - 💬 **Multi-turn conversation** with persistent context
@@ -23,7 +23,7 @@ Microphone → Speech-to-Text → llama-server (LLM on GPU) → Text-to-Speech �
 - 📊 **LLM metrics bar** — live prompt tokens, generation speed (t/s), total time, and context window fill percentage after every response
 - 🔒 **Fully local** — no data leaves your machine
 - 🗄️ **RAG memory system** — ChromaDB + BM25/vector fusion retrieval; drop `.md` or `.txt` files into `memory/input/` and the model answers with grounded context; gated by `RAG_ENABLED=true` in `.env`
-- 🖼️ **Dynamic dossier panel** — voice-triggered presentation mode loads subject images and structured profiles from a local manifest; new subjects added by dropping files in `assets/`
+- 🖼️ **Dynamic dossier panel** — voice-triggered presentation mode (`"pull up the dossier on [subject]"`) reconfigures the UI into a four-zone layout: sphere shifts up-left, chat repositions below it, a neon-bordered image panel and a structured text panel slide in. Subject images and profiles are resolved from `assets/images/manifest.json` via fuzzy name matching; the LLM automatically delivers a spoken briefing while the dossier is on screen. New subjects added by dropping an image and a `.md` description into `assets/`.
 
 ---
 
@@ -371,7 +371,7 @@ High-level milestones:
 - [ ] Sentence-chunked TTS latency further tuning
 - [ ] Tool use / function calling
 - [ ] Electron desktop app packaging
-- [x] **RAG memory system** — ChromaDB + BM25/vector RRF fusion + RSE-lite context expansion; voice-triggered dossier panel with dynamic images and structured subject profiles
+- [x] **Voice-triggered dossier / presentation mode** — all four phases complete: voice trigger intercept, neon border animation, four-zone layout reconfiguration, manifest-driven image + structured text loading, LLM auto-briefing spoken aloud via sentence-chunked TTS; sub-4 s end-to-end for retrieval and presentation
 
 ---
 

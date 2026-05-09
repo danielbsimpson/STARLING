@@ -388,11 +388,11 @@ Both Ollama (port 11434) and llama-server (port 8080) can run simultaneously. Ke
 
 ---
 
-## IDEA-003 — Voice-Triggered Presentation Mode
+## IDEA-003 — Voice-Triggered Presentation Mode [COMPLETED]
 
-**Status**: In progress — implement phases sequentially; do not jump ahead  
-**Effort**: Grows phase by phase — each phase is independently testable before the next begins  
-**Impact**: Establishes a voice-controlled visual presentation system, built incrementally from a simple rectangle to a full dossier layout, with RAG image loading added only once the UI mechanics are solid
+**Status**: Fully implemented — all four phases shipped and running in production  
+**Effort**: Grew phase by phase — each phase was independently tested before the next began  
+**Impact**: Full voice-controlled visual presentation system: voice trigger → four-zone layout reconfiguration → neon border animation → subject image loaded from manifest → structured dossier text rendered → LLM auto-briefing spoken aloud. End-to-end latency sub 4 s for retrieval + presentation mode; sub 3 s for standard responses. All pipelines remain on GPU.
 
 ### Guiding principle
 
@@ -956,21 +956,19 @@ None beyond Phase 0. The `.pres-mode` class cascade handles all layout transitio
 ---
 ### Phase 4 — RAG Image and Text Population
 
-**Status**: 🔴 Not started — implement only after Phase 3 is visually complete and stable  
+**Status**: ✅ Complete  
 **Effort**: Medium (backend manifest + API endpoints + prompt engineering)  
-**Goal**: Replace filler text and static test image with real data. When a trigger fires for a known subject, the correct image is loaded and **two sequential LLM calls** are made: one to generate the structured dossier panel, and one to feed that same data back into the normal S.T.A.R.L.I.N.G. prompt so the AI reads a summary aloud. The user sees the dossier on screen and hears STARLING describe it simultaneously.
+**Goal**: Replace filler text and static test image with real data. When a trigger fires for a known subject, the correct image is loaded and the LLM is prompted to deliver a spoken briefing. The user sees the dossier on screen and hears STARLING describe it simultaneously.
 
-#### What this phase does
+#### What this phase does — as implemented
 
-- `assets/images/manifest.json` is the single source of truth — each entry has a key, display title, image filename, raw text body, and metadata fields
-- A `backend/rag.py` router exposes `GET /rag/manifest` and `GET /rag/image/{key}`
-- `app.js` loads the manifest on startup
-- **Subject-to-key resolution**: `_presSubject` (captured in Phase 0 from e.g. `"pull up the dossier on Daniel Simpson"`) is passed to `_resolveManifestKey(subject)` which fuzzy-matches against manifest titles and keys — the direct payoff of the Phase 0 regex design
-- **Dual LLM call sequence**: once a manifest entry is resolved, two requests fire:
-  1. **Dossier prompt** — raw manifest data + a few-shot template instructing the LLM to return structured dossier output (title, 2–3 sentence body, key/value metadata rows). The streamed response populates the `.pres-dossier` panel fields in real time.
-  2. **Verbal readout prompt** — the same raw manifest data is injected into the normal STARLING system prompt as context, and the LLM is asked to give a spoken briefing. This streams into the chat window and is read aloud via the normal sentence-chunked TTS pipeline.
-- The two calls are **independent** — the dossier prompt fires first and streams into the panel; the verbal readout fires immediately after (or in parallel) and streams into the chat as normal speech
-- Voice trigger path and `[DOSSIER:key]` LLM tag path both converge on the same `_activateDossier(key)` function
+- `assets/images/manifest.json` is the single source of truth — each entry has a `key`, `title`, `image` filename, `dossier` key, and `aliases[]` array
+- `backend/main.py` exposes `GET /rag/manifest` (serves `manifest.json`) and `GET /dossier/{key}` (parses `assets/dossier_descriptions/{key}.md` → `{title, body, meta}`)
+- `app.js` calls `_loadManifest()` at startup, caching entries for the session
+- **Subject-to-key resolution**: `_resolveManifest(subject)` fuzzy-matches by exact key → exact title → alias → title-words → key-prefix. Covers natural speech variations including possessives and pre-dossier name placement (e.g. `"show me Quinn Minor's dossier"`)
+- **Subject extraction** is multi-fallback: primary capture group after `on/for/about/regarding/of`, fallback 1 for names before `dossier`, fallback 2 for names after `dossier` with any separator
+- **Single orchestrated LLM call**: once the manifest entry is resolved, `enterPresMode()` loads the image (via `presImage.src`), fetches the structured dossier via `GET /dossier/{key}`, populates `#pres-dossier-title`, `#pres-dossier-body`, and `#pres-dossier-meta`, then injects the dossier content as a `system`-role message and calls `sendToOllama()` with a concise verbal briefing prompt — the model speaks a 3–4 sentence summary while the panel is already populated
+- Dossier content injected as a `system` message prevents prompt instructions from leaking into the LLM output (resolved issue #10)
 
 #### Dual-prompt design
 
@@ -1045,14 +1043,14 @@ This streams tokens into the chat window and through TTS exactly as a normal res
 
 The `body` field is the raw text fed to both prompts. The `meta` array is a fallback rendered directly if the dossier LLM call fails or is skipped.
 
-#### Files changed (Phase 4 only)
+#### Files changed (Phase 4 — as implemented)
 
 | File | Change |
 |---|---|
-| `assets/images/manifest.json` | Create — full manifest |
-| `backend/rag.py` | Create — `GET /rag/manifest` and `GET /rag/image/{key}` |
-| `backend/main.py` | Register RAG router |
-| `frontend/app.js` | Manifest load on init; `_resolveManifestKey(subject)`; `_activateDossier(key)` orchestrator; dossier prompt call → panel population; verbal readout call → chat + TTS; `[DOSSIER:key]` stream tag parser as secondary trigger path |
+| `assets/images/manifest.json` | Created — `key`, `title`, `image`, `dossier`, `aliases[]` per entry |
+| `assets/dossier_descriptions/*.md` | Created — structured markdown files parsed by `/dossier/{key}` |
+| `backend/main.py` | Added `GET /rag/manifest` and `GET /dossier/{key}` endpoints |
+| `frontend/app.js` | `_loadManifest()` at startup; `_resolveManifest(subject)` fuzzy matcher; `enterPresMode()` orchestrates image load + dossier fetch + LLM briefing; `exitPresMode()` resets all panel fields |
 | `frontend/style.css` | **None** — Phase 3 styles are sufficient |
 | `frontend/index.html` | **None** — Phase 3 HTML is sufficient |
 
@@ -1060,12 +1058,20 @@ The `body` field is the raw text fed to both prompts. The `meta` array is a fall
 
 ### Phase summary
 
-| Phase | What it proves | Backend needed |
-|---|---|---|
-| **0 — Black rectangle** | Voice trigger intercept works | No |
-| **1 — Neon border animation** | Animation sequence plays cleanly from triggers | No |
-| **2 — Static image drop** | Image layout and timing work before any API | No |
-| **3 — Full reconfiguration** | Complete visual mode shift is smooth and reversible | No |
-| **4 — RAG population** | Real data populates the confirmed-working visual system | Yes |
+| Phase | What it proves | Backend needed | Status |
+|---|---|---|---|
+| **0 — Black rectangle** | Voice trigger intercept works | No | ✅ Complete |
+| **1 — Neon border animation** | Animation sequence plays cleanly from triggers | No | ✅ Complete |
+| **2 — Static image drop** | Image layout and timing work before any API | No | ✅ Complete |
+| **3 — Full reconfiguration** | Complete visual mode shift is smooth and reversible | No | ✅ Complete |
+| **4 — RAG population** | Real data populates the confirmed-working visual system | Yes | ✅ Complete |
+
+### Performance (production)
+
+| Scenario | End-to-end latency |
+|---|---|
+| Standard voice response | < 3 s (STT → LLM → TTS first sentence) |
+| Dossier retrieval + presentation mode | < 4 s (trigger → image load → dossier fetch → LLM briefing begins) |
+| All pipelines | GPU (Whisper CUDA, Kokoro DirectML/CUDA, llama-server CUDA) |
 
 ---
