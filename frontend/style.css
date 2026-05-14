@@ -789,3 +789,144 @@ html, body {
   color: #555;
   letter-spacing: 0.08em;
 }
+
+/* ── Timer Panel ─────────────────────────────────────────────────────────────── */
+
+.timer-panel {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 14px 20px;
+  margin-top: 8px;
+  animation: clockFadeIn 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.timer-panel.hidden {
+  display: none;
+}
+
+.timer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 8px;
+}
+
+.timer-title {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: clamp(0.7rem, 1.4vw, 0.9rem);
+  color: #e0e0e0;
+  letter-spacing: 0.14em;
+}
+
+.timer-clear-all {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: #555;
+  cursor: pointer;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  padding: 2px 7px;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.timer-clear-all:hover {
+  color: #ff8888;
+  border-color: rgba(255, 100, 100, 0.3);
+}
+
+.timer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Individual timer row */
+.timer-entry {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 7px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Progress fill — grows left-to-right as time elapses */
+.timer-progress {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: rgba(255, 255, 255, 0.04);
+  transition: width 1s linear;
+  pointer-events: none;
+}
+
+.timer-entry.done {
+  border-color: rgba(136, 255, 170, 0.25);
+  background:   rgba(136, 255, 170, 0.05);
+}
+
+.timer-entry.done .timer-progress {
+  background: rgba(136, 255, 170, 0.08);
+}
+
+.timer-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.72rem;
+  color: #aaa;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  position: relative;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.timer-countdown {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: clamp(1rem, 2.5vw, 1.3rem);
+  color: #ffffff;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  position: relative;
+}
+
+.timer-entry.done .timer-countdown {
+  color: #88ffaa;
+}
+
+/* Pulse animation when a timer expires */
+@keyframes timerDone {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+.timer-entry.pulsing {
+  animation: timerDone 0.6s ease 4;
+}
+
+.timer-cancel-btn {
+  background: transparent;
+  border: none;
+  color: #444;
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 2px 4px;
+  position: relative;
+  transition: color 0.15s;
+}
+
+.timer-cancel-btn:hover {
+  color: #ff8888;
+}

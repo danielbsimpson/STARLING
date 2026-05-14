@@ -64,6 +64,14 @@
               <span class="clock-tz"   id="clock-tz">—</span>
             </div>
           </div>
+          <!-- Timer Panel — hidden until one or more timers are active -->
+          <div class="timer-panel hidden" id="timer-panel">
+            <div class="timer-header">
+              <div class="timer-title">TIMERS</div>
+              <button class="timer-clear-all" id="timer-clear-all" title="Cancel all timers">✕ ALL</button>
+            </div>
+            <div class="timer-list" id="timer-list"></div>
+          </div>
           <div class="chat-inner" id="chat-inner"></div>
         </div>
       </div>
@@ -149,6 +157,6 @@
 
   </div>
   <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-  <script src="app.js?v=4"></script>
+  <script type="module" src="app.js?v=4"></script>
 </body>
 </html>

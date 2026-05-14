@@ -18,6 +18,8 @@ A voice-driven, S.T.A.R.L.I.N.G.-style web interface powered by a local LLM runn
 | 8 | Presentation mode (voice triggers) | Dossier exit phrases are unreliable — phrases like "close dossier" or "hide dossier" are sometimes missed by STT or fail to match the regex; "return to chat" is the most reliable trigger | 🔴 Open — Whisper transcription variations (e.g. added filler words, punctuation, capitalisation) cause some patterns to fall through; exit regex coverage should be broadened, and/or a fuzzy-match fallback added |
 | 9 | Presentation mode (LLM / TTS) | Interrupting the dossier briefing by saying "close dossier" exits the visual presentation mode correctly, but the in-flight LLM stream continues — the full dossier briefing text and audio still complete and appear in chat | 🔴 Open — `exitPresMode()` toggles the CSS class but does not abort the active `fetch` stream or drain the TTS playback queue; the in-flight `sendToOllama` call needs to be cancelled (e.g. via `AbortController`) and `_playbackChain` / `_activeAudio` flushed at the same time as the mode exit |
 | 10 | Presentation mode (LLM prompt) | The dossier briefing prompt instructions leaked into the LLM output — e.g. the model echoed "Based on this dossier, deliver a concise spoken briefing..." as part of its response | ✅ Resolved — dossier content is now injected as a `system`-role message so the model treats it as grounding data; the user turn contains only a short clean instruction that the model has no reason to repeat |
+| 11 | Tool panels (overlap) | When one tool panel is already visible (e.g. the timer panel showing a completed timer) and the user triggers a second tool (e.g. "what time is it"), the new panel renders on top of the existing one — both are visible simultaneously until the next user interaction | 🔴 Open — each tool's handler should dismiss all other tool panels before showing its own; `handleTimeQuery` / `handleDateQuery` should call `dismissTimerPanel()` at entry, and `handleTimerTrigger` should call `_dismissClockPanel()` before creating a timer entry; as more Phase 11 tools are added this should be generalised into a single `dismissAllToolPanels()` helper called at the top of every tool handler |
+| 12 | Timer (label parsing) | Named timers are not labelled correctly — "set a timer for 5 minutes called pasta" produces a timer with no label (or the duration itself as the label), and the completion announcement doubles the duration: "Your 5 minutes 5 minutes timer is done." The "called / named" keyword is not handled at all | 🔴 Open — two separate bugs in `detectTimerTrigger` in `timer-panel.js`: (1) no regex handles the `called [name]` or `named [name]` suffix pattern — a new check should be added before the existing label regex, e.g. `/\b(?:called|named)\s+(\w+(?:\s+\w+)?)\b/`; (2) when Whisper renders the phrase as "set a 5 minute timer called pasta", the existing label regex captures "5 minute" (the duration tokens that appear before the word "timer") as the label — the skip list should be extended to reject candidates that start with a digit or consist entirely of duration unit words (`minute`, `second`, `hour` and their plurals) |
 
 **Potential fixes to investigate:**
 - **STT early cutoff** — several approaches ranked by effort:
@@ -316,12 +318,12 @@ before any network call could even be made.
 Timers run entirely in the browser. The existing `_getAudioCtx()` function is reused for the
 completion chime — no new AudioContext is created. Multiple named timers are supported.
 
-- [ ] Create `frontend/timer-panel.js` — `detectTimerTrigger()`, `setTimer()`, `cancelTimer()`, `listTimers()`
-- [ ] Import in `app.js` and add timer intercept block in `onstop` + `handleSend`
-- [ ] Add timer panel HTML to `index.html` (card list with countdown display)
-- [ ] Add timer CSS to `style.css`
-- [ ] Add `_getAudioCtx()` chime synthesis in `timer-panel.js` (reuses shared AudioContext)
-- [ ] Test named timers: "set a 5-minute timer called pasta", "cancel the pasta timer"
+- [x] Create `frontend/timer-panel.js` — `detectTimerTrigger()`, `setTimer()`, `cancelTimer()`, `listTimers()`
+- [x] Import in `app.js` and add timer intercept block in `onstop` + `handleSend`
+- [x] Add timer panel HTML to `index.html` (card list with countdown display)
+- [x] Add timer CSS to `style.css`
+- [x] Add `_getAudioCtx()` chime synthesis in `timer-panel.js` (reuses shared AudioContext)
+- [x] Test named timers: "set a 5-minute timer called pasta", "cancel the pasta timer"
 - [ ] Test auto-stop: timer chimes and speaks "Timer complete: pasta" via `enqueueSpeak`
 
 ---

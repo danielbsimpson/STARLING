@@ -1,3 +1,6 @@
+// ── Imports ───────────────────────────────────────────────────────────────────
+import { detectTimerTrigger, handleTimerTrigger, initTimerPanel, dismissTimerPanel } from './timer-panel.js';
+
 // ── Config ────────────────────────────────────────────────────────────────────
 const BACKEND_BASE = 'http://localhost:8000';
 const MODEL        = localStorage.getItem('starling_model') || 'llama3.2:3b';
@@ -1265,6 +1268,13 @@ async function handleSend() {
   }
   // ────────────────────────────────────────────────────────────────────────
 
+  // ── Timer intercept (checked before time to avoid 'timer' matching time patterns) ──
+  const _timerTrigger = detectTimerTrigger(text);
+  if (_timerTrigger) {
+    setState('idle');
+    handleTimerTrigger(text, _timerTrigger);
+    return;
+  }
   // ── Date query intercept (checked before time — phrases are more specific) ──
   if (detectDateTrigger(text)) {
     setState('idle');
@@ -1280,6 +1290,7 @@ async function handleSend() {
   // ────────────────────────────────────────────────────────────────────────
 
   appendMessage('user', text);
+  dismissTimerPanel();
   await sendToOllama(text);
   fetchSystemStatus();
 }
@@ -1354,6 +1365,14 @@ async function startRecording() {
         }
         // ────────────────────────────────────────────────────────────────
 
+        // ── Timer intercept (checked before time to avoid 'timer' matching time patterns) ──
+        const _timerTrigger = detectTimerTrigger(transcript);
+        if (_timerTrigger) {
+          setState('idle');
+          handleTimerTrigger(transcript, _timerTrigger);
+          return;
+        }
+        // ────────────────────────────────────────────────────────────────────
         // ── Date query intercept (checked before time — phrases are more specific) ──
         if (detectDateTrigger(transcript)) {
           setState('idle');
@@ -1372,6 +1391,7 @@ async function startRecording() {
         const rttSnap = _rttStart;      // preserve timestamp set in stopRecording()
         clearAudioQueue();              // stop any in-progress speech — resets _rttStart
         _rttStart = rttSnap;            // restore so RTT is measured from mic release
+        dismissTimerPanel();
         await sendToOllama(transcript);
         fetchSystemStatus();
       } catch (err) {
@@ -1454,6 +1474,7 @@ async function warmupModels(greetingEl) {
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
+initTimerPanel({ appendMessage, setState, enqueueSpeak });
 initSphere();
 statModel.textContent = MODEL;
 _applyTtsMode();
