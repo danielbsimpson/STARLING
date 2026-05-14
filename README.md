@@ -24,10 +24,27 @@ Microphone → Speech-to-Text → llama-server (LLM on GPU) → Text-to-Speech �
 - 🔒 **Fully local** — no data leaves your machine
 - 🗄️ **RAG memory system** — ChromaDB + BM25/vector fusion retrieval; drop `.md` or `.txt` files into `memory/input/` and run `make rag-ingest` to index them
 - 🖼️ **Dynamic dossier / presentation mode** — say `"pull up the dossier on [name]"` to trigger a full UI reconfiguration with image panel, structured subject profile, and automatic LLM spoken briefing
+- 🕒 **Time & date queries** — instant voice responses ("what time is it?", "what day is it?") with a live clock panel; zero backend, sub-200 ms
+- ⏱️ **Voice-activated timers** — set, cancel, and list multiple named timers entirely in-browser; Web Audio API chime on completion
+- 🌤️ **Weather panel** — say "what's the weather?" to open a 7-day forecast panel sourced from Open-Meteo (free, no API key); LLM delivers a spoken conditions summary
 
 **Presentation / dossier mode:**
 
 ![S.T.A.R.L.I.N.G. Presentation Mode](assets/images/presentation_mode_example.png)
+
+**Time & date panel:**
+
+![S.T.A.R.L.I.N.G. Clock Panel](assets/images/clock_example.png)
+
+**Timer panel:**
+
+![S.T.A.R.L.I.N.G. Timer Panel — active](assets/images/timer_example1.png)
+
+![S.T.A.R.L.I.N.G. Timer Panel — complete](assets/images/timer_example2.png)
+
+**Weather panel:**
+
+![S.T.A.R.L.I.N.G. Weather Panel](assets/images/weather_example.png)
 
 ---
 
@@ -39,9 +56,9 @@ Full implementation guides live in the [`markdown/`](./markdown/) folder.
 
 | # | Tool | Guide | Backend | Status |
 |---|---|---|---|---|
-| 1 | Time & Date | [`markdown/TIME.md`](./markdown/TIME.md) | None | 🔲 Planned |
-| 2 | Timers | [`markdown/TIMER.md`](./markdown/TIMER.md) | None | 🔲 Planned |
-| 3 | Weather | [`markdown/WEATHER.md`](./markdown/WEATHER.md) | Open-Meteo (free, no key) | 🔲 Planned |
+| 1 | Time & Date | [`markdown/TIME.md`](./markdown/TIME.md) | None | ✅ Done |
+| 2 | Timers | [`markdown/TIMER.md`](./markdown/TIMER.md) | None | ✅ Done |
+| 3 | Weather | [`markdown/WEATHER.md`](./markdown/WEATHER.md) | Open-Meteo (free, no key) | ✅ Done |
 | 4 | News Briefing | [`markdown/NEWS.md`](./markdown/NEWS.md) | RSS / feedparser (free) | 🔲 Planned |
 | 5 | Stocks & Crypto | [`markdown/STOCKS.md`](./markdown/STOCKS.md) | yfinance (unofficial) | 🔲 Planned |
 | 6 | Wake Word & Interrupt | [`markdown/WAKE_WORD.md`](./markdown/WAKE_WORD.md) | None | 🔲 Planned |
@@ -488,7 +505,8 @@ High-level milestones:
 - [x] LLM metrics bar — prompt tokens, generation speed, time, and context window fill percentage
 - [x] **Voice-triggered dossier / presentation mode** — voice trigger intercept, neon border animation, four-zone layout reconfiguration, manifest-driven image + structured text loading, LLM auto-briefing via sentence-chunked TTS
 - [x] **RAG memory system** — ChromaDB + BM25/vector fusion; `make rag-ingest` indexes any `.md`/`.txt` files dropped into `memory/input/`
-- [ ] **Phase 11 — Tool kit** — 12 voice-activated tools (time, timers, weather, news, stocks, wake word, browser panel, ideas, journal, Wikipedia RAG, Calendar, Gmail); see [`markdown/`](./markdown/) for implementation guides
+- [x] **Phase 11 (Tools 1–3)** — Time & date panel, voice-activated timers, and weather forecast panel with Open-Meteo integration
+- [ ] **Phase 11 (Tools 4–12)** — News briefing, stocks, wake word, browser panel, ideas tracker, journal, Wikipedia RAG, Google Calendar, Gmail; see [`markdown/`](./markdown/) for implementation guides
 - [ ] Electron desktop app packaging
 - [ ] GraphRAG knowledge graph memory
 

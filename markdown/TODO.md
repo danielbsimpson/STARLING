@@ -324,7 +324,7 @@ completion chime — no new AudioContext is created. Multiple named timers are s
 - [x] Add timer CSS to `style.css`
 - [x] Add `_getAudioCtx()` chime synthesis in `timer-panel.js` (reuses shared AudioContext)
 - [x] Test named timers: "set a 5-minute timer called pasta", "cancel the pasta timer"
-- [ ] Test auto-stop: timer chimes and speaks "Timer complete: pasta" via `enqueueSpeak`
+- [x] Test auto-stop: timer chimes and speaks "Timer complete: pasta" via `enqueueSpeak`
 
 ---
 
@@ -336,15 +336,15 @@ completion chime — no new AudioContext is created. Multiple named timers are s
 Follows the exact dossier intercept pattern already proven in the codebase. Backend calls
 Open-Meteo's free public API. No authentication required.
 
-- [ ] `pip install httpx` (or confirm already present in `requirements.txt`)
-- [ ] Create `backend/weather.py` — `GET /weather` endpoint (lat/lon from `.env`, calls Open-Meteo)
-- [ ] Register `weather_router` in `backend/main.py`
-- [ ] Add `WEATHER_LAT`, `WEATHER_LON`, `WEATHER_UNITS` to `.env` / `.env.example`
-- [ ] Create `frontend/weather-panel.js` — `detectWeatherTrigger()`, `openWeatherPanel()`, render forecast cards
-- [ ] Import in `app.js` and add weather intercept block in `onstop` + `handleSend`
-- [ ] Add weather panel HTML to `index.html`
-- [ ] Add weather panel CSS to `style.css`
-- [ ] Test: "What's the weather?" → panel opens + LLM spoken summary of current conditions + 7-day forecast
+- [x] `pip install httpx` (or confirm already present in `requirements.txt`)
+- [x] Create `backend/weather.py` — `GET /weather` endpoint (lat/lon from `.env`, calls Open-Meteo)
+- [x] Register `weather_router` in `backend/main.py`
+- [x] Add `WEATHER_LAT`, `WEATHER_LON`, `WEATHER_UNITS` to `.env` / `.env.example`
+- [x] Create `frontend/weather-panel.js` — `detectWeatherTrigger()`, `openWeatherPanel()`, render forecast cards
+- [x] Import in `app.js` and add weather intercept block in `onstop` + `handleSend`
+- [x] Add weather panel HTML to `index.html`
+- [x] Add weather panel CSS to `style.css`
+- [x] Test: "What's the weather?" → panel opens + LLM spoken summary of current conditions + 7-day forecast
 
 ---
 
