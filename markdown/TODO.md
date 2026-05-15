@@ -583,6 +583,214 @@ Same intercept and panel pattern as weather and news. No API key required.
 - [ ] Add stocks panel HTML + CSS
 - [ ] Test: "What's the market doing?" → panel + LLM spoken summary of movers
 
+#### Enhancement — JSON Watchlist File 🟢
+
+Replace the flat `STOCKS_TICKERS` env var with a user-editable `memory/watchlist.json` file that defines which equities and crypto tokens to track, organised into named groups. The file is the single source of truth — no code change required to add, remove, or reorganise tickers.
+
+**Watchlist file format (`memory/watchlist.json`)**
+
+```json
+{
+  "groups": [
+    {
+      "label": "Indices",
+      "tickers": ["^GSPC", "^DJI", "^IXIC", "^RUT"]
+    },
+    {
+      "label": "Tech",
+      "tickers": ["AAPL", "MSFT", "NVDA", "GOOGL", "META", "AMZN"]
+    },
+    {
+      "label": "Crypto",
+      "tickers": ["BTC-USD", "ETH-USD", "SOL-USD"]
+    },
+    {
+      "label": "Personal",
+      "tickers": []
+    }
+  ],
+  "default_group": "all"
+}
+```
+
+- `"groups"` — ordered list of named ticker groups; groups are rendered as tabs in the stocks panel
+- `"default_group"` — which group tab is shown first when the panel opens; set to `"all"` to flatten all tickers into a single view, or a group `label` to open that tab directly
+- The file is plain JSON — users add/remove tickers by editing it directly; no restart required (backend reads the file on each cache miss)
+
+**Backend changes (`backend/stocks.py`)**
+
+- [ ] On startup, check for `memory/watchlist.json`; if absent, write a default template (the example above) so first-run works without manual setup
+- [ ] Replace `STOCKS_TICKERS` env var loading with `load_watchlist() -> dict` that reads and validates `memory/watchlist.json`; raise a clear startup warning (not a crash) if the file is malformed
+- [ ] `GET /stocks` flattens all groups into a single ticker list for the `yfinance` batch call, then re-groups the results by `label` before returning — the response shape becomes:
+  ```json
+  {
+    "groups": [
+      {
+        "label": "Tech",
+        "tickers": [
+          { "symbol": "AAPL", "price": 213.45, "change": 1.23, "change_pct": 0.58, "name": "Apple Inc." },
+          ...
+        ]
+      }
+    ],
+    "default_group": "all",
+    "fetched_at": "2026-05-14T14:32:00Z",
+    "source": "live"
+  }
+  ```
+- [ ] Retain the existing `STOCKS_CACHE_SECONDS` TTL — cached response stores the full grouped structure
+- [ ] Add `GET /stocks/watchlist` endpoint — returns the raw `watchlist.json` content so the frontend can render an edit UI in the future without needing filesystem access
+- [ ] Add `PUT /stocks/watchlist` endpoint — accepts a full watchlist JSON body, validates it (checks all required keys, rejects unknown ticker formats), and writes it back to `memory/watchlist.json` atomically; invalidates the current cache on success
+
+**Frontend panel updates (`frontend/stocks-panel.js`)**
+
+- [ ] Render group tabs at the top of the stocks panel, one tab per `groups[].label` plus an `All` tab that flattens everything — active tab highlighted with accent colour
+- [ ] `default_group: "all"` opens the `All` tab; any other value selects the matching group tab on open
+- [ ] Each ticker row shows: symbol, full company/asset name, current price, change amount, and `±pct%` coloured green/red
+- [ ] Indices group (tickers starting with `^`) rendered without a price currency symbol — display as plain number with change
+
+**`.env` change**
+
+- [ ] Remove `STOCKS_TICKERS` from `.env` / `.env.example` — superseded by `watchlist.json`
+- [ ] Add `STOCKS_WATCHLIST_FILE` to `.env` / `.env.example` (default: `memory/watchlist.json`)
+
+**`.gitignore` addition**
+
+- [ ] Add `memory/watchlist.json` to `.gitignore` — personal portfolio data; do not commit
+
+#### Enhancement — Interactive Chart Dashboard 🟡
+
+Replace the flat ticker grid with a full-panel chart dashboard. The panel is divided into **6 fixed tiles** in a 3 × 2 grid. The top row holds three always-visible market index charts; the bottom row holds a crypto index chart, a watchlist stocks tile, and a watchlist crypto tile. All charts are rendered with [Chart.js](https://www.chartjs.org/) (no new backend dependency — historical OHLC data is fetched from `yfinance`).
+
+**Panel layout (6-tile grid)**
+
+```
+┌─────────────────┬─────────────────┬─────────────────┐
+│  S&P 500        │  NASDAQ         │  Dow Jones      │
+│  (^GSPC)        │  (^IXIC)        │  (^DJI)         │
+├─────────────────┼─────────────────┼─────────────────┤
+│  Bitcoin        │  My Stocks      │  My Crypto      │
+│  + Ethereum     │  (watchlist)    │  (watchlist)    │
+└─────────────────┴─────────────────┴─────────────────┘
+```
+
+- Tiles 1–3 (S&P 500, NASDAQ, Dow Jones) — fixed index charts, always shown, not user-configurable
+- Tile 4 (Bitcoin + Ethereum) — two-line overlay chart on the same axis; both lines always shown together as the baseline crypto benchmark
+- Tile 5 (My Stocks) — single rotating chart; a **ticker selector dropdown** above the chart lets the user switch between any equity in their watchlist groups
+- Tile 6 (My Crypto) — same as Tile 5 but scoped to crypto tickers from the watchlist (`BTC-USD`, `ETH-USD`, `SOL-USD`, etc.)
+
+**Timeframe controls**
+
+- [ ] Each tile has its own timeframe pill strip: `1D · 1W · 1M · 3M · 1Y · ALL` — clicking a pill re-fetches and re-renders that tile only
+- [ ] Default timeframe on panel open: `1M` for all tiles
+- [ ] Timeframe selection is preserved per-tile in the panel's local state for the duration of the session (not persisted to localStorage)
+
+**Backend changes (`backend/stocks.py`)**
+
+- [ ] Add `GET /stocks/history` endpoint accepting `ticker: str`, `period: str` (`1d`, `1wk`, `1mo`, `3mo`, `1y`, `max`) and `interval: str` (auto-derived from period: `1d`→`5m`, `1wk`→`1h`, `1mo`→`1d`, `3mo`→`1d`, `1y`→`1wk`, `max`→`1mo`):
+  - Calls `yfinance.Ticker(ticker).history(period=period, interval=interval)`
+  - Returns `{ "ticker", "period", "interval", "points": [{ "t": <unix_ms>, "o", "h", "l", "c", "v" }] }`
+- [ ] Cache each `(ticker, period)` pair independently — TTL varies by period: `1d`→`5 min`, `1wk`→`15 min`, `1mo`→`1 hr`, longer periods→`6 hr`
+- [ ] Batch endpoint `GET /stocks/history/batch` — accepts `tickers` (comma-separated) and a single `period`; returns an array of the same structure above — used on panel open to pre-fetch all 6 tiles in one round trip
+
+**Frontend — chart rendering (`frontend/stocks-panel.js`)**
+
+- [ ] Add Chart.js via CDN in `index.html`: `<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>`
+- [ ] Add `chartjs-adapter-date-fns` adapter for time-scale x-axis: `<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>`
+- [ ] Write `renderTile(canvasId, datasets, options)` — thin wrapper around `new Chart(...)` with shared defaults: dark background (`#0a0a0a`), no border radius on points, grid lines in `rgba(255,255,255,0.06)`, x-axis as `type: "time"`, tooltip showing date + value on hover
+- [ ] Index tiles (1–3): single-line chart, line colour white (`#ffffff`), area fill to `rgba(255,255,255,0.04)`
+- [ ] BTC + ETH tile (4): two-line overlay — BTC in amber (`#f7931a`), ETH in indigo (`#627eea`); shared time axis, independent y-axes (left = BTC, right = ETH) so price scale difference doesn't flatten either line
+- [ ] My Stocks tile (5): single line in cyan (`#88ddff`); selector dropdown above chart populated from watchlist equity groups; switching dropdown destroys and re-creates the Chart.js instance for that canvas
+- [ ] My Crypto tile (6): single line in violet (`#bb88ff`); selector dropdown populated from watchlist crypto group
+- [ ] On panel open, call `GET /stocks/history/batch?tickers=^GSPC,^IXIC,^DJI,BTC-USD,ETH-USD,<first_equity>,<first_crypto>&period=1mo` — render all 6 tiles from the single response
+- [ ] Timeframe pill click: call `GET /stocks/history?ticker=<tile_ticker>&period=<period>` for that tile only; update chart data via `chart.data.datasets[0].data = newPoints; chart.update()`
+- [ ] On panel resize (window `resize` event): call `chart.resize()` on all active Chart.js instances so tiles fill available space correctly
+
+**Frontend — panel layout CSS (`style.css`)**
+
+- [ ] Add `.stocks-dashboard` grid: `display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr); gap: 1px; background: #1a1a1a;` — 1 px gap creates hairline dividers between tiles
+- [ ] Each `.stocks-tile`: `background: #0a0a0a; padding: 12px; display: flex; flex-direction: column;`
+- [ ] Tile header: `display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;` — left side shows ticker symbol + full name in small-caps; right side shows current price + `±pct%` chip
+- [ ] Timeframe pills: `display: flex; gap: 4px; margin-bottom: 8px;` — each pill `font-size: 0.65rem; padding: 2px 6px; border: 1px solid #333; border-radius: 3px; cursor: pointer;`; active pill `background: #fff; color: #000`
+- [ ] Canvas element fills remaining tile height: `flex: 1; min-height: 0;`
+- [ ] On small viewports (`< 900 px`): collapse to single-column stacked layout — `grid-template-columns: 1fr`
+
+**`.env` additions**
+
+```
+STOCKS_CHART_DEFAULT_PERIOD=1mo
+STOCKS_HISTORY_CACHE_SECONDS_SHORT=300
+STOCKS_HISTORY_CACHE_SECONDS_LONG=21600
+```
+
+#### Enhancement — Persistent Local JSON Cache 🟢
+
+Persist every `yfinance` response to a local JSON file on disk. Before calling Yahoo Finance, check the cache; if the stored entry for a given `(ticker, period)` pair is less than 24 hours old, serve the stored data directly — no network call made. This avoids redundant API hits across restarts and sessions, and builds a passive historical record of past snapshots over time.
+
+**Cache file structure (`memory/stocks_cache.json`)**
+
+```json
+{
+  "quote": {
+    "AAPL": { "fetched_at": "2026-05-14T14:00:00Z", "data": { ... } },
+    "BTC-USD": { "fetched_at": "2026-05-14T14:00:00Z", "data": { ... } }
+  },
+  "history": {
+    "AAPL__1mo": { "fetched_at": "2026-05-14T14:00:00Z", "data": [ ... ] },
+    "^GSPC__1y": { "fetched_at": "2026-05-14T08:00:00Z", "data": [ ... ] }
+  }
+}
+```
+
+- `"quote"` — keyed by ticker symbol; stores the latest price, change, and metadata returned by `GET /stocks`
+- `"history"` — keyed by `"<ticker>__<period>"`; stores the OHLCV point arrays returned by `GET /stocks/history`
+- All timestamps are ISO-8601 UTC strings for human readability when inspecting the file directly
+
+**TTL rules by data type**
+
+| Data type | Cache TTL | Rationale |
+|---|---|---|
+| Quote (current price + change) | 24 hours | Markets close daily; stale intraday data is acceptable for a personal dashboard |
+| History `1d` period | 1 hour | Intraday data changes frequently during market hours |
+| History `1wk` / `1mo` | 24 hours | Daily candles change at most once per market session |
+| History `3mo` / `1y` / `max` | 7 days | Weekly/monthly candles are stable; no need to re-fetch frequently |
+
+**Backend changes (`backend/stocks.py`)**
+
+- [ ] Add `STOCKS_CACHE_FILE` to `.env` / `.env.example` (default: `memory/stocks_cache.json`)
+- [ ] On startup, create `memory/stocks_cache.json` if it does not exist (seed with `{"quote": {}, "history": {}}`)
+- [ ] Write `load_stocks_cache() -> dict` and `save_stocks_cache(cache: dict)` helpers — `save` writes atomically to a `.tmp` file then `os.replace` to prevent corruption on write
+- [ ] In `GET /stocks` handler, before calling `yfinance`:
+  - For each ticker, check `cache["quote"][ticker]["fetched_at"]`; if within 86 400 s of `datetime.utcnow()`, use stored data — skip the `yfinance` call for that ticker
+  - Only fetch tickers whose cache entry is absent or expired; merge fresh results back into the cache and save
+  - Include `"source": "cache"` or `"source": "live"` per ticker in the response so the frontend can label freshness
+- [ ] In `GET /stocks/history` handler:
+  - Cache key: `"<ticker>__<period>"` in `cache["history"]`
+  - Apply the TTL from the table above based on `period` value
+  - On hit, return stored points with `"source": "cache"`; on miss, fetch from `yfinance`, store, and return with `"source": "live"`
+- [ ] In `GET /stocks/history/batch`:
+  - Evaluate each `(ticker, period)` pair independently against the cache — partial cache hits are fine; only the stale/missing pairs trigger a `yfinance` call
+  - Merge and return all results in a single response
+- [ ] Add `GET /stocks/cache/status` endpoint — returns per-ticker and per-history-key `fetched_at` timestamps and age in seconds; useful for debugging staleness without opening the JSON file
+- [ ] Add `DELETE /stocks/cache` endpoint — clears `stocks_cache.json` back to the seed state; allows a forced full refresh without editing the file manually
+- [ ] Remove the now-redundant in-memory `STOCKS_CACHE_SECONDS` TTL variable — the on-disk cache with per-key TTLs supersedes it; retire `STOCKS_CACHE_SECONDS` from `.env.example`
+
+**Frontend panel updates (`frontend/stocks-panel.js`)**
+
+- [ ] Display a staleness label in each tile's header when `source === "cache"` — e.g. `"as of 3 hr ago"` — so the user knows they are viewing stored data
+- [ ] Add a `"Refresh"` icon button (🔄) to each tile header that appends `?force=true` to the history or quote fetch for that tile, bypassing the cache for that specific `(ticker, period)` pair
+- [ ] Support `force=true` query param in all three backend endpoints (`/stocks`, `/stocks/history`, `/stocks/history/batch`) — when present, skip the cache read and always call `yfinance`; write the fresh result back to the cache as normal
+
+**`.env` additions**
+
+```
+STOCKS_CACHE_FILE=memory/stocks_cache.json
+```
+
+**`.gitignore` addition**
+
+- [ ] Add `memory/stocks_cache.json` to `.gitignore` — contains personal watchlist pricing data; do not commit
+
 ---
 
 ### Tool 6 — Wake Word & Interruptible Conversations (`WAKE_WORD.md`) 🟡
