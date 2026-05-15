@@ -26,7 +26,7 @@ Microphone → Speech-to-Text → llama-server (LLM on GPU) → Text-to-Speech �
 - 🖼️ **Dynamic dossier / presentation mode** — say `"pull up the dossier on [name]"` to trigger a full UI reconfiguration with image panel, structured subject profile, and automatic LLM spoken briefing
 - 🕒 **Time & date queries** — instant voice responses ("what time is it?", "what day is it?") with a live clock panel; zero backend, sub-200 ms
 - ⏱️ **Voice-activated timers** — set, cancel, and list multiple named timers entirely in-browser; Web Audio API chime on completion
-- 🌤️ **Weather panel** — say "what's the weather?" to open a 7-day forecast panel sourced from Open-Meteo (free, no API key); LLM delivers a spoken conditions summary
+- 🌤️ **Weather panel** — say "what's the weather?" or "weather in Boston" to open a 7-day forecast panel sourced from Open-Meteo (free, no API key); supports named-location queries resolved via Nominatim geocoding with geodesic proximity disambiguation (closest match to your home coordinates); responses are cached to disk with a 1-hour TTL and up to 168 historical snapshots per location; panel shows the resolved location name, cache age, and a 🔄 refresh button; LLM delivers a spoken conditions summary using structured forecast data
 - 📰 **News briefing panel** — say "what's the news?" to open a live headlines panel sourced from configurable RSS feeds; LLM delivers a spoken multi-story briefing
 
 **Presentation / dossier mode:**
@@ -368,7 +368,15 @@ RAG_MAX_CONTEXT_TOKENS=400
 # Weather (Tool 3)
 WEATHER_LOCATION=Framingham,Massachusetts
 WEATHER_UNITS=fahrenheit
-WEATHER_CACHE_SECONDS=600
+
+# Path to on-disk JSON cache file (relative to backend working dir)
+WEATHER_CACHE_FILE=memory/weather_cache.json
+
+# Max hourly snapshots retained per location (~1 week at hourly cadence)
+WEATHER_HISTORY_MAX=168
+
+# Panel label shown for the default home location
+WEATHER_DEFAULT_LABEL=Framingham
 
 # News (Tool 4)
 NEWS_FEEDS=https://feeds.bbci.co.uk/news/rss.xml,https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml
@@ -443,7 +451,8 @@ To use Whisper, set `STT_ENGINE=whisper` in `.env` and ensure the FastAPI backen
 
 | Endpoint | Method | Tool |
 |---|---|---|
-| `/weather` | GET | Weather forecast (Open-Meteo) |
+| `/weather` | GET | Weather forecast + current conditions (Open-Meteo); optional `location` and `force` params |
+| `/weather/history` | GET | Cached historical weather snapshots; optional `location` filter |
 | `/news` | GET | News headlines (RSS) |
 | `/stocks` | GET | Stock / crypto quotes (yfinance) |
 | `/ideas/add` | POST | Save a new idea |
