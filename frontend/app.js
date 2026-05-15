@@ -1434,6 +1434,7 @@ async function startRecording() {
         if (!transcript) { setState('idle'); return; }
 
         // dismiss any open tool panel before routing the new transcript
+        dismissAllToolPanels();
         // ── Presentation mode intercept ──────────────────────────────────
         if (_matchesExitPhrase(transcript)) {
           exitPresMode();
