@@ -111,13 +111,6 @@ html, body {
   display: flex; align-items: center; justify-content: center;
 }
 
-/* Right column — empty, unused now that chat is in col-left */
-.col-right {
-  width: 0;
-  overflow: hidden;
-  transition: width 0.5s ease;
-}
-
 /* ── Presentation panel (neon image) ───────────────────────────────────── */
 .pres-panel {
   flex-shrink: 0;
@@ -210,9 +203,6 @@ html, body {
 }
 .starling.pres-mode .col-left .ring-section {
   width: auto;
-}
-.starling.pres-mode .col-right {
-  width: 0;
 }
 .starling.pres-mode .pres-panel {
   width: 30%;
@@ -1394,8 +1384,4 @@ html, body {
   font-size: 10px;
   line-height: 1.45;
   padding: 4px 0;
-}
-
-.starling.news-mode .col-right {
-  width: 0;
 }

@@ -950,6 +950,119 @@ Implement Phase 1 first (Simple English Wikipedia, ~250 MB, ~200,000 articles). 
 
 ---
 
+### Enhancement — Toolkit Awareness & Fuzzy Tool Recovery 🟡
+
+Two tiers of the same idea: making Starling genuinely aware of what she can do, and recovering gracefully when a tool trigger almost — but not quite — matched.
+
+---
+
+#### Tier 1 — Toolkit Self-Awareness (Simple) 🟢
+
+Inject a structured toolkit manifest into Starling's system prompt so she can answer natural questions like *"What can you do?"*, *"Do you have a weather tool?"*, or *"What tools are available?"* without hallucinating.
+
+**System prompt injection (`backend/main.py` or `backend/llama_server.py`)**
+
+- [ ] Define a `TOOLKIT_MANIFEST` constant — a plain-prose block listing every active tool, its trigger phrases, and a one-sentence description. Example:
+
+  ```
+  You have access to the following tools. When the user asks what you can do or which tools are available, describe these tools accurately and naturally.
+
+  - Time & Date: answers questions like "what time is it" or "what's today's date" — reads the local system clock directly, no internet required.
+  - Timers: sets and cancels countdown timers ("set a 5-minute timer called pasta", "cancel the pasta timer").
+  - Weather: fetches the current forecast ("what's the weather?", "weather in London") via Open-Meteo — no API key required.
+  - News Briefing: reads RSS headlines by category ("news briefing", "show me the tech news").
+  - Stocks & Crypto: shows live market prices ("what's the market doing?", "how is Apple trading?").
+  - Wake Word: hands-free activation — say "Hey Starling" to start listening without pressing a button.
+  - In-UI Browser: opens a sandboxed web panel ("open YouTube", "search Google for…").
+  - Ideas Tracker: captures and retrieves spoken ideas ("store my idea", "show my ideas").
+  - Voice Journal: multi-press dictation with LLM summary ("start a journal entry").
+  - Wikipedia RAG: grounded encyclopedia Q&A ("Wikipedia search for black holes").
+  - Google Calendar: reads today's or this week's schedule ("what's on my schedule today?").
+  - Gmail: reads, summarises, and trashes emails ("view my emails", "summarise that email").
+  ```
+
+- [ ] Append the `TOOLKIT_MANIFEST` block to the existing `LLAMA_SYSTEM_PROMPT` value at startup — separated by a blank line so it reads as a natural continuation of Starling's persona
+- [ ] Add `TOOLKIT_MANIFEST_ENABLED` flag to `.env` / `.env.example` (default `true`) — when `false`, the manifest is omitted (useful for token-budget-constrained models)
+- [ ] Keep the manifest in sync with the `TOOL_INTERCEPT_ORDER` list — when a new tool is added to `app.js`, update the manifest constant at the same time (single-file maintenance)
+- [ ] Test: "What can you do?" → Starling describes all available tools in natural prose without markdown
+- [ ] Test: "Do you have a timer?" → confirms yes and explains trigger phrases
+- [ ] Test: "Can you check my email?" → confirms capability and explains how to trigger it
+
+---
+
+#### Tier 2 — Fuzzy Tool Detection & Confirmation (Complex) 🟡
+
+When STT transcription produces a near-miss (garbled audio, background noise, hesitant speech), detect that the utterance was *probably* a tool trigger, confirm with the user via a spoken prompt, and open the tool on affirmation. Prevents the LLM from receiving noise fragments as chat input.
+
+**Detection strategy (`frontend/app.js` or new `frontend/fuzzy-tool-detect.js`)**
+
+- [ ] Define a `FUZZY_TOOL_MAP` — an array of `{ toolName, canonicalTriggers, fuzzyKeywords, openFn }` entries, one per tool. `fuzzyKeywords` are the core semantic words that should appear even in a degraded transcript:
+
+  ```js
+  const FUZZY_TOOL_MAP = [
+    { toolName: 'Timer',    canonicalTriggers: ['set a timer', 'cancel timer'],         fuzzyKeywords: ['timer', 'remind', 'countdown', 'minutes', 'seconds'],   openFn: () => detectTimerTrigger(transcript) },
+    { toolName: 'Weather',  canonicalTriggers: ['what\'s the weather', 'weather in'],   fuzzyKeywords: ['weather', 'forecast', 'temperature', 'rain', 'cloud'],   openFn: () => detectWeatherTrigger(transcript) },
+    { toolName: 'News',     canonicalTriggers: ['news briefing', 'headlines'],           fuzzyKeywords: ['news', 'headlines', 'briefing', 'stories', 'latest'],    openFn: () => detectNewsTrigger(transcript) },
+    { toolName: 'Stocks',   canonicalTriggers: ['what\'s the market', 'how is apple'],  fuzzyKeywords: ['stocks', 'market', 'shares', 'trading', 'crypto', 'price'], openFn: () => detectMarketTrigger(transcript) },
+    { toolName: 'Calendar', canonicalTriggers: ['what\'s on my schedule', 'my calendar'], fuzzyKeywords: ['calendar', 'schedule', 'meeting', 'appointment', 'today'], openFn: () => detectCalendarTrigger(transcript) },
+    { toolName: 'Email',    canonicalTriggers: ['view my emails', 'check my email'],    fuzzyKeywords: ['email', 'gmail', 'inbox', 'unread', 'messages'],           openFn: () => detectGmailTrigger(transcript) },
+    { toolName: 'Journal',  canonicalTriggers: ['start a journal entry'],               fuzzyKeywords: ['journal', 'diary', 'entry', 'log', 'record'],             openFn: () => detectJournalStartTrigger(transcript) },
+    { toolName: 'Ideas',    canonicalTriggers: ['store my idea', 'show my ideas'],      fuzzyKeywords: ['idea', 'ideas', 'capture', 'note', 'thought'],            openFn: () => detectIdeaCaptureTrigger(transcript) },
+    { toolName: 'Browser',  canonicalTriggers: ['open youtube', 'search google'],       fuzzyKeywords: ['open', 'browse', 'search', 'website', 'google', 'youtube'], openFn: () => detectBrowserTrigger(transcript) },
+  ];
+  ```
+
+- [ ] Write `detectFuzzyToolIntent(transcript) -> { toolName, confidence } | null`:
+  - Normalise `transcript` to lowercase, strip punctuation
+  - For each entry in `FUZZY_TOOL_MAP`, count how many `fuzzyKeywords` appear in the normalised transcript
+  - Compute `confidence = matchCount / fuzzyKeywords.length`
+  - Return the highest-confidence entry if `confidence >= FUZZY_THRESHOLD` (default `0.3` — at least 30 % of keywords present); otherwise return `null`
+  - Skip entries whose `canonicalTriggers` already matched via the normal intercept chain (i.e. the tool already fired — no fuzzy fallback needed)
+  - Add `FUZZY_THRESHOLD` to `app.js` as a module-level constant; document in `.env.example` as a comment for visibility
+
+**Confirmation flow (`frontend/app.js`)**
+
+- [ ] Add a `_fuzzyConfirmPending` state variable and a `_fuzzyPendingTool` reference to track the in-flight confirmation
+- [ ] In the intercept chain — after all canonical tool checks and *before* the `sendToOllama` fallback — call `detectFuzzyToolIntent(transcript)`:
+  - If a match is returned: set `_fuzzyConfirmPending = true`, set `_fuzzyPendingTool` to the matched entry, speak `"Did you want to open the <toolName> tool?"` via `enqueueSpeak`, and `return` early (do not send to LLM)
+  - If no match: fall through to `sendToOllama` as normal
+- [ ] Add a `_fuzzyConfirmMode` check at **position 3** in the intercept chain (immediately after `journalMode` and `ideasMode` checks, before dossier exit):
+  - If `_fuzzyConfirmPending` is `true`:
+    - Normalise transcript; check for affirmative tokens (`yes`, `yeah`, `yep`, `correct`, `do it`, `open it`, `go ahead`, `sure`, `please`)
+    - If affirmative: clear `_fuzzyConfirmPending`, call `_fuzzyPendingTool.openFn()`, speak `"Opening <toolName>."`, and `return`
+    - If negative (`no`, `nope`, `cancel`, `never mind`, `stop`): clear state, speak `"Okay, never mind."`, and `return`
+    - If neither (ambiguous second transcription): speak `"I didn't catch that — did you want to open <toolName>? Say yes or no."`, keep `_fuzzyConfirmPending = true`, and `return`
+- [ ] Add `_clearFuzzyConfirmState()` helper — resets both flags to `false` / `null`; called from the clear button handler and from `exitPresMode()`
+- [ ] Add a visible confirmation prompt to the UI: when `_fuzzyConfirmPending` is `true`, render a dismissible banner or badge (e.g. `"Did you mean: open Timer?"` with Yes / No buttons) so the user can also click to confirm or dismiss without speaking
+
+**Intercept chain position**
+
+Add the fuzzy confirm check to the Final Intercept Order:
+
+```
+1.  journalMode active check      ← MUST be first
+2.  ideasMode active check        ← MUST be second
+3.  _fuzzyConfirmMode check       ← NEW: resolve pending tool confirmation before anything else
+4.  _matchesExitPhrase            ← dossier exit
+    ... (existing order unchanged below)
+19. detectFuzzyToolIntent         ← NEW: catch near-miss transcriptions before LLM fallback
+20. appendMessage + sendToOllama  ← normal LLM path (catch-all)
+```
+
+**Edge-case guards**
+
+- [ ] If STT returns an empty or sub-5-character transcript, skip fuzzy detection entirely — too short to be meaningful
+- [ ] Add a 15-second timeout on the fuzzy confirm state: if no follow-up mic press arrives within 15 s, auto-dismiss (`_clearFuzzyConfirmState()`) and speak `"Okay, I'll cancel that."` — prevents the confirm state from silently gating all future mic presses
+- [ ] When fuzzy detection fires but the user is in `journalMode` or `ideasMode`, skip fuzzy entirely — the mode flags take precedence and the utterance belongs to the active session
+
+**`.env` additions**
+
+```
+TOOLKIT_MANIFEST_ENABLED=true
+```
+
+---
+
 ### Final Intercept Order (all tools implemented)
 
 Once all tools are active, the intercept chain in `mediaRecorder.onstop` and `handleSend`
@@ -958,22 +1071,24 @@ must follow this exact order to avoid mode flag collisions:
 ```
 1.  journalMode active check      ← MUST be first (gates all mic presses in journal mode)
 2.  ideasMode active check        ← MUST be second (gates next mic press in ideas mode)
-3.  _matchesExitPhrase            ← dossier exit
-4.  _parseTrigger                 ← dossier open
-5.  detectJournalStartTrigger     ← enter journal dictation mode
-6.  detectJournalReadTrigger      ← journal read / search / delete
-7.  detectIdeaCaptureTrigger      ← enter ideas capture mode
-8.  detectIdeaReadTrigger         ← ideas list / search / discard / clear
-9.  detectTimerTrigger            ← timer set / cancel / status
-10. detectTimeTrigger             ← time / date query
-11. detectWeatherTrigger          ← weather forecast
-12. detectCalendarTrigger         ← calendar schedule
-13. detectNewsTrigger             ← news briefing
-14. detectMarketTrigger           ← stocks / crypto
-15. detectGmailTrigger            ← Gmail inbox / open / summarise / trash
-16. detectWikiTrigger             ← Wikipedia RAG search
-17. detectBrowserTrigger          ← in-UI browser panel
-18. appendMessage + sendToOllama  ← normal LLM path (catch-all)
+3.  _fuzzyConfirmMode check       ← resolve pending tool confirmation before any new trigger fires
+4.  _matchesExitPhrase            ← dossier exit
+5.  _parseTrigger                 ← dossier open
+6.  detectJournalStartTrigger     ← enter journal dictation mode
+7.  detectJournalReadTrigger      ← journal read / search / delete
+8.  detectIdeaCaptureTrigger      ← enter ideas capture mode
+9.  detectIdeaReadTrigger         ← ideas list / search / discard / clear
+10. detectTimerTrigger            ← timer set / cancel / status
+11. detectTimeTrigger             ← time / date query
+12. detectWeatherTrigger          ← weather forecast
+13. detectCalendarTrigger         ← calendar schedule
+14. detectNewsTrigger             ← news briefing
+15. detectMarketTrigger           ← stocks / crypto
+16. detectGmailTrigger            ← Gmail inbox / open / summarise / trash
+17. detectWikiTrigger             ← Wikipedia RAG search
+18. detectBrowserTrigger          ← in-UI browser panel
+19. detectFuzzyToolIntent         ← catch near-miss transcriptions before falling through to LLM
+20. appendMessage + sendToOllama  ← normal LLM path (catch-all)
 ```
 
 ---

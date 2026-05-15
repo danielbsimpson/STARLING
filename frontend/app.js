@@ -1264,28 +1264,12 @@ function _speakBrowser(text) {
   window.speechSynthesis.speak(utt);
 }
 
-function stopSpeaking() {
-  if (_activeAudio) { _activeAudio.pause(); _activeAudio = null; }
-  if (window.speechSynthesis) window.speechSynthesis.cancel();
-  setState('idle');
-}
-
-async function speak(text) {
-  if (ttsMode === 'off') return;
-  if (ttsMode === 'browser') { _speakBrowser(text); return; }
-  await _speakKokoro(text);
-}
-
-// ── Text send handler ─────────────────────────────────────────────────────────
-async function handleSend() {
-  const text = textInput.value.trim();
-  if (!text) return;
-  _rttStart = performance.now();            // start RTT clock for text-input path
-  clearAudioQueue();  // stop any in-progress speech before new request
-  textInput.value = '';
+// ── Unified input router ──────────────────────────────────────────────────────
+// Handles all trigger intercepts; falls through to the LLM for unmatched input.
+// Called by both handleSend (text path) and mediaRecorder.onstop (voice path).
+async function _routeInput(text) {
   dismissAllToolPanels();
 
-  // ── Presentation mode intercept ──────────────────────────────────────────
   if (_matchesExitPhrase(text)) {
     exitPresMode();
     setState('idle');
@@ -1297,35 +1281,32 @@ async function handleSend() {
     setState('idle');
     return;
   }
-  // ────────────────────────────────────────────────────────────────────────
 
-  // ── Timer intercept (checked before time to avoid 'timer' matching time patterns) ──
+  // Timer checked before time to avoid 'timer' matching time patterns
   const _timerTrigger = detectTimerTrigger(text);
   if (_timerTrigger) {
     setState('idle');
     handleTimerTrigger(text, _timerTrigger);
     return;
   }
-  // ── Date query intercept (checked before time — phrases are more specific) ──
+  // Date checked before time — phrases are more specific
   if (detectDateTrigger(text)) {
     setState('idle');
     handleDateQuery(text);
     return;
   }
-  // ── Time query intercept ────────────────────────────────────────────────────
   if (detectTimeTrigger(text)) {
     setState('idle');
     handleTimeQuery(text);
     return;
   }
-  // ── Weather intercept ───────────────────────────────────────────────────────
+
   const _wxTrigger = detectWeatherTrigger(text);
   if (_wxTrigger) {
     setState('thinking');
     appendMessage('user', text);
     const wxResult = await openWeatherPanel(_wxTrigger.location);
     if (wxResult && typeof wxResult === 'object' && wxResult._wxErr) {
-      // Unknown location — speak error, skip LLM, return early
       const { txt } = appendMessage('assistant', wxResult._wxErr);
       enqueueSpeak(wxResult._wxErr, () => { txt.textContent = wxResult._wxErr; });
       setState('idle');
@@ -1348,7 +1329,6 @@ async function handleSend() {
           ],
         }
       );
-      // All sentences are now enqueued — start the auto-dismiss once audio finishes
       _playbackChain.then(() => startWeatherAutoDismiss());
     } else {
       await sendToOllama('Inform the user that weather data could not be retrieved right now. One sentence.');
@@ -1356,9 +1336,8 @@ async function handleSend() {
     fetchSystemStatus();
     return;
   }
-  // ── News briefing intercept ─────────────────────────────────────────────────
+
   if (detectNewsTrigger(text)) {
-    dismissAllToolPanels();
     setState('thinking');
     appendMessage('user', text);
     const newsContext = await openNewsPanel();
@@ -1383,12 +1362,20 @@ async function handleSend() {
     fetchSystemStatus();
     return;
   }
-  // ────────────────────────────────────────────────────────────────────────
 
   appendMessage('user', text);
-  dismissAllToolPanels();
   await sendToOllama(text);
   fetchSystemStatus();
+}
+
+// ── Text send handler ─────────────────────────────────────────────────────────
+async function handleSend() {
+  const text = textInput.value.trim();
+  if (!text) return;
+  _rttStart = performance.now();
+  clearAudioQueue();
+  textInput.value = '';
+  await _routeInput(text);
 }
 
 sendBtn.addEventListener('click', handleSend);
@@ -1447,116 +1434,11 @@ async function startRecording() {
         const { transcript } = await r.json();
         if (!transcript) { setState('idle'); return; }
 
-        // dismiss any open tool panel before routing the new transcript
-        dismissAllToolPanels();
-        // ── Presentation mode intercept ──────────────────────────────────
-        if (_matchesExitPhrase(transcript)) {
-          exitPresMode();
-          setState('idle');
-          return;
-        }
-        const _triggerResult = _parseTrigger(transcript);
-        if (_triggerResult.matched) {
-          enterPresMode(_triggerResult.subject);
-          setState('idle');
-          return;
-        }
-        // ────────────────────────────────────────────────────────────────
-
-        // ── Timer intercept (checked before time to avoid 'timer' matching time patterns) ──
-        const _timerTrigger = detectTimerTrigger(transcript);
-        if (_timerTrigger) {
-          setState('idle');
-          handleTimerTrigger(transcript, _timerTrigger);
-          return;
-        }
-        // ────────────────────────────────────────────────────────────────────
-        // ── Date query intercept (checked before time — phrases are more specific) ──
-        if (detectDateTrigger(transcript)) {
-          setState('idle');
-          handleDateQuery(transcript);
-          return;
-        }
-        // ── Time query intercept ──────────────────────────────────────────────
-        if (detectTimeTrigger(transcript)) {
-          setState('idle');
-          handleTimeQuery(transcript);
-          return;
-        }
-        // ── Weather intercept ─────────────────────────────────────────────────
-        const _wxTrigger = detectWeatherTrigger(transcript);
-        if (_wxTrigger) {
-          setState('thinking');
-          appendMessage('user', transcript);
-          const wxResult = await openWeatherPanel(_wxTrigger.location);
-          if (wxResult && typeof wxResult === 'object' && wxResult._wxErr) {
-            // Unknown location — speak error, skip LLM, return early
-            const { txt } = appendMessage('assistant', wxResult._wxErr);
-            enqueueSpeak(wxResult._wxErr, () => { txt.textContent = wxResult._wxErr; });
-            setState('idle');
-            fetchSystemStatus();
-            return;
-          }
-          if (wxResult) {
-            await sendToOllama(
-              'Give a spoken weather briefing using only the weather data in your context — do not estimate or invent any values. ' +
-              'Start with current conditions and how it feels outside. ' +
-              'Then describe the upcoming forecast using the exact high temperatures listed for each day. ' +
-              'If temperatures are rising or falling significantly over the next few days, say so. ' +
-              'Keep it to three or four natural sentences. Phrase temperatures naturally (say "low seventies" for 74°F, "mid-eighties" for 83°F).',
-              {
-                ephemeralMessages: [
-                  {
-                    role: 'system',
-                    content: SYSTEM_PROMPT + '\n\n[WEATHER DATA — use only these values, do not hallucinate temperatures]\n' + wxResult,
-                  },
-                ],
-              }
-            );
-            // All sentences are now enqueued — start the auto-dismiss once audio finishes
-            _playbackChain.then(() => startWeatherAutoDismiss());
-          } else {
-            await sendToOllama('Inform the user that weather data could not be retrieved right now. One sentence.');
-          }
-          fetchSystemStatus();
-          return;
-        }
-        // ── News briefing intercept ───────────────────────────────────────────
-        if (detectNewsTrigger(transcript)) {
-          dismissAllToolPanels();
-          setState('thinking');
-          appendMessage('user', transcript);
-          const newsContext = await openNewsPanel();
-          if (newsContext) {
-            enterNewsMode();
-            await sendToOllama(
-              'Deliver a concise spoken news briefing based on the headlines provided. ' +
-              'Pick the four or five most significant stories and summarise each in one sentence. ' +
-              'Group related stories naturally if they appear. ' +
-              'Keep the whole briefing under sixty seconds when spoken aloud. ' +
-              'Do not read source names aloud unless they add important context.',
-              {
-                ephemeralMessages: [
-                  { role: 'system', content: SYSTEM_PROMPT },
-                  { role: 'system', content: `${_currentTimeContext()}\n${newsContext}` },
-                ],
-              }
-            );
-          } else {
-            await sendToOllama('Inform the user that the news feeds could not be reached right now. One sentence.');
-          }
-          fetchSystemStatus();
-          return;
-        }
-        // ─────────────────────────────────────────────────────────────────────
-
-        appendMessage('user', transcript);
-        const rttSnap = _rttStart;      // preserve timestamp set in stopRecording()
-        clearAudioQueue();              // stop any in-progress speech — resets _rttStart
-        _rttStart = rttSnap;            // restore so RTT is measured from mic release
-        dismissAllToolPanels();
-        await sendToOllama(transcript);
-        fetchSystemStatus();
+        // Preserve RTT timestamp across clearAudioQueue before routing
+        const rttSnap = _rttStart;
+        clearAudioQueue();
+        _rttStart = rttSnap;
+        await _routeInput(transcript);
       } catch (err) {
         appendMessage('assistant', `[STT error: ${err.message}]`);
         setState('error');
