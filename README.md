@@ -56,9 +56,9 @@ Full implementation guides live in the [`markdown/`](./markdown/) folder.
 
 | # | Tool | Guide | Backend | Status |
 |---|---|---|---|---|
-| 1 | Time & Date | [`markdown/TIME.md`](./markdown/TIME.md) | None | ✅ Done |
-| 2 | Timers | [`markdown/TIMER.md`](./markdown/TIMER.md) | None | ✅ Done |
-| 3 | Weather | [`markdown/WEATHER.md`](./markdown/WEATHER.md) | Open-Meteo (free, no key) | ✅ Done |
+| 1 | Time & Date | [`markdown/TIME.md`](./markdown/complete/TIME.md) | None | ✅ Done |
+| 2 | Timers | [`markdown/TIMER.md`](./markdown/complete/TIMER.md) | None | ✅ Done |
+| 3 | Weather | [`markdown/WEATHER.md`](./markdown/complete/WEATHER.md) | Open-Meteo (free, no key) | ✅ Done |
 | 4 | News Briefing | [`markdown/NEWS.md`](./markdown/NEWS.md) | RSS / feedparser (free) | 🔲 Planned |
 | 5 | Stocks & Crypto | [`markdown/STOCKS.md`](./markdown/STOCKS.md) | yfinance (unofficial) | 🔲 Planned |
 | 6 | Wake Word & Interrupt | [`markdown/WAKE_WORD.md`](./markdown/WAKE_WORD.md) | None | 🔲 Planned |

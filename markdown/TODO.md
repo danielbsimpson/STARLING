@@ -346,6 +346,78 @@ Open-Meteo's free public API. No authentication required.
 - [x] Add weather panel CSS to `style.css`
 - [x] Test: "What's the weather?" → panel opens + LLM spoken summary of current conditions + 7-day forecast
 
+#### Enhancement — Local JSON Cache & Historical Tracking 🟡
+
+Persist each weather API response to a local JSON file on disk. Before calling Open-Meteo, check the cache; if the most recent entry is less than 1 hour old, serve the stored data instead. Every cache miss (i.e. a real API call) appends a timestamped record, building a passive historical log over time.
+
+**Backend changes (`backend/weather.py`)**
+
+- [ ] Add `WEATHER_CACHE_FILE` to `.env` / `.env.example` (default: `memory/weather_cache.json`)
+- [ ] On startup, create `memory/weather_cache.json` if it does not exist (seed with `{"entries": []}`)
+- [ ] In `GET /weather` handler, before calling Open-Meteo:
+  - Load `weather_cache.json`; read `entries[-1]` (most recent record)
+  - If `entries[-1].fetched_at` exists and is within 3 600 s of `datetime.utcnow()`, return `entries[-1].data` directly with a `"source": "cache"` flag — no HTTP call made
+- [ ] On a cache miss, call Open-Meteo as normal; append `{ "fetched_at": "<ISO-8601 UTC>", "data": <response JSON> }` to `entries`; write the file back atomically (write to `.tmp` then `os.replace`)
+- [ ] Cap `entries` to the most recent N records (default 168, i.e. one week of hourly snapshots) — controlled by `WEATHER_HISTORY_MAX` in `.env`; trim oldest entries on write
+- [ ] Add `GET /weather/history` endpoint — returns the full `entries` array (timestamps + weather payloads) for potential future charting or trend queries
+
+**Frontend changes (`frontend/weather-panel.js`)**
+
+- [ ] Display a small cache-age label in the weather panel header when serving cached data — e.g. `"Last updated 23 min ago"` — so the user knows the data is not live
+- [ ] Add a manual "Refresh" button (🔄) to the panel that calls `GET /weather?force=true` (bypass cache, always fetch live) and re-renders the panel
+- [ ] Support `force=true` query param in the backend: skip the age check and always call Open-Meteo when `force` is present
+
+**`.env` additions**
+
+```
+WEATHER_CACHE_FILE=memory/weather_cache.json
+WEATHER_HISTORY_MAX=168
+```
+
+**`.gitignore` addition**
+
+- [ ] Add `memory/weather_cache.json` to `.gitignore` (personal location data — do not commit)
+
+#### Enhancement — Location-Aware Weather Queries 🟡
+
+Allow the user to ask for weather at any named location by including it in the voice query. When no location is mentioned, fall back to the default coordinates stored in `.env` (Framingham, MA). When an ambiguous place name could match multiple locations (e.g. "Brighton" → Brighton, England or Brighton, MA), bias resolution toward the geographically closest match to the default home location.
+
+**Trigger parsing (`frontend/weather-panel.js`)**
+
+- [ ] Extend `detectWeatherTrigger(transcript)` to extract an optional location token from the query:
+  - Patterns to match: `"weather in <X>"`, `"weather for <X>"`, `"weather at <X>"`, `"show me the weather in <X>"`, `"what's the weather in <X>"`, `"let me see the weather in <X>"`, `"how's the weather in <X>"`, and common contractions / STT variants (`whats`, `how is`, etc.)
+  - Capture everything after the preposition (`in` / `for` / `at`) up to end-of-string, stripping trailing punctuation
+  - If no location token is found, set `location = null` — backend defaults to home coordinates
+- [ ] Pass the extracted `location` string (URL-encoded) as a query param when calling `GET /weather?location=<X>`; omit the param entirely when `location` is null
+
+**Backend geocoding (`backend/weather.py`)**
+
+- [ ] Add `pip install geopy` (provides the `Nominatim` geocoder — OSM-based, free, no API key)
+- [ ] Write a `resolve_location(query: str, home_lat: float, home_lon: float) -> tuple[float, float, str]` helper:
+  - Call `Nominatim(user_agent="starling-weather").geocode(query, exactly_one=False, limit=5)` to get up to 5 candidate results
+  - For each candidate compute the geodesic distance from the home coordinates using `geopy.distance.geodesic`
+  - Return the `(lat, lon, display_name)` of the **closest** candidate — this naturally resolves "Brighton" to Brighton, MA over Brighton, England when the home location is Framingham, MA
+  - Raise `HTTPException(422)` if no candidates are returned (place name not recognised)
+- [ ] Update `GET /weather` to accept an optional `location: str = Query(None)` param:
+  - If `location` is provided, call `resolve_location(location, home_lat, home_lon)` to get `(lat, lon, display_name)`
+  - If `location` is `None`, use `WEATHER_LAT` / `WEATHER_LON` from `.env` and `display_name = "Framingham"` (or a configurable `WEATHER_DEFAULT_LABEL`)
+  - Include `display_name` and `is_default_location: bool` in the response JSON so the frontend can label the panel correctly
+- [ ] Cache key should incorporate the resolved `(lat, lon)` pair rounded to 2 decimal places — location-specific responses are cached independently from the home location entry; format: `"entries"` keyed by `"<lat_rounded>_<lon_rounded>"` in `weather_cache.json`
+
+**Frontend panel updates (`frontend/weather-panel.js`)**
+
+- [ ] Display the resolved `display_name` as the panel title (e.g. `"WEATHER — FRAMINGHAM, MA"` or `"WEATHER — LONDON, UK"`) instead of a hardcoded string
+- [ ] When `is_default_location` is `false`, show a subtle secondary label: `"showing results for <display_name>"` beneath the title so the user knows a location override is active
+- [ ] On a `422` response (unknown location), speak `"I couldn't find a weather location called [X]. Try being more specific."` via `enqueueSpeak` and do not open the panel
+
+**`.env` additions**
+
+```
+WEATHER_DEFAULT_LABEL=Framingham
+```
+
+- [ ] Add `geopy` to `requirements.txt`
+
 ---
 
 ### Tool 4 — News Briefing (`NEWS.md`) 🟢
@@ -365,6 +437,133 @@ the LLM delivers a spoken briefing from structured context injection.
 - [ ] Add news panel HTML to `index.html`
 - [ ] Add news panel CSS to `style.css`
 - [ ] Test: "News briefing" → panel opens with headlines + LLM spoken summary of top stories
+
+#### Enhancement — Category-Filtered News Queries 🟡
+
+Allow the user to request headlines for a specific news category by including it in the voice query. When no category is mentioned, fall back to the default "World" feed. Categories map to distinct RSS feed subsets defined in `.env` — no new dependencies required.
+
+**Supported categories (initial set)**
+
+| Category token | Example trigger phrases | Feed tag |
+|---|---|---|
+| `world` | "news briefing", "show me the headlines", "what's in the news" | `world` |
+| `us` / `america` | "US news", "American headlines", "display the US news" | `us` |
+| `technology` / `tech` | "technology news", "tech headlines", "pull up the tech news" | `technology` |
+| `finance` / `financial` / `business` | "financial headlines", "business news", "show me the finance news" | `business` |
+| `science` | "science news", "science headlines" | `science` |
+| `health` | "health news", "health headlines" | `health` |
+| `sports` | "sports headlines", "sports news" | `sports` |
+| `entertainment` | "entertainment news", "entertainment headlines" | `entertainment` |
+
+**Trigger parsing (`frontend/news-panel.js`)**
+
+- [ ] Extend `detectNewsTrigger(transcript)` to extract an optional category token from the query:
+  - Match category keywords anywhere in the phrase: `"show me the <category> news"`, `"pull up <category> headlines"`, `"display the <category> news"`, `"<category> briefing"`, `"what's happening in <category>"`, etc.
+  - Normalise synonyms to canonical tags: `"tech"` → `technology`, `"financial"` / `"finance"` → `business`, `"american"` / `"america"` / `"us"` → `us`
+  - If no recognisable category keyword is present, set `category = "world"` as the default
+- [ ] Pass the resolved `category` string as a query param when calling `GET /news?category=<tag>`
+
+**Backend changes (`backend/news.py`)**
+
+- [ ] Update `NEWS_FEEDS` in `.env` from a single comma-separated list to a **category-keyed structure** — store as prefixed env vars:
+  ```
+  NEWS_FEEDS_WORLD=https://feeds.bbci.co.uk/news/rss.xml,...
+  NEWS_FEEDS_US=https://feeds.npr.org/1001/rss.xml,...
+  NEWS_FEEDS_TECHNOLOGY=https://feeds.arstechnica.com/arstechnica/index,...
+  NEWS_FEEDS_BUSINESS=https://feeds.reuters.com/reuters/businessNews,...
+  NEWS_FEEDS_SCIENCE=https://www.sciencedaily.com/rss/all.xml,...
+  NEWS_FEEDS_HEALTH=https://feeds.webmd.com/rss/rss.aspx?RSSSource=RSS_PUBLIC,...
+  NEWS_FEEDS_SPORTS=https://www.espn.com/espn/rss/news,...
+  NEWS_FEEDS_ENTERTAINMENT=https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml,...
+  ```
+- [ ] Update `GET /news` to accept `category: str = Query("world")` param; load the matching `NEWS_FEEDS_<CATEGORY>` var (case-insensitive); return `400` with a spoken-friendly message if the category key is not configured
+- [ ] Include `category` and `category_label` (display name) in the response JSON so the frontend can label the panel header accordingly
+- [ ] Cache key should incorporate the category tag — each category is cached independently with its own 2-minute TTL; format: `"<category>:<fetched_at>"` in the existing cache structure
+
+**Frontend panel updates (`frontend/news-panel.js`)**
+
+- [ ] Display the resolved `category_label` in the panel header — e.g. `"NEWS — TECHNOLOGY"` or `"NEWS — WORLD HEADLINES"`
+- [ ] Render a row of category chip buttons at the top of the news panel (World · US · Tech · Business · Science · Health · Sports · Entertainment) — clicking a chip calls `GET /news?category=<tag>` and re-renders the panel inline without reopening it
+- [ ] Highlight the active chip with an accent border/colour so the user can see which category is currently displayed
+- [ ] On a `400` response (unconfigured category), speak `"I don't have a feed set up for [category] news."` via `enqueueSpeak` and do not change the panel state
+
+**`.env` additions**
+
+```
+NEWS_FEEDS_WORLD=https://feeds.bbci.co.uk/news/rss.xml,https://rss.nytimes.com/services/xml/rss/nyt/World.xml
+NEWS_FEEDS_US=https://feeds.npr.org/1001/rss.xml,https://rss.nytimes.com/services/xml/rss/nyt/US.xml
+NEWS_FEEDS_TECHNOLOGY=https://feeds.arstechnica.com/arstechnica/index,https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml
+NEWS_FEEDS_BUSINESS=https://feeds.reuters.com/reuters/businessNews,https://rss.nytimes.com/services/xml/rss/nyt/Business.xml
+NEWS_FEEDS_SCIENCE=https://www.sciencedaily.com/rss/all.xml
+NEWS_FEEDS_HEALTH=https://rss.nytimes.com/services/xml/rss/nyt/Health.xml
+NEWS_FEEDS_SPORTS=https://www.espn.com/espn/rss/news,https://rss.nytimes.com/services/xml/rss/nyt/Sports.xml
+NEWS_FEEDS_ENTERTAINMENT=https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml
+```
+
+#### Enhancement — Cross-Source Story Synthesis 🟠
+
+When headlines are fetched from multiple RSS sources for a given category, multiple outlets will often cover the same story with slightly different titles. Rather than displaying them as duplicate cards, use the LLM silently to cluster the raw headlines into deduplicated story groups. Each synthesised story card shows a single unified headline, a short LLM-generated summary sentence, and an expandable source list — one link per outlet that reported the same story.
+
+**Backend changes (`backend/news.py`)**
+
+- [ ] After fetching and parsing all RSS feeds for a category, collect the raw headline list: `[{ "title", "link", "source_name", "published" }, ...]`
+- [ ] Pass the raw headline list to a `synthesise_headlines(headlines: list, llm_url: str) -> list` helper function that calls the local LLM (via `llama_server.py` or the active `LLM_BACKEND`) with a silent, non-streamed completion request:
+  - Prompt instructs the model to group headlines that refer to the same real-world story, produce a single neutral synthesised headline per group, write one concise summary sentence per group, and return structured JSON:
+    ```json
+    [
+      {
+        "headline": "Synthesised story headline",
+        "summary": "One-sentence plain-prose summary.",
+        "sources": [
+          { "name": "BBC News", "title": "Original BBC title", "link": "https://...", "published": "ISO-8601" },
+          { "name": "Reuters",  "title": "Original Reuters title", "link": "https://...", "published": "ISO-8601" }
+        ]
+      }
+    ]
+    ```
+  - Use `response_format: { type: "json_object" }` (llama-server supports this via grammar constraints) to enforce valid JSON output without post-processing
+  - Cap input at `NEWS_SYNTHESIS_MAX_HEADLINES` headlines (default 40) before sending to the LLM to stay within context
+- [ ] If the LLM call fails or returns malformed JSON, fall back gracefully to the raw unsynthesised headline list so the panel always renders something
+- [ ] Include synthesised groups in the cached response — the synthesis result is stored alongside the raw feed data; re-synthesis only occurs on a real cache miss (not on every request)
+- [ ] Add `NEWS_SYNTHESIS_ENABLED` flag to `.env` (default `true`) — when `false`, skip the LLM step entirely and return raw headlines, useful for debugging or low-power sessions
+- [ ] Add `NEWS_SYNTHESIS_MAX_HEADLINES` to `.env` (default `40`) — number of raw headlines fed to the LLM per synthesis call
+
+**Frontend panel updates (`frontend/news-panel.js`)**
+
+- [ ] Replace the flat headline card list with synthesised story cards. Each card renders:
+  - **Synthesised headline** — prominent, full-width title text
+  - **Summary sentence** — muted smaller text directly beneath the headline
+  - **Source pills row** — compact inline chips, one per outlet (e.g. `BBC · Reuters · NYT`); each chip is a clickable `<a target="_blank">` link to the original article
+  - **Published timestamp** — taken from the most-recent `published` value among the grouped sources
+- [ ] Add a subtle multi-source indicator (e.g. `3 sources` label) on cards with more than one outlet so the user immediately knows it is a merged story
+- [ ] Expand/collapse the full source list on card click — show just the chips by default; expand to a stacked list of `[Source name] — Original title — link` rows when the user clicks the card body
+- [ ] When `NEWS_SYNTHESIS_ENABLED=false` (raw mode), render the original flat card layout unchanged — no regression in fallback path
+- [ ] Show a brief `"Synthesising headlines…"` status message in the panel header while the silent LLM call is in flight, replaced by the category label once complete
+
+**LLM prompt template (stored in `backend/news.py` as a module-level constant)**
+
+```python
+NEWS_SYNTHESIS_PROMPT = """
+You are a news editor. Below is a JSON array of raw headlines from multiple news sources.
+Group headlines that refer to the same real-world story.
+For each group, produce:
+- "headline": a single neutral synthesised headline (plain prose, no markdown)
+- "summary": one concise sentence summarising the story (plain prose, no markdown)
+- "sources": the original objects for every headline in the group, unchanged
+
+Return ONLY a valid JSON array. No commentary, no markdown fences.
+
+Headlines:
+{headlines_json}
+""".strip()
+```
+
+**`.env` additions**
+
+```
+NEWS_SYNTHESIS_ENABLED=true
+NEWS_SYNTHESIS_MAX_HEADLINES=40
+```
 
 ---
 
