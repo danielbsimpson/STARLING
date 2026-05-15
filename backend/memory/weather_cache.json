@@ -1,0 +1,466 @@
+{
+  "42.28_-71.42": [
+    {
+      "fetched_at": "2026-05-15T22:11:24.741668+00:00",
+      "data": {
+        "location": "Framingham, Massachusetts US",
+        "display_name": "Framingham, Massachusetts US",
+        "is_default_location": true,
+        "current": {
+          "condition": "Overcast",
+          "weather_code": 3,
+          "temp": 53,
+          "feels_like": 51,
+          "humidity": 88,
+          "wind_speed": 6,
+          "wind_dir": "N",
+          "cloud_cover": 100,
+          "precipitation": 0.0,
+          "is_day": true,
+          "unit_temp": "\u00b0F",
+          "unit_wind": "mph",
+          "unit_precip": "in"
+        },
+        "forecast": [
+          {
+            "day": "Friday",
+            "date": "2026-05-15",
+            "condition": "Foggy",
+            "weather_code": 45,
+            "high": 57,
+            "low": 47,
+            "precip": 0.0,
+            "wind_max": 8,
+            "sunrise": "05:24",
+            "sunset": "19:59"
+          },
+          {
+            "day": "Saturday",
+            "date": "2026-05-16",
+            "condition": "Overcast",
+            "weather_code": 3,
+            "high": 74,
+            "low": 44,
+            "precip": 0.0,
+            "wind_max": 13,
+            "sunrise": "05:23",
+            "sunset": "20:00"
+          },
+          {
+            "day": "Sunday",
+            "date": "2026-05-17",
+            "condition": "Overcast",
+            "weather_code": 3,
+            "high": 83,
+            "low": 58,
+            "precip": 0.0,
+            "wind_max": 12,
+            "sunrise": "05:22",
+            "sunset": "20:01"
+          },
+          {
+            "day": "Monday",
+            "date": "2026-05-18",
+            "condition": "Overcast",
+            "weather_code": 3,
+            "high": 82,
+            "low": 56,
+            "precip": 0.0,
+            "wind_max": 12,
+            "sunrise": "05:21",
+            "sunset": "20:02"
+          },
+          {
+            "day": "Tuesday",
+            "date": "2026-05-19",
+            "condition": "Light drizzle",
+            "weather_code": 51,
+            "high": 94,
+            "low": 57,
+            "precip": 0.016,
+            "wind_max": 12,
+            "sunrise": "05:20",
+            "sunset": "20:03"
+          },
+          {
+            "day": "Wednesday",
+            "date": "2026-05-20",
+            "condition": "Overcast",
+            "weather_code": 3,
+            "high": 95,
+            "low": 67,
+            "precip": 0.0,
+            "wind_max": 15,
+            "sunrise": "05:19",
+            "sunset": "20:04"
+          },
+          {
+            "day": "Thursday",
+            "date": "2026-05-21",
+            "condition": "Light drizzle",
+            "weather_code": 51,
+            "high": 68,
+            "low": 54,
+            "precip": 0.047,
+            "wind_max": 10,
+            "sunrise": "05:18",
+            "sunset": "20:05"
+          }
+        ],
+        "llm_context": "Current weather in Framingham, Massachusetts US: Overcast, 53\u00b0F (feels like 51\u00b0F), humidity 88%, wind 6 mph N, cloud cover 100%, precipitation 0.0 in. Today: high 57\u00b0F, low 47\u00b0F, Foggy. Sunrise 05:24, sunset 19:59. Upcoming: Saturday 74/44\u00b0F Overcast, Sunday 83/58\u00b0F Overcast, Monday 82/56\u00b0F Overcast, Tuesday 94/57\u00b0F Light drizzle.",
+        "fetched_at": "2026-05-15T22:11:24.741668+00:00",
+        "units": "fahrenheit",
+        "source": "live",
+        "cache_age_seconds": 0
+      }
+    }
+  ],
+  "40.71_-74.01": [
+    {
+      "fetched_at": "2026-05-15T22:13:15.926882+00:00",
+      "data": {
+        "location": "New York, United States",
+        "display_name": "New York, United States",
+        "is_default_location": false,
+        "current": {
+          "condition": "Mainly clear",
+          "weather_code": 1,
+          "temp": 67,
+          "feels_like": 62,
+          "humidity": 43,
+          "wind_speed": 9,
+          "wind_dir": "NW",
+          "cloud_cover": 21,
+          "precipitation": 0.0,
+          "is_day": true,
+          "unit_temp": "\u00b0F",
+          "unit_wind": "mph",
+          "unit_precip": "in"
+        },
+        "forecast": [
+          {
+            "day": "Friday",
+            "date": "2026-05-15",
+            "condition": "Overcast",
+            "weather_code": 3,
+            "high": 67,
+            "low": 49,
+            "precip": 0.0,
+            "wind_max": 13,
+            "sunrise": "05:38",
+            "sunset": "20:06"
+          },
+          {
+            "day": "Saturday",
+            "date": "2026-05-16",
+            "condition": "Overcast",
+            "weather_code": 3,
+            "high": 79,
+            "low": 51,
+            "precip": 0.0,
+            "wind_max": 13,
+            "sunrise": "05:37",
+            "sunset": "20:07"
+          },
+          {
+            "day": "Sunday",
+            "date": "2026-05-17",
+            "condition": "Light drizzle",
+            "weather_code": 51,
+            "high": 84,
+            "low": 62,
+            "precip": 0.031,
+            "wind_max": 11,
+            "sunrise": "05:36",
+            "sunset": "20:08"
+          },
+          {
+            "day": "Monday",
+            "date": "2026-05-18",
+            "condition": "Overcast",
+            "weather_code": 3,
+            "high": 72,
+            "low": 63,
+            "precip": 0.0,
+            "wind_max": 11,
+            "sunrise": "05:35",
+            "sunset": "20:09"
+          },
+          {
+            "day": "Tuesday",
+            "date": "2026-05-19",
+            "condition": "Overcast",
+            "weather_code": 3,
+            "high": 88,
+            "low": 62,
+            "precip": 0.0,
+            "wind_max": 15,
+            "sunrise": "05:35",
+            "sunset": "20:09"
+          },
+          {
+            "day": "Wednesday",
+            "date": "2026-05-20",
+            "condition": "Overcast",
+            "weather_code": 3,
+            "high": 89,
+            "low": 70,
+            "precip": 0.0,
+            "wind_max": 13,
+            "sunrise": "05:34",
+            "sunset": "20:10"
+          },
+          {
+            "day": "Thursday",
+            "date": "2026-05-21",
+            "condition": "Moderate drizzle",
+            "weather_code": 53,
+            "high": 74,
+            "low": 53,
+            "precip": 0.083,
+            "wind_max": 18,
+            "sunrise": "05:33",
+            "sunset": "20:11"
+          }
+        ],
+        "llm_context": "Current weather in New York, United States: Mainly clear, 67\u00b0F (feels like 62\u00b0F), humidity 43%, wind 9 mph NW, cloud cover 21%, precipitation 0.0 in. Today: high 67\u00b0F, low 49\u00b0F, Overcast. Sunrise 05:38, sunset 20:06. Upcoming: Saturday 79/51\u00b0F Overcast, Sunday 84/62\u00b0F Light drizzle, Monday 72/63\u00b0F Overcast, Tuesday 88/62\u00b0F Overcast.",
+        "fetched_at": "2026-05-15T22:13:15.926882+00:00",
+        "units": "fahrenheit",
+        "source": "live",
+        "cache_age_seconds": 0
+      }
+    }
+  ],
+  "42.53_-83.78": [
+    {
+      "fetched_at": "2026-05-15T22:14:02.537451+00:00",
+      "data": {
+        "location": "Brighton, Livingston County, Michigan, 48116, United States",
+        "display_name": "Brighton, Livingston County, Michigan, 48116, United States",
+        "is_default_location": false,
+        "current": {
+          "condition": "Clear sky",
+          "weather_code": 0,
+          "temp": 70,
+          "feels_like": 62,
+          "humidity": 30,
+          "wind_speed": 12,
+          "wind_dir": "S",
+          "cloud_cover": 0,
+          "precipitation": 0.0,
+          "is_day": true,
+          "unit_temp": "\u00b0F",
+          "unit_wind": "mph",
+          "unit_precip": "in"
+        },
+        "forecast": [
+          {
+            "day": "Friday",
+            "date": "2026-05-15",
+            "condition": "Overcast",
+            "weather_code": 3,
+            "high": 70,
+            "low": 39,
+            "precip": 0.0,
+            "wind_max": 12,
+            "sunrise": "06:12",
+            "sunset": "20:50"
+          },
+          {
+            "day": "Saturday",
+            "date": "2026-05-16",
+            "condition": "Moderate drizzle",
+            "weather_code": 53,
+            "high": 78,
+            "low": 50,
+            "precip": 0.034,
+            "wind_max": 15,
+            "sunrise": "06:11",
+            "sunset": "20:51"
+          },
+          {
+            "day": "Sunday",
+            "date": "2026-05-17",
+            "condition": "Moderate drizzle",
+            "weather_code": 53,
+            "high": 78,
+            "low": 55,
+            "precip": 0.099,
+            "wind_max": 11,
+            "sunrise": "06:10",
+            "sunset": "20:52"
+          },
+          {
+            "day": "Monday",
+            "date": "2026-05-18",
+            "condition": "Moderate showers",
+            "weather_code": 81,
+            "high": 83,
+            "low": 63,
+            "precip": 0.382,
+            "wind_max": 32,
+            "sunrise": "06:09",
+            "sunset": "20:53"
+          },
+          {
+            "day": "Tuesday",
+            "date": "2026-05-19",
+            "condition": "Moderate showers",
+            "weather_code": 81,
+            "high": 79,
+            "low": 65,
+            "precip": 0.587,
+            "wind_max": 19,
+            "sunrise": "06:09",
+            "sunset": "20:54"
+          },
+          {
+            "day": "Wednesday",
+            "date": "2026-05-20",
+            "condition": "Moderate showers",
+            "weather_code": 81,
+            "high": 69,
+            "low": 50,
+            "precip": 0.315,
+            "wind_max": 13,
+            "sunrise": "06:08",
+            "sunset": "20:55"
+          },
+          {
+            "day": "Thursday",
+            "date": "2026-05-21",
+            "condition": "Overcast",
+            "weather_code": 3,
+            "high": 57,
+            "low": 37,
+            "precip": 0.0,
+            "wind_max": 13,
+            "sunrise": "06:07",
+            "sunset": "20:56"
+          }
+        ],
+        "llm_context": "Current weather in Brighton, Livingston County, Michigan, 48116, United States: Clear sky, 70\u00b0F (feels like 62\u00b0F), humidity 30%, wind 12 mph S, cloud cover 0%, precipitation 0.0 in. Today: high 70\u00b0F, low 39\u00b0F, Overcast. Sunrise 06:12, sunset 20:50. Upcoming: Saturday 78/50\u00b0F Moderate drizzle, Sunday 78/55\u00b0F Moderate drizzle, Monday 83/63\u00b0F Moderate showers, Tuesday 79/65\u00b0F Moderate showers.",
+        "fetched_at": "2026-05-15T22:14:02.537451+00:00",
+        "units": "fahrenheit",
+        "source": "live",
+        "cache_age_seconds": 0
+      }
+    }
+  ],
+  "51.51_-0.13": [
+    {
+      "fetched_at": "2026-05-15T22:17:56.853137+00:00",
+      "data": {
+        "location": "Greater London, England, United Kingdom",
+        "display_name": "Greater London, England, United Kingdom",
+        "is_default_location": false,
+        "current": {
+          "condition": "Partly cloudy",
+          "weather_code": 2,
+          "temp": 53,
+          "feels_like": 48,
+          "humidity": 43,
+          "wind_speed": 4,
+          "wind_dir": "E",
+          "cloud_cover": 72,
+          "precipitation": 0.0,
+          "is_day": false,
+          "unit_temp": "\u00b0F",
+          "unit_wind": "mph",
+          "unit_precip": "in"
+        },
+        "forecast": [
+          {
+            "day": "Friday",
+            "date": "2026-05-15",
+            "condition": "Light drizzle",
+            "weather_code": 51,
+            "high": 58,
+            "low": 44,
+            "precip": 0.008,
+            "wind_max": 7,
+            "sunrise": "05:08",
+            "sunset": "20:45"
+          },
+          {
+            "day": "Saturday",
+            "date": "2026-05-16",
+            "condition": "Moderate drizzle",
+            "weather_code": 53,
+            "high": 57,
+            "low": 46,
+            "precip": 0.118,
+            "wind_max": 9,
+            "sunrise": "05:06",
+            "sunset": "20:47"
+          },
+          {
+            "day": "Sunday",
+            "date": "2026-05-17",
+            "condition": "Dense drizzle",
+            "weather_code": 55,
+            "high": 60,
+            "low": 50,
+            "precip": 0.075,
+            "wind_max": 12,
+            "sunrise": "05:05",
+            "sunset": "20:48"
+          },
+          {
+            "day": "Monday",
+            "date": "2026-05-18",
+            "condition": "Light drizzle",
+            "weather_code": 51,
+            "high": 59,
+            "low": 47,
+            "precip": 0.043,
+            "wind_max": 11,
+            "sunrise": "05:03",
+            "sunset": "20:49"
+          },
+          {
+            "day": "Tuesday",
+            "date": "2026-05-19",
+            "condition": "Dense drizzle",
+            "weather_code": 55,
+            "high": 65,
+            "low": 52,
+            "precip": 0.224,
+            "wind_max": 15,
+            "sunrise": "05:02",
+            "sunset": "20:51"
+          },
+          {
+            "day": "Wednesday",
+            "date": "2026-05-20",
+            "condition": "Overcast",
+            "weather_code": 3,
+            "high": 67,
+            "low": 54,
+            "precip": 0.0,
+            "wind_max": 12,
+            "sunrise": "05:01",
+            "sunset": "20:52"
+          },
+          {
+            "day": "Thursday",
+            "date": "2026-05-21",
+            "condition": "Overcast",
+            "weather_code": 3,
+            "high": 74,
+            "low": 55,
+            "precip": 0.0,
+            "wind_max": 7,
+            "sunrise": "05:00",
+            "sunset": "20:54"
+          }
+        ],
+        "llm_context": "Current weather in Greater London, England, United Kingdom: Partly cloudy, 53\u00b0F (feels like 48\u00b0F), humidity 43%, wind 4 mph E, cloud cover 72%, precipitation 0.0 in. Today: high 58\u00b0F, low 44\u00b0F, Light drizzle. Sunrise 05:08, sunset 20:45. Upcoming: Saturday 57/46\u00b0F Moderate drizzle, Sunday 60/50\u00b0F Dense drizzle, Monday 59/47\u00b0F Light drizzle, Tuesday 65/52\u00b0F Dense drizzle.",
+        "fetched_at": "2026-05-15T22:17:56.853137+00:00",
+        "units": "fahrenheit",
+        "source": "live",
+        "cache_age_seconds": 0
+      }
+    }
+  ]
+}

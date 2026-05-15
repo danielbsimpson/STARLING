@@ -29,6 +29,9 @@ Thumbs.db
 # ChromaDB (generated at runtime)
 **/chroma_db/
 
+# Weather cache (contains location data — do not commit)
+memory/weather_cache.json
+
 # Images and Personal Files
 assets/dossier_descriptions/
 assets/dossier_images/

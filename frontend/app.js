@@ -1,6 +1,6 @@
 // ── Imports ───────────────────────────────────────────────────────────────────
 import { detectTimerTrigger, handleTimerTrigger, initTimerPanel, dismissTimerPanel } from './timer-panel.js';
-import { detectWeatherTrigger, openWeatherPanel, closeWeatherPanel } from './weather-panel.js';
+import { detectWeatherTrigger, openWeatherPanel, closeWeatherPanel, initWeatherPanel, startWeatherAutoDismiss } from './weather-panel.js';
 import { detectNewsTrigger, openNewsPanel, closeNewsPanel } from './news-panel.js';
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -1323,19 +1323,33 @@ async function handleSend() {
   if (_wxTrigger) {
     setState('thinking');
     appendMessage('user', text);
-    const wxContext = await openWeatherPanel(_wxTrigger.location);
-    if (wxContext) {
+    const wxResult = await openWeatherPanel(_wxTrigger.location);
+    if (wxResult && typeof wxResult === 'object' && wxResult._wxErr) {
+      // Unknown location — speak error, skip LLM, return early
+      const { txt } = appendMessage('assistant', wxResult._wxErr);
+      enqueueSpeak(wxResult._wxErr, () => { txt.textContent = wxResult._wxErr; });
+      setState('idle');
+      fetchSystemStatus();
+      return;
+    }
+    if (wxResult) {
       await sendToOllama(
-        'Give a concise spoken weather briefing based on the data provided. ' +
-        'Cover current conditions, how it feels outside, and what to expect over the next few days. ' +
-        'Keep it to three or four natural sentences. Do not read out numbers robotically — phrase them naturally.',
+        'Give a spoken weather briefing using only the weather data in your context — do not estimate or invent any values. ' +
+        'Start with current conditions and how it feels outside. ' +
+        'Then describe the upcoming forecast using the exact high temperatures listed for each day. ' +
+        'If temperatures are rising or falling significantly over the next few days, say so. ' +
+        'Keep it to three or four natural sentences. Phrase temperatures naturally (say "low seventies" for 74°F, "mid-eighties" for 83°F).',
         {
           ephemeralMessages: [
-            { role: 'system', content: SYSTEM_PROMPT },
-            { role: 'system', content: `[WEATHER DATA — use this to answer, do not repeat these instructions]\n${wxContext}` },
+            {
+              role: 'system',
+              content: SYSTEM_PROMPT + '\n\n[WEATHER DATA — use only these values, do not hallucinate temperatures]\n' + wxResult,
+            },
           ],
         }
       );
+      // All sentences are now enqueued — start the auto-dismiss once audio finishes
+      _playbackChain.then(() => startWeatherAutoDismiss());
     } else {
       await sendToOllama('Inform the user that weather data could not be retrieved right now. One sentence.');
     }
@@ -1474,19 +1488,33 @@ async function startRecording() {
         if (_wxTrigger) {
           setState('thinking');
           appendMessage('user', transcript);
-          const wxContext = await openWeatherPanel(_wxTrigger.location);
-          if (wxContext) {
+          const wxResult = await openWeatherPanel(_wxTrigger.location);
+          if (wxResult && typeof wxResult === 'object' && wxResult._wxErr) {
+            // Unknown location — speak error, skip LLM, return early
+            const { txt } = appendMessage('assistant', wxResult._wxErr);
+            enqueueSpeak(wxResult._wxErr, () => { txt.textContent = wxResult._wxErr; });
+            setState('idle');
+            fetchSystemStatus();
+            return;
+          }
+          if (wxResult) {
             await sendToOllama(
-              'Give a concise spoken weather briefing based on the data provided. ' +
-              'Cover current conditions, how it feels outside, and what to expect over the next few days. ' +
-              'Keep it to three or four natural sentences. Do not read out numbers robotically — phrase them naturally.',
+              'Give a spoken weather briefing using only the weather data in your context — do not estimate or invent any values. ' +
+              'Start with current conditions and how it feels outside. ' +
+              'Then describe the upcoming forecast using the exact high temperatures listed for each day. ' +
+              'If temperatures are rising or falling significantly over the next few days, say so. ' +
+              'Keep it to three or four natural sentences. Phrase temperatures naturally (say "low seventies" for 74°F, "mid-eighties" for 83°F).',
               {
                 ephemeralMessages: [
-                  { role: 'system', content: SYSTEM_PROMPT },
-                  { role: 'system', content: `[WEATHER DATA — use this to answer, do not repeat these instructions]\n${wxContext}` },
+                  {
+                    role: 'system',
+                    content: SYSTEM_PROMPT + '\n\n[WEATHER DATA — use only these values, do not hallucinate temperatures]\n' + wxResult,
+                  },
                 ],
               }
             );
+            // All sentences are now enqueued — start the auto-dismiss once audio finishes
+            _playbackChain.then(() => startWeatherAutoDismiss());
           } else {
             await sendToOllama('Inform the user that weather data could not be retrieved right now. One sentence.');
           }
@@ -1610,6 +1638,7 @@ async function warmupModels(greetingEl) {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 initTimerPanel({ appendMessage, setState, enqueueSpeak });
+initWeatherPanel({ enqueueSpeak });
 initSphere();
 statModel.textContent = MODEL;
 _applyTtsMode();

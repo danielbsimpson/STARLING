@@ -353,20 +353,20 @@ Persist each weather API response to a local JSON file on disk. Before calling O
 
 **Backend changes (`backend/weather.py`)**
 
-- [ ] Add `WEATHER_CACHE_FILE` to `.env` / `.env.example` (default: `memory/weather_cache.json`)
-- [ ] On startup, create `memory/weather_cache.json` if it does not exist (seed with `{"entries": []}`)
-- [ ] In `GET /weather` handler, before calling Open-Meteo:
+- [x] Add `WEATHER_CACHE_FILE` to `.env` / `.env.example` (default: `memory/weather_cache.json`)
+- [x] On startup, create `memory/weather_cache.json` if it does not exist (seed with `{"entries": []}`)
+- [x] In `GET /weather` handler, before calling Open-Meteo:
   - Load `weather_cache.json`; read `entries[-1]` (most recent record)
   - If `entries[-1].fetched_at` exists and is within 3 600 s of `datetime.utcnow()`, return `entries[-1].data` directly with a `"source": "cache"` flag — no HTTP call made
-- [ ] On a cache miss, call Open-Meteo as normal; append `{ "fetched_at": "<ISO-8601 UTC>", "data": <response JSON> }` to `entries`; write the file back atomically (write to `.tmp` then `os.replace`)
-- [ ] Cap `entries` to the most recent N records (default 168, i.e. one week of hourly snapshots) — controlled by `WEATHER_HISTORY_MAX` in `.env`; trim oldest entries on write
-- [ ] Add `GET /weather/history` endpoint — returns the full `entries` array (timestamps + weather payloads) for potential future charting or trend queries
+- [x] On a cache miss, call Open-Meteo as normal; append `{ "fetched_at": "<ISO-8601 UTC>", "data": <response JSON> }` to `entries`; write the file back atomically (write to `.tmp` then `os.replace`)
+- [x] Cap `entries` to the most recent N records (default 168, i.e. one week of hourly snapshots) — controlled by `WEATHER_HISTORY_MAX` in `.env`; trim oldest entries on write
+- [x] Add `GET /weather/history` endpoint — returns the full `entries` array (timestamps + weather payloads) for potential future charting or trend queries
 
 **Frontend changes (`frontend/weather-panel.js`)**
 
-- [ ] Display a small cache-age label in the weather panel header when serving cached data — e.g. `"Last updated 23 min ago"` — so the user knows the data is not live
-- [ ] Add a manual "Refresh" button (🔄) to the panel that calls `GET /weather?force=true` (bypass cache, always fetch live) and re-renders the panel
-- [ ] Support `force=true` query param in the backend: skip the age check and always call Open-Meteo when `force` is present
+- [x] Display a small cache-age label in the weather panel header when serving cached data — e.g. `"Last updated 23 min ago"` — so the user knows the data is not live
+- [x] Add a manual "Refresh" button (🔄) to the panel that calls `GET /weather?force=true` (bypass cache, always fetch live) and re-renders the panel
+- [x] Support `force=true` query param in the backend: skip the age check and always call Open-Meteo when `force` is present
 
 **`.env` additions**
 
@@ -377,7 +377,7 @@ WEATHER_HISTORY_MAX=168
 
 **`.gitignore` addition**
 
-- [ ] Add `memory/weather_cache.json` to `.gitignore` (personal location data — do not commit)
+- [x] Add `memory/weather_cache.json` to `.gitignore` (personal location data — do not commit)
 
 #### Enhancement — Location-Aware Weather Queries 🟡
 
@@ -385,31 +385,31 @@ Allow the user to ask for weather at any named location by including it in the v
 
 **Trigger parsing (`frontend/weather-panel.js`)**
 
-- [ ] Extend `detectWeatherTrigger(transcript)` to extract an optional location token from the query:
+- [x] Extend `detectWeatherTrigger(transcript)` to extract an optional location token from the query:
   - Patterns to match: `"weather in <X>"`, `"weather for <X>"`, `"weather at <X>"`, `"show me the weather in <X>"`, `"what's the weather in <X>"`, `"let me see the weather in <X>"`, `"how's the weather in <X>"`, and common contractions / STT variants (`whats`, `how is`, etc.)
   - Capture everything after the preposition (`in` / `for` / `at`) up to end-of-string, stripping trailing punctuation
   - If no location token is found, set `location = null` — backend defaults to home coordinates
-- [ ] Pass the extracted `location` string (URL-encoded) as a query param when calling `GET /weather?location=<X>`; omit the param entirely when `location` is null
+- [x] Pass the extracted `location` string (URL-encoded) as a query param when calling `GET /weather?location=<X>`; omit the param entirely when `location` is null
 
 **Backend geocoding (`backend/weather.py`)**
 
-- [ ] Add `pip install geopy` (provides the `Nominatim` geocoder — OSM-based, free, no API key)
-- [ ] Write a `resolve_location(query: str, home_lat: float, home_lon: float) -> tuple[float, float, str]` helper:
+- [x] Add `pip install geopy` (provides the `Nominatim` geocoder — OSM-based, free, no API key)
+- [x] Write a `resolve_location(query: str, home_lat: float, home_lon: float) -> tuple[float, float, str]` helper:
   - Call `Nominatim(user_agent="starling-weather").geocode(query, exactly_one=False, limit=5)` to get up to 5 candidate results
   - For each candidate compute the geodesic distance from the home coordinates using `geopy.distance.geodesic`
   - Return the `(lat, lon, display_name)` of the **closest** candidate — this naturally resolves "Brighton" to Brighton, MA over Brighton, England when the home location is Framingham, MA
   - Raise `HTTPException(422)` if no candidates are returned (place name not recognised)
-- [ ] Update `GET /weather` to accept an optional `location: str = Query(None)` param:
+- [x] Update `GET /weather` to accept an optional `location: str = Query(None)` param:
   - If `location` is provided, call `resolve_location(location, home_lat, home_lon)` to get `(lat, lon, display_name)`
   - If `location` is `None`, use `WEATHER_LAT` / `WEATHER_LON` from `.env` and `display_name = "Framingham"` (or a configurable `WEATHER_DEFAULT_LABEL`)
   - Include `display_name` and `is_default_location: bool` in the response JSON so the frontend can label the panel correctly
-- [ ] Cache key should incorporate the resolved `(lat, lon)` pair rounded to 2 decimal places — location-specific responses are cached independently from the home location entry; format: `"entries"` keyed by `"<lat_rounded>_<lon_rounded>"` in `weather_cache.json`
+- [x] Cache key should incorporate the resolved `(lat, lon)` pair rounded to 2 decimal places — location-specific responses are cached independently from the home location entry; format: `"entries"` keyed by `"<lat_rounded>_<lon_rounded>"` in `weather_cache.json`
 
 **Frontend panel updates (`frontend/weather-panel.js`)**
 
-- [ ] Display the resolved `display_name` as the panel title (e.g. `"WEATHER — FRAMINGHAM, MA"` or `"WEATHER — LONDON, UK"`) instead of a hardcoded string
-- [ ] When `is_default_location` is `false`, show a subtle secondary label: `"showing results for <display_name>"` beneath the title so the user knows a location override is active
-- [ ] On a `422` response (unknown location), speak `"I couldn't find a weather location called [X]. Try being more specific."` via `enqueueSpeak` and do not open the panel
+- [x] Display the resolved `display_name` as the panel title (e.g. `"WEATHER — FRAMINGHAM, MA"` or `"WEATHER — LONDON, UK"`) instead of a hardcoded string
+- [x] When `is_default_location` is `false`, show a subtle secondary label: `"showing results for <display_name>"` beneath the title so the user knows a location override is active
+- [x] On a `422` response (unknown location), speak `"I couldn't find a weather location called [X]. Try being more specific."` via `enqueueSpeak` and do not open the panel
 
 **`.env` additions**
 
@@ -417,7 +417,7 @@ Allow the user to ask for weather at any named location by including it in the v
 WEATHER_DEFAULT_LABEL=Framingham
 ```
 
-- [ ] Add `geopy` to `requirements.txt`
+- [x] Add `geopy` to `requirements.txt`
 
 ---
 

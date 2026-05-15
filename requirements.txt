@@ -23,3 +23,6 @@ fastembed>=0.3.0
 
 # News briefing (Tool 4)
 feedparser>=6.0.11
+
+# Weather location geocoding (Tool 3, Enhancement 2)
+geopy>=2.4.0

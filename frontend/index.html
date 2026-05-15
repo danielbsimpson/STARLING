@@ -80,7 +80,12 @@
       <div class="weather-panel hidden" id="weather-panel">
         <div class="weather-header">
           <div class="weather-location" id="weather-location">—</div>
-          <div class="weather-fetched" id="weather-fetched">—</div>
+          <div class="weather-location-label hidden" id="weather-location-label"></div>
+          <div class="weather-header-row">
+            <div class="weather-fetched" id="weather-fetched">—</div>
+            <div class="weather-cache-age hidden" id="weather-cache-age"></div>
+            <button class="weather-refresh-btn" id="weather-refresh-btn" title="Refresh weather data">🔄</button>
+          </div>
         </div>
         <!-- Current conditions -->
         <div class="weather-current" id="weather-current">
