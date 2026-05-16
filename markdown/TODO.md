@@ -21,6 +21,7 @@ A voice-driven, S.T.A.R.L.I.N.G.-style web interface powered by a local LLM runn
 | 11 | Tool panels (overlap) | When one tool panel is already visible (e.g. the timer panel showing a completed timer) and the user triggers a second tool (e.g. "what time is it"), the new panel renders on top of the existing one — both are visible simultaneously until the next user interaction | ✅ Resolved — `.chat-panel` converted to a flex column (`display: flex; flex-direction: column`); `.clock-panel` changed from `position: absolute` to `position: relative; flex-shrink: 0` so it occupies normal flow space; `.chat-inner` switched to `flex: 1; min-height: 0`. All visible tool panels now stack vertically rather than overlapping |
 | 12 | Timer (label parsing) | Named timers are not labelled correctly — "set a timer for 5 minutes called pasta" produces a timer with no label (or the duration itself as the label), and the completion announcement doubles the duration: "Your 5 minutes 5 minutes timer is done." The "called / named" keyword is not handled at all | ✅ Resolved — `detectTimerTrigger` now checks for a `called/named` suffix first (highest priority); the fallback label regex now rejects candidates that start with a digit or consist entirely of duration unit words (`minute`, `second`, `hour`, plurals, numeric strings) |
 | 13 | Weather panel (layout) | On wide-screen monitors the weather panel takes up too much vertical space — the current conditions block is oversized and the 5-day forecast strip is pushed down to a small portion of the panel, making the forecast hard to read at a glance | ✅ Resolved — `@media (min-width: 1400px)` converts the weather panel to a CSS grid with current conditions on the left and the 7-day forecast on the right; both sections share the horizontal space equally |
+| 14 | News briefing (synthesis latency) | End-to-end response time for the news briefing ballooned to ~35 s after the cross-source story synthesis update — the LLM synthesis call is a synchronous blocking step between RSS fetch and panel render, so nothing is visible to the user until the full synthesis completes | � In Progress — Approaches A+B implemented (parallel fetch + background synthesis + frontend polling) |
 
 **Potential fixes to investigate:**
 - **STT early cutoff** — several approaches ranked by effort:
@@ -40,6 +41,35 @@ A voice-driven, S.T.A.R.L.I.N.G.-style web interface powered by a local LLM runn
   - **Sentence-chunked pipeline synergy**: combining with sentence-chunked TTS (Issue #1 follow-up) means the sanitiser runs per-sentence before synthesis, making it easier to test and tune incrementally
 
 **Monitoring**: The `/system-status` endpoint and footer device badges surface GPU vs CPU state for all three pipelines in real time after each exchange — and are now also polled once at startup after the warm-up sequence completes.
+
+---
+
+**Issue #14 — News synthesis latency (~35 s) — potential fixes ranked by effort / impact**
+
+The bottleneck is a single blocking LLM call that processes all raw headlines before anything is shown. Approaches below are ranked from least to most invasive:
+
+| # | Approach | Effort | Expected gain |
+|---|---|---|---|
+| A | **Raw headlines first, synthesise in background** | 🟢 Low | Panel opens immediately with raw cards; synthesis result patches in silently once ready — user sees content within ~2 s, synthesis arrives ~30 s later without any perceived wait |
+| B | **Progressive panel render — RSS feeds stream in one-by-one** | 🟢 Low | Open the panel immediately with a spinner; as each RSS feed resolves, append its raw cards to the list in real time — panel feels live even before synthesis starts |
+| C | **Streaming synthesis via SSE** | 🟡 Medium | LLM synthesis endpoint returns each clustered story as a Server-Sent Event; frontend appends a new story card for each SSE line — user sees stories appear one-by-one over ~30 s instead of nothing then everything |
+| D | **Per-story synthesis (incremental prompts)** | 🟡 Medium | Instead of one giant prompt for all headlines, fire N small LLM calls (one per story cluster detected by a lightweight local dedup heuristic); results stream into the panel as each mini-prompt resolves |
+| E | **Reduce synthesis input size** | 🟢 Low | Lower `NEWS_SYNTHESIS_MAX_HEADLINES` from 40 → 15–20; the model spends less time reading context; sacrifice completeness for speed |
+| F | **Background warm cache** | 🟢 Low | After any successful synthesis, schedule a background re-fetch/re-synthesise at `NEWS_CACHE_SECONDS / 2`; subsequent opens hit a warm synthesised cache and respond in < 1 s |
+| G | **Lightweight client-side dedup before LLM** | 🟡 Medium | Before calling the LLM, run a Jaccard / edit-distance deduplifier in Python that pre-groups obvious duplicates by title similarity; send only the representative titles to the LLM — smaller input, faster call |
+| H | **Skip synthesis for single-source categories** | 🟢 Trivial | If a category only has one RSS feed configured, skip the LLM synthesis step entirely (nothing to deduplicate) and render raw cards immediately |
+| I | **Async synthesis with placeholder cards** | 🟢 Low | Render a skeleton card for each raw headline immediately; patch each card's content with the synthesised version as the LLM result arrives — avoids any perceived blank panel |
+
+**Recommended short-term fix — Approach A (raw-first, background synthesis):**
+
+1. `GET /news` returns immediately with raw headlines + `synthesised: null`.
+2. A second `GET /news/synthesise?category=<tag>` endpoint triggers the LLM call asynchronously and caches the result.
+3. Frontend polls `GET /news/synthesise/status?category=<tag>` (or opens a short SSE connection) and patches the story cards in once the result lands.
+4. The LLM spoken briefing is still delivered from the `llm_context` (raw headlines), which is already available — TTS is unaffected.
+
+**Recommended medium-term fix — Approach C (streaming synthesis):**
+
+Backend streams each synthesised story object as a JSON line over SSE. Frontend appends a rendered card for each line. User sees the first story within ~2–3 s and subsequent stories trickle in. No polling required, no skeleton cards needed.
 
 ---
 
@@ -458,15 +488,15 @@ Allow the user to request headlines for a specific news category by including it
 
 **Trigger parsing (`frontend/news-panel.js`)**
 
-- [ ] Extend `detectNewsTrigger(transcript)` to extract an optional category token from the query:
+- [x] Extend `detectNewsTrigger(transcript)` to extract an optional category token from the query:
   - Match category keywords anywhere in the phrase: `"show me the <category> news"`, `"pull up <category> headlines"`, `"display the <category> news"`, `"<category> briefing"`, `"what's happening in <category>"`, etc.
   - Normalise synonyms to canonical tags: `"tech"` → `technology`, `"financial"` / `"finance"` → `business`, `"american"` / `"america"` / `"us"` → `us`
   - If no recognisable category keyword is present, set `category = "world"` as the default
-- [ ] Pass the resolved `category` string as a query param when calling `GET /news?category=<tag>`
+- [x] Pass the resolved `category` string as a query param when calling `GET /news?category=<tag>`
 
 **Backend changes (`backend/news.py`)**
 
-- [ ] Update `NEWS_FEEDS` in `.env` from a single comma-separated list to a **category-keyed structure** — store as prefixed env vars:
+- [x] Update `NEWS_FEEDS` in `.env` from a single comma-separated list to a **category-keyed structure** — store as prefixed env vars:
   ```
   NEWS_FEEDS_WORLD=https://feeds.bbci.co.uk/news/rss.xml,...
   NEWS_FEEDS_US=https://feeds.npr.org/1001/rss.xml,...
@@ -477,16 +507,16 @@ Allow the user to request headlines for a specific news category by including it
   NEWS_FEEDS_SPORTS=https://www.espn.com/espn/rss/news,...
   NEWS_FEEDS_ENTERTAINMENT=https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml,...
   ```
-- [ ] Update `GET /news` to accept `category: str = Query("world")` param; load the matching `NEWS_FEEDS_<CATEGORY>` var (case-insensitive); return `400` with a spoken-friendly message if the category key is not configured
-- [ ] Include `category` and `category_label` (display name) in the response JSON so the frontend can label the panel header accordingly
-- [ ] Cache key should incorporate the category tag — each category is cached independently with its own 2-minute TTL; format: `"<category>:<fetched_at>"` in the existing cache structure
+- [x] Update `GET /news` to accept `category: str = Query("world")` param; load the matching `NEWS_FEEDS_<CATEGORY>` var (case-insensitive); return `400` with a spoken-friendly message if the category key is not configured
+- [x] Include `category` and `category_label` (display name) in the response JSON so the frontend can label the panel header accordingly
+- [x] Cache key should incorporate the category tag — each category is cached independently with its own 2-minute TTL; format: `"<category>:<fetched_at>"` in the existing cache structure
 
 **Frontend panel updates (`frontend/news-panel.js`)**
 
-- [ ] Display the resolved `category_label` in the panel header — e.g. `"NEWS — TECHNOLOGY"` or `"NEWS — WORLD HEADLINES"`
-- [ ] Render a row of category chip buttons at the top of the news panel (World · US · Tech · Business · Science · Health · Sports · Entertainment) — clicking a chip calls `GET /news?category=<tag>` and re-renders the panel inline without reopening it
-- [ ] Highlight the active chip with an accent border/colour so the user can see which category is currently displayed
-- [ ] On a `400` response (unconfigured category), speak `"I don't have a feed set up for [category] news."` via `enqueueSpeak` and do not change the panel state
+- [x] Display the resolved `category_label` in the panel header — e.g. `"NEWS — TECHNOLOGY"` or `"NEWS — WORLD HEADLINES"`
+- [x] Render a row of category chip buttons at the top of the news panel (World · US · Tech · Business · Science · Health · Sports · Entertainment) — clicking a chip calls `GET /news?category=<tag>` and re-renders the panel inline without reopening it
+- [x] Highlight the active chip with an accent border/colour so the user can see which category is currently displayed
+- [x] On a `400` response (unconfigured category), speak `"I don't have a feed set up for [category] news."` via `enqueueSpeak` and do not change the panel state
 
 **`.env` additions**
 
@@ -507,8 +537,8 @@ When headlines are fetched from multiple RSS sources for a given category, multi
 
 **Backend changes (`backend/news.py`)**
 
-- [ ] After fetching and parsing all RSS feeds for a category, collect the raw headline list: `[{ "title", "link", "source_name", "published" }, ...]`
-- [ ] Pass the raw headline list to a `synthesise_headlines(headlines: list, llm_url: str) -> list` helper function that calls the local LLM (via `llama_server.py` or the active `LLM_BACKEND`) with a silent, non-streamed completion request:
+- [x] After fetching and parsing all RSS feeds for a category, collect the raw headline list: `[{ "title", "link", "source_name", "published" }, ...]`
+- [x] Pass the raw headline list to a `synthesise_headlines(headlines: list, llm_url: str) -> list` helper function that calls the local LLM (via `llama_server.py` or the active `LLM_BACKEND`) with a silent, non-streamed completion request:
   - Prompt instructs the model to group headlines that refer to the same real-world story, produce a single neutral synthesised headline per group, write one concise summary sentence per group, and return structured JSON:
     ```json
     [
@@ -524,22 +554,22 @@ When headlines are fetched from multiple RSS sources for a given category, multi
     ```
   - Use `response_format: { type: "json_object" }` (llama-server supports this via grammar constraints) to enforce valid JSON output without post-processing
   - Cap input at `NEWS_SYNTHESIS_MAX_HEADLINES` headlines (default 40) before sending to the LLM to stay within context
-- [ ] If the LLM call fails or returns malformed JSON, fall back gracefully to the raw unsynthesised headline list so the panel always renders something
-- [ ] Include synthesised groups in the cached response — the synthesis result is stored alongside the raw feed data; re-synthesis only occurs on a real cache miss (not on every request)
-- [ ] Add `NEWS_SYNTHESIS_ENABLED` flag to `.env` (default `true`) — when `false`, skip the LLM step entirely and return raw headlines, useful for debugging or low-power sessions
-- [ ] Add `NEWS_SYNTHESIS_MAX_HEADLINES` to `.env` (default `40`) — number of raw headlines fed to the LLM per synthesis call
+- [x] If the LLM call fails or returns malformed JSON, fall back gracefully to the raw unsynthesised headline list so the panel always renders something
+- [x] Include synthesised groups in the cached response — the synthesis result is stored alongside the raw feed data; re-synthesis only occurs on a real cache miss (not on every request)
+- [x] Add `NEWS_SYNTHESIS_ENABLED` flag to `.env` (default `true`) — when `false`, skip the LLM step entirely and return raw headlines, useful for debugging or low-power sessions
+- [x] Add `NEWS_SYNTHESIS_MAX_HEADLINES` to `.env` (default `40`) — number of raw headlines fed to the LLM per synthesis call
 
 **Frontend panel updates (`frontend/news-panel.js`)**
 
-- [ ] Replace the flat headline card list with synthesised story cards. Each card renders:
+- [x] Replace the flat headline card list with synthesised story cards. Each card renders:
   - **Synthesised headline** — prominent, full-width title text
   - **Summary sentence** — muted smaller text directly beneath the headline
   - **Source pills row** — compact inline chips, one per outlet (e.g. `BBC · Reuters · NYT`); each chip is a clickable `<a target="_blank">` link to the original article
   - **Published timestamp** — taken from the most-recent `published` value among the grouped sources
-- [ ] Add a subtle multi-source indicator (e.g. `3 sources` label) on cards with more than one outlet so the user immediately knows it is a merged story
-- [ ] Expand/collapse the full source list on card click — show just the chips by default; expand to a stacked list of `[Source name] — Original title — link` rows when the user clicks the card body
-- [ ] When `NEWS_SYNTHESIS_ENABLED=false` (raw mode), render the original flat card layout unchanged — no regression in fallback path
-- [ ] Show a brief `"Synthesising headlines…"` status message in the panel header while the silent LLM call is in flight, replaced by the category label once complete
+- [x] Add a subtle multi-source indicator (e.g. `3 sources` label) on cards with more than one outlet so the user immediately knows it is a merged story
+- [x] Expand/collapse the full source list on card click — show just the chips by default; expand to a stacked list of `[Source name] — Original title — link` rows when the user clicks the card body
+- [x] When `NEWS_SYNTHESIS_ENABLED=false` (raw mode), render the original flat card layout unchanged — no regression in fallback path
+- [x] Show a brief `"Synthesising headlines…"` status message in the panel header while the silent LLM call is in flight, replaced by the category label once complete
 
 **LLM prompt template (stored in `backend/news.py` as a module-level constant)**
 

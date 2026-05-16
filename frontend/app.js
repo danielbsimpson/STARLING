@@ -1354,10 +1354,11 @@ async function _routeInput(text) {
     return;
   }
 
-  if (detectNewsTrigger(text)) {
+  const newsCategory = detectNewsTrigger(text);
+  if (newsCategory) {
     setState('thinking');
     appendMessage('user', text);
-    const newsContext = await openNewsPanel();
+    const newsContext = await openNewsPanel(newsCategory);
     if (newsContext) {
       enterNewsMode();
       await sendToOllama(
