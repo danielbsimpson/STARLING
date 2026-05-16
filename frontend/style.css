@@ -1198,6 +1198,49 @@ html, body {
   display: none;
 }
 
+/* ── Synthesis-in-progress indicator (between tabs and list) ───────────────── */
+.news-synth-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 20px;
+  padding: 4px 12px 4px 9px;
+  align-self: center;
+  opacity: 1;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+
+.news-synth-indicator.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@keyframes synthSpin {
+  to { transform: rotate(360deg); }
+}
+
+.news-synth-spinner {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  border-top-color: rgba(255, 255, 255, 0.6);
+  border-radius: 50%;
+  animation: synthSpin 0.75s linear infinite;
+  flex-shrink: 0;
+}
+
+.news-synth-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.55rem;
+  color: #888;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+}
+
 .news-header {
   display: flex;
   justify-content: space-between;

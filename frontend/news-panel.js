@@ -24,6 +24,7 @@ const newsList       = document.getElementById('news-list');
 const newsFetched    = document.getElementById('news-fetched');
 const newsRefreshBtn = document.getElementById('news-refresh-btn');
 const newsCategories = document.getElementById('news-categories');
+const newsSynthIndicator = document.getElementById('news-synth-indicator');
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let _newsData        = null;   // last fetched payload
@@ -155,6 +156,9 @@ export async function openNewsPanel(category = 'world', silent = false) {
   _newsData  = data;
   _activeTab = 'all';
 
+  // Ensure indicator is hidden until polling confirms synthesis is in flight
+  newsSynthIndicator?.classList.add('hidden');
+
   // Render raw cards immediately — panel opens without waiting for synthesis
   _renderPanel(data);
   newsPanel.classList.remove('hidden');
@@ -178,6 +182,7 @@ export function closeNewsPanel() {
 function _startSynthesisPolling(category, rawCount) {
   _synthPollCount = 0;
   _updateSynthMeta(rawCount, true);
+  newsSynthIndicator?.classList.remove('hidden');
 
   _synthPollTimer = setInterval(async () => {
     _synthPollCount++;
@@ -216,6 +221,7 @@ function _stopSynthesisPolling() {
     clearInterval(_synthPollTimer);
     _synthPollTimer = null;
   }
+  newsSynthIndicator?.classList.add('hidden');
 }
 
 function _updateSynthMeta(count, synthesising) {
