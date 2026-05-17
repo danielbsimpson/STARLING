@@ -9,15 +9,17 @@ The first matching tool wins; unmatched input falls through to the LLM.
 
 | Priority | Tool | Notes |
 |----------|------|-------|
-| 1 | Dossier — exit | Checked before everything else |
-| 2 | Dossier — open | |
-| 3 | Timer | Checked before Time to avoid "timer" matching time patterns |
-| 4 | Date | Checked before Time — date phrases are more specific |
-| 5 | Time | |
-| 6 | Weather | |
-| 7 | Market / Stocks / Crypto | Checked before News — more specific domain vocabulary |
-| 8 | News | |
-| 9 | LLM fallback | Anything unmatched |
+| 1 | Browser — close | Only when browser panel is open; checked before everything else |
+| 2 | Dossier — exit | |
+| 3 | Dossier — open | |
+| 4 | Timer | Checked before Time to avoid "timer" matching time patterns |
+| 5 | Date | Checked before Time — date phrases are more specific |
+| 6 | Time | |
+| 7 | Weather | |
+| 8 | Market / Stocks / Crypto | Checked before News — more specific domain vocabulary |
+| 9 | News | |
+| 10 | Browser — open | Wikipedia lookups, open URL, or web search |
+| 11 | LLM fallback | Anything unmatched |
 
 ---
 
@@ -250,6 +252,60 @@ The category keyword maps to the feed as shown below.
 
 ---
 
+## 8 · Browser / Web Panel
+
+Opens an embedded browser panel (iframe) in the UI. The close phrase is checked at the
+highest priority whenever the panel is open. The open trigger fires last — after all other
+tools — so that short phrases like `"search"` don't accidentally hijack longer ones.
+
+Page text is extracted server-side and injected as LLM context, enabling on-page Q&A and
+summarisation.
+
+### Close (priority 1 — panel must be open)
+
+| Example phrase |
+|----------------|
+| `close browser` · `close the browser` |
+| `exit browser` · `exit the browser` |
+| `dismiss browser` · `dismiss the browser` |
+| `hide browser` · `hide the browser` |
+| `shut browser` · `shut the browser` |
+
+### Wikipedia lookup (priority 10)
+
+Extracts the topic and navigates to the English Wikipedia article.
+
+| Example phrase | Topic resolved |
+|----------------|---------------|
+| `look up black holes on Wikipedia` | black holes |
+| `search Wikipedia for the French Revolution` | the French Revolution |
+| `open quantum computing on Wikipedia` | quantum computing |
+| `find Marie Curie on Wikipedia` | Marie Curie |
+| `wikipedia about photosynthesis` | photosynthesis |
+| `wikipedia on the Roman Empire` | the Roman Empire |
+| `wikipedia for Alan Turing` | Alan Turing |
+
+### Open URL (priority 10)
+
+Navigates directly to a given URL or bare domain.
+
+| Example phrase | Resolves to |
+|----------------|-------------|
+| `open browser https://example.com` | `https://example.com` |
+| `open browser example.com` | `https://example.com` |
+| `open browser news.ycombinator.com` | `https://news.ycombinator.com` |
+
+### Web search (priority 10)
+
+Opens a DuckDuckGo plain-HTML search (iframe-friendly).
+
+| Example phrase | Search query |
+|----------------|--------------|
+| `browser search for latest AI news` | latest AI news |
+| `browser search typescript generics` | typescript generics |
+
+---
+
 ## Disambiguation Quick Reference
 
 | Ambiguous phrase | Routes to | Why |
@@ -289,3 +345,4 @@ frontend file. Add patterns to the appropriate array and update this document.
 | Weather | `frontend/weather-panel.js` | `detectWeatherTrigger()` |
 | Market | `frontend/stocks-panel.js` | `detectMarketTrigger()` |
 | News | `frontend/news-panel.js` | `detectNewsTrigger()` |
+| Browser | `frontend/browser-panel.js` | `detectBrowserTrigger()` / `detectBrowserClose()` |
