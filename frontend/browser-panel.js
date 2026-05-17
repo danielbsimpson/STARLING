@@ -50,6 +50,18 @@ export function getBrowserPageUrl() {
 }
 
 /**
+ * Returns the current page text if already fetched, otherwise fetches it now and
+ * awaits the result. Use this at query-time to guarantee the LLM has page context
+ * even if the background frame.load fetch hasn't completed yet.
+ */
+export async function ensureBrowserPageText() {
+  if (_pageText) return _pageText;
+  if (!_currentUrl || _currentUrl === 'about:blank') return null;
+  await _fetchPageText(_currentUrl);
+  return _pageText;
+}
+
+/**
  * Given a raw Whisper transcript, check for a browser trigger phrase.
  * Returns { url, label } if matched, otherwise null.
  *   url   — resolved URL to navigate to

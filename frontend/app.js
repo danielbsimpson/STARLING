@@ -3,7 +3,7 @@ import { detectTimerTrigger, handleTimerTrigger, initTimerPanel, dismissTimerPan
 import { detectWeatherTrigger, openWeatherPanel, closeWeatherPanel, initWeatherPanel, startWeatherAutoDismiss } from './weather-panel.js';
 import { detectNewsTrigger, openNewsPanel, closeNewsPanel } from './news-panel.js';
 import { detectMarketTrigger, openMarketPanel, closeMarketPanel, setSendToOllama as _setMktSendToOllama, setOnClose as _setMktOnClose } from './stocks-panel.js';
-import { detectBrowserTrigger, detectBrowserClose, isBrowserPanelOpen, openBrowserPanel, closeBrowserPanel, getBrowserPageText } from './browser-panel.js';
+import { detectBrowserTrigger, detectBrowserClose, isBrowserPanelOpen, openBrowserPanel, closeBrowserPanel, getBrowserPageText, ensureBrowserPageText } from './browser-panel.js';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const BACKEND_BASE = 'http://localhost:8000';
@@ -1451,7 +1451,9 @@ async function _routeInput(text) {
     appendMessage('user', text);
     openBrowserPanel(_browserTrigger.url);
     await sendToOllama(
-      `The user has opened ${_browserTrigger.label} in the browser panel. In two sentences: first confirm it is open, then invite them to ask you anything about what they are viewing or the topic.`,
+      `The user has opened ${_browserTrigger.label} in the browser panel. ` +
+      `In two or three natural spoken sentences: confirm the page is open and that you are reading its content, ` +
+      `then let the user know they can ask you to summarize it, answer questions about it, or explain anything on the page.`,
       {
         ephemeralMessages: [
           { role: 'system', content: SYSTEM_PROMPT },
@@ -1463,10 +1465,18 @@ async function _routeInput(text) {
   }
 
   appendMessage('user', text);
-  const _pageCtx = isBrowserPanelOpen() ? getBrowserPageText() : null;
+  let _pageCtx = null;
+  if (isBrowserPanelOpen()) {
+    // Await page text — fetches on-demand if the background load hasn't completed yet.
+    _pageCtx = await ensureBrowserPageText();
+  }
   await sendToOllama(text, _pageCtx ? {
-    extraContext: `The user is currently viewing a webpage in the browser panel. ` +
-                  `Here is the extracted page content for context:\n\n${_pageCtx}`,
+    extraContext:
+      `The user is currently viewing a webpage in the browser panel. ` +
+      `The full text content of that page is provided below. ` +
+      `When the user asks you to summarize, explain, analyse, or answer questions, ` +
+      `use this page content as your primary source — do not rely on prior knowledge ` +
+      `unless the page content is insufficient.\n\nPAGE CONTENT:\n${_pageCtx}`,
   } : {});
   fetchSystemStatus();
 }
