@@ -3,6 +3,7 @@ import os
 import re
 from pathlib import Path
 
+import httpx
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -10,6 +11,10 @@ from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# ── Path constants ────────────────────────────────────────────────────────────
+_FRONTEND = Path(__file__).parent.parent / "frontend"
+_ASSETS   = Path(__file__).parent.parent / "assets"
 
 # ── LLM backend selection ─────────────────────────────────────────────────────
 # Set LLM_BACKEND=llama in .env to route /chat/ to llama-server instead of Ollama.
@@ -26,18 +31,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+import stt as _stt
+import tts as _tts
 from stt import router as stt_router
 from tts import router as tts_router
 
 if LLM_BACKEND == "llama":
     from llama_server import router as llm_router
+    from llama_server import LLAMA_BASE as _LLM_BASE
 else:
     from ollama import router as llm_router
+    from ollama import OLLAMA_BASE as _LLM_BASE
 
 from weather import router as weather_router
 from news import router as news_router
 from stocks import router as stocks_router
 from browser import router as browser_router
+from rag import ingest as _rag_ingest, get_status as _rag_get_status, INPUT_FOLDER as _RAG_INPUT_FOLDER
 
 app.include_router(stt_router)
 app.include_router(llm_router)
@@ -58,16 +68,14 @@ def health():
 @app.post("/rag/ingest")
 async def rag_ingest(background_tasks: BackgroundTasks):
     """Trigger async document ingestion from memory/input/. Returns immediately."""
-    from rag import ingest, INPUT_FOLDER
-    background_tasks.add_task(ingest)
-    return {"status": "ingesting", "folder": INPUT_FOLDER}
+    background_tasks.add_task(_rag_ingest)
+    return {"status": "ingesting", "folder": _RAG_INPUT_FOLDER}
 
 
 @app.get("/rag/status")
 async def rag_status():
     """Return RAG system status: enabled flag, chunk count, collection name."""
-    from rag import get_status
-    return get_status()
+    return _rag_get_status()
 
 
 @app.get("/rag/manifest")
@@ -88,10 +96,6 @@ def rag_manifest():
 
 @app.get("/system-status")
 async def system_status():
-    import httpx
-    import stt as _stt
-    import tts as _tts
-
     # Whisper — device is resolved once at startup
     whisper_device = "GPU" if _stt._active_device == "cuda" else "CPU"
 
@@ -113,11 +117,10 @@ async def system_status():
     # LLM backend status — behaviour differs by LLM_BACKEND selection
     llm_device = "UNKNOWN"
     if LLM_BACKEND == "llama":
-        from llama_server import LLAMA_BASE
-        llm_url = LLAMA_BASE.removeprefix("http://").removeprefix("https://")
+        llm_url = _LLM_BASE.removeprefix("http://").removeprefix("https://")
         try:
             async with httpx.AsyncClient(timeout=3.0) as client:
-                resp = await client.get(f"{LLAMA_BASE}/health")
+                resp = await client.get(f"{_LLM_BASE}/health")
                 if resp.status_code == 200 and resp.json().get("status") == "ok":
                     llm_device = "GPU"
                 else:
@@ -125,12 +128,11 @@ async def system_status():
         except Exception:
             llm_device = "OFFLINE"
     else:
-        from ollama import OLLAMA_BASE
-        llm_url = OLLAMA_BASE.removeprefix("http://").removeprefix("https://")
+        llm_url = _LLM_BASE.removeprefix("http://").removeprefix("https://")
         # Ollama — /api/ps returns running models; size_vram > 0 means GPU
         try:
             async with httpx.AsyncClient(timeout=3.0) as client:
-                resp = await client.get(f"{OLLAMA_BASE}/api/ps")
+                resp = await client.get(f"{_LLM_BASE}/api/ps")
                 if resp.status_code == 200:
                     models = resp.json().get("models", [])
                     if models:
@@ -151,8 +153,6 @@ async def system_status():
 
 
 # ── Dossier endpoint ─────────────────────────────────────────────────────────
-_FRONTEND = Path(__file__).parent.parent / "frontend"
-_ASSETS   = Path(__file__).parent.parent / "assets"
 
 @app.get("/dossier/{key}")
 def get_dossier(key: str):

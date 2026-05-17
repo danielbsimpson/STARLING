@@ -1,4 +1,5 @@
 // ── Imports ───────────────────────────────────────────────────────────────────
+import { BACKEND_BASE } from './config.js';
 import { detectTimerTrigger, handleTimerTrigger, initTimerPanel, dismissTimerPanel } from './timer-panel.js';
 import { detectWeatherTrigger, openWeatherPanel, closeWeatherPanel, initWeatherPanel, startWeatherAutoDismiss } from './weather-panel.js';
 import { detectNewsTrigger, openNewsPanel, closeNewsPanel } from './news-panel.js';
@@ -6,8 +7,7 @@ import { detectMarketTrigger, openMarketPanel, closeMarketPanel, setSendToOllama
 import { detectBrowserTrigger, detectBrowserClose, isBrowserPanelOpen, openBrowserPanel, closeBrowserPanel, getBrowserPageText, ensureBrowserPageText } from './browser-panel.js';
 
 // ── Config ────────────────────────────────────────────────────────────────────
-const BACKEND_BASE = 'http://localhost:8000';
-const MODEL        = localStorage.getItem('starling_model') || 'llama3.2:3b';
+const MODEL = localStorage.getItem('starling_model') || 'llama3.2:3b';
 
 // ── Presentation mode ─────────────────────────────────────────────────────────
 // Matches dossier trigger verbs and optionally captures a subject after "on/for/about/regarding/of"

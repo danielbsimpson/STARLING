@@ -1,13 +1,13 @@
 // frontend/browser-panel.js
 // Handles the in-UI browser panel: trigger detection, rendering, and toolbar controls.
 
+import { BACKEND_BASE } from './config.js';
+
 const KNOWN_BLOCKED_DOMAINS = [
   'google.com', 'youtube.com', 'twitter.com', 'x.com',
   'reddit.com', 'facebook.com', 'instagram.com', 'linkedin.com',
   'amazon.com', 'netflix.com',
 ];
-
-const BACKEND_BASE = 'http://localhost:8000';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -17,7 +17,7 @@ let _currentUrl = null;   // last URL we navigated to
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 
-const starlingEl = document.querySelector('.starling');
+const starlingEl = document.getElementById('starling');
 const panel      = document.getElementById('browser-panel');
 const frame      = document.getElementById('browser-frame');
 const urlBar     = document.getElementById('browser-url-bar');
@@ -203,7 +203,7 @@ async function _fetchPageText(url) {
 document.getElementById('browser-close').addEventListener('click', closeBrowserPanel);
 
 document.getElementById('browser-refresh').addEventListener('click', () => {
-  if (frame.src && frame.src !== 'about:blank') frame.src = frame.src;
+  if (_currentUrl) _navigateTo(_currentUrl);
 });
 
 document.getElementById('browser-back').addEventListener('click', () => {

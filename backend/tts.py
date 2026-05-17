@@ -124,7 +124,7 @@ async def synthesize(req: TTSRequest):
 
     try:
         lang = _VOICE_MAP[req.voice]["lang"]
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         def _run_synthesis():
             return kokoro.create(req.text, voice=req.voice, speed=req.speed, lang=lang)

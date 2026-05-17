@@ -7,16 +7,19 @@ Exposes GET /news and DELETE /news/cache.
 import asyncio
 import hashlib
 import json as _json
+import logging
 import os
 import re
 import time
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 
 import feedparser
 import httpx
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # ── Config ────────────────────────────────────────────────────────────────────
 _FEEDS_ENV       = os.getenv(
@@ -191,7 +194,6 @@ def _parse_feed(url: str) -> list[dict]:
         pub    = ""
         pub_ts = 0.0
         try:
-            from email.utils import parsedate_to_datetime
             pub_dt = parsedate_to_datetime(pub_raw)
             pub_ts = pub_dt.timestamp()
             today  = datetime.now(timezone.utc).date()
@@ -290,7 +292,7 @@ async def _synthesise_headlines(headlines: list[dict]) -> list[dict] | None:
         return parsed
 
     except Exception as exc:
-        print(f"[news] synthesis failed: {exc}")
+        logger.warning("News synthesis failed: %s", exc)
         return None
 
 
@@ -302,7 +304,7 @@ async def _fetch_all_parallel(category: str) -> list[dict]:
     rather than the sum of all feed latencies.
     """
     feed_urls = _get_feeds_for_category(category)
-    loop      = asyncio.get_event_loop()
+    loop      = asyncio.get_running_loop()
 
     results = await asyncio.gather(
         *[loop.run_in_executor(None, _parse_feed, url) for url in feed_urls],
@@ -334,9 +336,9 @@ async def _run_synthesis_bg(headlines: list[dict], category: str) -> None:
         stories = await _synthesise_headlines(headlines)
         if stories:
             _synth_cache[cache_key] = {"ts": time.time(), "stories": stories}
-            print(f"[news] synthesis complete for '{category}': {len(stories)} stories")
+            logger.info("News synthesis complete for %r: %d stories", category, len(stories))
         else:
-            print(f"[news] synthesis returned nothing for '{category}', keeping raw view")
+            logger.info("News synthesis returned nothing for %r, keeping raw view", category)
     finally:
         _synth_busy.discard(cache_key)
 

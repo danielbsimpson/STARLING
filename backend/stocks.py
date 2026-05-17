@@ -14,6 +14,7 @@ Enhanced market data module — Tool 5, all enhancements.
 
 import asyncio
 import json
+import logging
 import os
 import time
 from datetime import datetime, timezone
@@ -24,6 +25,7 @@ import yfinance as yf
 from fastapi import APIRouter, BackgroundTasks, Body, HTTPException, Query
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # ── Config ────────────────────────────────────────────────────────────────────
 _BASE_DIR       = Path(__file__).parent
@@ -72,7 +74,7 @@ def _load_json(path: Path, default: dict) -> dict:
         if path.exists():
             return json.loads(path.read_text(encoding="utf-8"))
     except Exception as exc:
-        print(f"[stocks] JSON load error ({path.name}): {exc}")
+        logger.warning("JSON load error (%s): %s", path.name, exc)
     return dict(default)
 
 

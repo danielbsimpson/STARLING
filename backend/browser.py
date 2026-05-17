@@ -108,7 +108,7 @@ async def _fetch_wikipedia(lang: str, title: str) -> str:
         pages = data.get('query', {}).get('pages', [])
         return pages[0].get('extract', '') if pages else ''
 
-    return await asyncio.get_event_loop().run_in_executor(None, _sync)
+    return await asyncio.get_running_loop().run_in_executor(None, _sync)
 
 
 @router.get('/browser/page-text')
