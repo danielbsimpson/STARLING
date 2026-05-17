@@ -69,9 +69,11 @@ export function detectNewsTrigger(transcript) {
     /\bcatch\s+me\s+up\b/,
     /\bbrief\s+me\b/,
     /\bheadlines?\b/,
-    // Category-specific patterns
-    /\b(?:show\s+me(?:\s+the)?|pull\s+up(?:\s+the)?|display(?:\s+the)?|give\s+me(?:\s+the)?|get(?:\s+me)?(?:\s+the)?)\s+\w+\s+(?:news|headlines?|briefing)\b/,
-    /\b\w+\s+(?:news|headlines?|briefing)\b/,
+    // Category-specific patterns — require explicit "news" or "headlines" keyword.
+    // Deliberately exclude "briefing" to avoid stealing "stock briefing", "market briefing",
+    // "crypto briefing", "portfolio briefing", etc. (those belong to the market tool).
+    /\b(?:show\s+me(?:\s+the)?|pull\s+up(?:\s+the)?|display(?:\s+the)?|give\s+me(?:\s+the)?|get(?:\s+me)?(?:\s+the)?)\s+\w+\s+(?:news|headlines?)\b/,
+    /\b\w+\s+(?:news|headlines?)\b/,
   ];
 
   const isNews = patterns.some(p => p.test(t));

@@ -30,7 +30,12 @@ Thumbs.db
 **/chroma_db/
 
 # Weather cache (contains location data — do not commit)
-memory/weather_cache.json
+backend/memory/weather_cache.json
+
+# Stocks/crypto runtime data (generated at runtime — do not commit)
+backend/memory/watchlist.json
+backend/memory/stocks_cache.json
+backend/memory/stocks_history.json
 
 # Images and Personal Files
 assets/dossier_descriptions/

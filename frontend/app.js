@@ -2,7 +2,7 @@
 import { detectTimerTrigger, handleTimerTrigger, initTimerPanel, dismissTimerPanel } from './timer-panel.js';
 import { detectWeatherTrigger, openWeatherPanel, closeWeatherPanel, initWeatherPanel, startWeatherAutoDismiss } from './weather-panel.js';
 import { detectNewsTrigger, openNewsPanel, closeNewsPanel } from './news-panel.js';
-import { detectMarketTrigger, openMarketPanel, closeMarketPanel } from './stocks-panel.js';
+import { detectMarketTrigger, openMarketPanel, closeMarketPanel, setSendToOllama as _setMktSendToOllama, setOnClose as _setMktOnClose } from './stocks-panel.js';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const BACKEND_BASE = 'http://localhost:8000';
@@ -1365,34 +1365,7 @@ async function _routeInput(text) {
     return;
   }
 
-  const newsCategory = detectNewsTrigger(text);
-  if (newsCategory) {
-    setState('thinking');
-    appendMessage('user', text);
-    const newsContext = await openNewsPanel(newsCategory);
-    if (newsContext) {
-      enterNewsMode();
-      await sendToOllama(
-        'Deliver a concise spoken news briefing based on the headlines provided. ' +
-        'Pick the four or five most significant stories and summarise each in one sentence. ' +
-        'Group related stories naturally if they appear. ' +
-        'Keep the whole briefing under sixty seconds when spoken aloud. ' +
-        'Do not read source names aloud unless they add important context.',
-        {
-          ephemeralMessages: [
-            { role: 'system', content: SYSTEM_PROMPT },
-            { role: 'system', content: `${_currentTimeContext()}\n${newsContext}` },
-          ],
-        }
-      );
-    } else {
-      await sendToOllama('Inform the user that the news feeds could not be reached right now. One sentence.');
-    }
-    fetchSystemStatus();
-    return;
-  }
-
-  // ── Market / stocks / crypto intercept ───────────────────────────────────────
+  // ── Market / stocks / crypto intercept (checked before news — more specific) ──
   const mktTrigger = detectMarketTrigger(text);
   if (mktTrigger) {
     setState('thinking');
@@ -1419,6 +1392,33 @@ async function _routeInput(text) {
       );
     } else {
       await sendToOllama('Inform the user that market data could not be retrieved right now. One sentence.');
+    }
+    fetchSystemStatus();
+    return;
+  }
+
+  const newsCategory = detectNewsTrigger(text);
+  if (newsCategory) {
+    setState('thinking');
+    appendMessage('user', text);
+    const newsContext = await openNewsPanel(newsCategory);
+    if (newsContext) {
+      enterNewsMode();
+      await sendToOllama(
+        'Deliver a concise spoken news briefing based on the headlines provided. ' +
+        'Pick the four or five most significant stories and summarise each in one sentence. ' +
+        'Group related stories naturally if they appear. ' +
+        'Keep the whole briefing under sixty seconds when spoken aloud. ' +
+        'Do not read source names aloud unless they add important context.',
+        {
+          ephemeralMessages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'system', content: `${_currentTimeContext()}\n${newsContext}` },
+          ],
+        }
+      );
+    } else {
+      await sendToOllama('Inform the user that the news feeds could not be reached right now. One sentence.');
     }
     fetchSystemStatus();
     return;
@@ -1589,5 +1589,7 @@ _applyTtsMode();
 loadVoices();
 fetchContextLimit();
 _loadManifest();  // Phase 4: load subject→image manifest for dynamic dossier images
+_setMktSendToOllama(sendToOllama);  // provide LLM callback to stocks panel briefing
+_setMktOnClose(exitMarketMode);     // close button returns to conversation mode
 const { txt: _greetingTxt } = appendMessage('assistant', 'INITIALISING…');
 warmupModels(_greetingTxt);  // async — heats Kokoro + Whisper, then reveals greeting

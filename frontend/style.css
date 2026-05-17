@@ -1685,6 +1685,21 @@ a.news-story-source-title:hover {
 .mkt-status[data-open="true"]  { color: #88ffaa; }
 .mkt-status[data-open="false"] { color: #ff8888; }
 
+.mkt-close-btn {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 4px;
+  color: #666;
+  cursor: pointer;
+  font-size: 0.7rem;
+  line-height: 1;
+  padding: 2px 7px;
+  transition: border-color 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.mkt-close-btn:hover { border-color: rgba(255,255,255,0.35); color: #ccc; }
+
 /* Filter tabs */
 .mkt-tabs {
   display: flex;
@@ -1895,3 +1910,323 @@ a.news-story-source-title:hover {
   line-height: 1.45;
   padding: 4px 0;
 }
+
+/* ── Market panel view switching ─────────────────────────────────────────── */
+
+.mkt-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 8px;
+}
+
+.mkt-view.hidden {
+  display: none;
+}
+
+/* ── 6-tile chart dashboard ──────────────────────────────────────────────── */
+
+.stocks-dashboard {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 1px;
+  background: #1a1a1a;
+  flex: 1;
+  min-height: 0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.stocks-tile {
+  background: #0a0a0a;
+  padding: 10px 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  cursor: pointer;
+  transition: background 0.15s;
+  min-height: 0;
+}
+
+.stocks-tile:hover {
+  background: #111;
+}
+
+.stocks-tile-hdr {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.stocks-tile-id {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.stocks-tile-sym {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: clamp(0.62rem, 1vw, 0.75rem);
+  color: #e0e0e0;
+  letter-spacing: 0.08em;
+}
+
+.stocks-tile-ticker {
+  font-size: 0.55rem;
+  color: #555;
+  letter-spacing: 0.06em;
+}
+
+.stocks-tile-sel {
+  background: transparent;
+  border: none;
+  color: #888;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.56rem;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  max-width: 120px;
+  text-overflow: ellipsis;
+}
+
+.stocks-tile-sel:focus { outline: none; }
+
+.stocks-tile-prc {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+.stocks-tile-price {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: clamp(0.6rem, 1vw, 0.72rem);
+  color: #ccc;
+}
+
+.stocks-tile-chg {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.58rem;
+}
+
+.stocks-tile-chg[data-direction="up"]   { color: #88ffaa; }
+.stocks-tile-chg[data-direction="down"] { color: #ff8888; }
+.stocks-tile-chg[data-direction="flat"] { color: #888; }
+
+/* Tile timeframe pills */
+.stocks-tile-pills {
+  display: flex;
+  gap: 3px;
+}
+
+.spill {
+  background: transparent;
+  border: 1px solid #222;
+  border-radius: 3px;
+  color: #555;
+  cursor: pointer;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.55rem;
+  padding: 1px 5px;
+  letter-spacing: 0.06em;
+  transition: background 0.12s, color 0.12s;
+}
+
+.spill:hover  { background: rgba(255,255,255,0.05); color: #aaa; }
+.spill.active { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.25); color: #e0e0e0; }
+
+/* Canvas wrapper fills remaining tile height */
+.stocks-canvas-wrap {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.stocks-canvas-wrap canvas {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* ── Detail view ─────────────────────────────────────────────────────────── */
+
+#mkt-detail {
+  flex: 1;
+  min-height: 0;
+}
+
+.mkt-detail-hdr {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-wrap: wrap;
+}
+
+.mkt-back-btn {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 4px;
+  color: #888;
+  cursor: pointer;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  padding: 4px 10px;
+  transition: border-color 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.mkt-back-btn:hover { border-color: rgba(255,255,255,0.3); color: #ccc; }
+
+.mkt-detail-info {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: 1;
+}
+
+.mkt-detail-sym {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: clamp(0.8rem, 1.4vw, 1rem);
+  color: #e0e0e0;
+  letter-spacing: 0.1em;
+}
+
+.mkt-detail-name {
+  font-size: 0.65rem;
+  color: #555;
+  letter-spacing: 0.04em;
+}
+
+.mkt-detail-prc {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.mkt-detail-price {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: clamp(0.85rem, 1.4vw, 1rem);
+  color: #ddd;
+}
+
+.mkt-detail-chg {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.7rem;
+}
+
+.mkt-detail-chg[data-direction="up"]   { color: #88ffaa; }
+.mkt-detail-chg[data-direction="down"] { color: #ff8888; }
+.mkt-detail-chg[data-direction="flat"] { color: #888; }
+
+/* Window pills (detail view) */
+.mkt-window-pills {
+  display: flex;
+  gap: 4px;
+}
+
+.wpill {
+  background: transparent;
+  border: 1px solid #222;
+  border-radius: 3px;
+  color: #555;
+  cursor: pointer;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.08em;
+  padding: 2px 8px;
+  transition: background 0.12s, color 0.12s;
+}
+
+.wpill:hover  { background: rgba(255,255,255,0.05); color: #aaa; }
+.wpill.active { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.25); color: #e0e0e0; }
+
+/* Full-height chart area */
+.mkt-detail-chart-wrap {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.mkt-detail-chart-wrap canvas {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Stats strip */
+.mkt-stats-strip {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+
+.mkt-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mkt-stat-lbl {
+  font-size: 0.52rem;
+  color: #444;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mkt-stat-val {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.63rem;
+  color: #bbb;
+}
+
+/* Hear Briefing button */
+.mkt-hear-btn {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 5px;
+  color: #888;
+  cursor: pointer;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  padding: 6px 16px;
+  transition: background 0.15s, color 0.15s;
+  width: 100%;
+  text-align: center;
+}
+
+.mkt-hear-btn:hover:not(:disabled)    { background: rgba(255,255,255,0.08); color: #ccc; }
+.mkt-hear-btn:disabled                { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Responsive — single column below 900 px ─────────────────────────────── */
+@media (max-width: 900px) {
+  .stocks-dashboard {
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+
+  .mkt-stats-strip {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* mkt-mode — ensure inner views can grow to fill the panel */
+.starling.mkt-mode .body-cols > .mkt-panel .mkt-view {
+  flex: 1;
+  min-height: 0;
+}
+

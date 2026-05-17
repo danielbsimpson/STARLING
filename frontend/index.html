@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>S.T.A.R.L.I.N.G. — Local AI</title>
+  <link rel="icon" type="image/png" href="/assets/images/basic_ds.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;600&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
@@ -147,22 +148,191 @@
 
       <!-- Market Panel — zero-width in normal mode, expands in mkt-mode -->
       <div class="mkt-panel hidden" id="mkt-panel">
+
+        <!-- Shared header -->
         <div class="mkt-header">
           <div class="mkt-title">MARKET WATCH</div>
           <div class="mkt-status" id="mkt-status">—</div>
+          <button class="mkt-close-btn" id="mkt-close-btn" title="Close market panel">✕</button>
         </div>
-        <div class="mkt-tabs">
-          <button class="mkt-tab active" data-filter="all">ALL</button>
-          <button class="mkt-tab" data-filter="equity">STOCKS</button>
-          <button class="mkt-tab" data-filter="crypto">CRYPTO</button>
-          <button class="mkt-tab" data-filter="index">INDICES</button>
-        </div>
-        <div class="mkt-grid" id="mkt-grid"></div>
-        <div class="mkt-footer">
-          <button class="mkt-refresh-btn" id="mkt-refresh-btn">↻ REFRESH</button>
-          <span class="mkt-fetched" id="mkt-fetched">—</span>
-        </div>
-      </div>
+
+        <!-- ── Dashboard view (default) ───────────────────────────────────── -->
+        <div id="mkt-dashboard" class="mkt-view">
+
+          <!-- Group tabs rendered dynamically from watchlist.json -->
+          <div class="mkt-tabs" id="mkt-group-tabs"></div>
+
+          <!-- 6-tile chart grid -->
+          <div class="stocks-dashboard" id="stocks-dashboard">
+
+            <!-- Tile 0 — S&P 500 -->
+            <div class="stocks-tile" id="tile-0" data-symbol="^GSPC" data-name="S&amp;P 500">
+              <div class="stocks-tile-hdr">
+                <div class="stocks-tile-id">
+                  <span class="stocks-tile-sym">S&amp;P 500</span>
+                  <span class="stocks-tile-ticker">^GSPC</span>
+                </div>
+                <div class="stocks-tile-prc">
+                  <span class="stocks-tile-price" id="tp-0-price">—</span>
+                  <span class="stocks-tile-chg" id="tp-0-chg">—</span>
+                </div>
+              </div>
+              <div class="stocks-tile-pills" data-tile="0">
+                <button class="spill active" data-w="1m" data-tile="0">1M</button>
+                <button class="spill" data-w="3m" data-tile="0">3M</button>
+                <button class="spill" data-w="1y" data-tile="0">1Y</button>
+              </div>
+              <div class="stocks-canvas-wrap"><canvas id="sc-0"></canvas></div>
+            </div>
+
+            <!-- Tile 1 — NASDAQ -->
+            <div class="stocks-tile" id="tile-1" data-symbol="^IXIC" data-name="NASDAQ">
+              <div class="stocks-tile-hdr">
+                <div class="stocks-tile-id">
+                  <span class="stocks-tile-sym">NASDAQ</span>
+                  <span class="stocks-tile-ticker">^IXIC</span>
+                </div>
+                <div class="stocks-tile-prc">
+                  <span class="stocks-tile-price" id="tp-1-price">—</span>
+                  <span class="stocks-tile-chg" id="tp-1-chg">—</span>
+                </div>
+              </div>
+              <div class="stocks-tile-pills" data-tile="1">
+                <button class="spill active" data-w="1m" data-tile="1">1M</button>
+                <button class="spill" data-w="3m" data-tile="1">3M</button>
+                <button class="spill" data-w="1y" data-tile="1">1Y</button>
+              </div>
+              <div class="stocks-canvas-wrap"><canvas id="sc-1"></canvas></div>
+            </div>
+
+            <!-- Tile 2 — Dow Jones -->
+            <div class="stocks-tile" id="tile-2" data-symbol="^DJI" data-name="Dow Jones">
+              <div class="stocks-tile-hdr">
+                <div class="stocks-tile-id">
+                  <span class="stocks-tile-sym">Dow Jones</span>
+                  <span class="stocks-tile-ticker">^DJI</span>
+                </div>
+                <div class="stocks-tile-prc">
+                  <span class="stocks-tile-price" id="tp-2-price">—</span>
+                  <span class="stocks-tile-chg" id="tp-2-chg">—</span>
+                </div>
+              </div>
+              <div class="stocks-tile-pills" data-tile="2">
+                <button class="spill active" data-w="1m" data-tile="2">1M</button>
+                <button class="spill" data-w="3m" data-tile="2">3M</button>
+                <button class="spill" data-w="1y" data-tile="2">1Y</button>
+              </div>
+              <div class="stocks-canvas-wrap"><canvas id="sc-2"></canvas></div>
+            </div>
+
+            <!-- Tile 3 — BTC + ETH overlay -->
+            <div class="stocks-tile" id="tile-3" data-symbol="BTC-USD" data-symbol2="ETH-USD" data-name="Bitcoin + Ethereum">
+              <div class="stocks-tile-hdr">
+                <div class="stocks-tile-id">
+                  <span class="stocks-tile-sym">BTC + ETH</span>
+                  <span class="stocks-tile-ticker">Crypto</span>
+                </div>
+                <div class="stocks-tile-prc">
+                  <span class="stocks-tile-price" id="tp-3-price">—</span>
+                  <span class="stocks-tile-chg" id="tp-3-chg">—</span>
+                </div>
+              </div>
+              <div class="stocks-tile-pills" data-tile="3">
+                <button class="spill active" data-w="1m" data-tile="3">1M</button>
+                <button class="spill" data-w="3m" data-tile="3">3M</button>
+                <button class="spill" data-w="1y" data-tile="3">1Y</button>
+              </div>
+              <div class="stocks-canvas-wrap"><canvas id="sc-3"></canvas></div>
+            </div>
+
+            <!-- Tile 4 — My Stocks (equity watchlist) -->
+            <div class="stocks-tile" id="tile-4" data-name="My Stocks">
+              <div class="stocks-tile-hdr">
+                <div class="stocks-tile-id">
+                  <span class="stocks-tile-sym">My Stocks</span>
+                  <select class="stocks-tile-sel" id="sel-4" title="Select equity ticker"></select>
+                </div>
+                <div class="stocks-tile-prc">
+                  <span class="stocks-tile-price" id="tp-4-price">—</span>
+                  <span class="stocks-tile-chg" id="tp-4-chg">—</span>
+                </div>
+              </div>
+              <div class="stocks-tile-pills" data-tile="4">
+                <button class="spill active" data-w="1m" data-tile="4">1M</button>
+                <button class="spill" data-w="3m" data-tile="4">3M</button>
+                <button class="spill" data-w="1y" data-tile="4">1Y</button>
+              </div>
+              <div class="stocks-canvas-wrap"><canvas id="sc-4"></canvas></div>
+            </div>
+
+            <!-- Tile 5 — My Crypto (crypto watchlist) -->
+            <div class="stocks-tile" id="tile-5" data-name="My Crypto">
+              <div class="stocks-tile-hdr">
+                <div class="stocks-tile-id">
+                  <span class="stocks-tile-sym">My Crypto</span>
+                  <select class="stocks-tile-sel" id="sel-5" title="Select crypto ticker"></select>
+                </div>
+                <div class="stocks-tile-prc">
+                  <span class="stocks-tile-price" id="tp-5-price">—</span>
+                  <span class="stocks-tile-chg" id="tp-5-chg">—</span>
+                </div>
+              </div>
+              <div class="stocks-tile-pills" data-tile="5">
+                <button class="spill active" data-w="1m" data-tile="5">1M</button>
+                <button class="spill" data-w="3m" data-tile="5">3M</button>
+                <button class="spill" data-w="1y" data-tile="5">1Y</button>
+              </div>
+              <div class="stocks-canvas-wrap"><canvas id="sc-5"></canvas></div>
+            </div>
+
+          </div><!-- /stocks-dashboard -->
+
+          <div class="mkt-footer">
+            <button class="mkt-refresh-btn" id="mkt-refresh-btn">↻ REFRESH</button>
+            <span class="mkt-fetched" id="mkt-fetched">—</span>
+          </div>
+        </div><!-- /mkt-dashboard -->
+
+        <!-- ── Detail view (hidden by default) ────────────────────────────── -->
+        <div id="mkt-detail" class="mkt-view hidden">
+          <div class="mkt-detail-hdr">
+            <button id="mkt-back-btn" class="mkt-back-btn">← BACK</button>
+            <div class="mkt-detail-info">
+              <span class="mkt-detail-sym" id="mkt-detail-sym">—</span>
+              <span class="mkt-detail-name" id="mkt-detail-name">—</span>
+            </div>
+            <div class="mkt-detail-prc">
+              <span class="mkt-detail-price" id="mkt-detail-price">—</span>
+              <span class="mkt-detail-chg" id="mkt-detail-chg">—</span>
+            </div>
+          </div>
+
+          <div class="mkt-window-pills" id="mkt-window-pills">
+            <button class="wpill" data-w="7d">7D</button>
+            <button class="wpill active" data-w="1m">1M</button>
+            <button class="wpill" data-w="3m">3M</button>
+            <button class="wpill" data-w="6m">6M</button>
+            <button class="wpill" data-w="1y">1Y</button>
+            <button class="wpill" data-w="5y">5Y</button>
+            <button class="wpill" data-w="10y">10Y</button>
+          </div>
+
+          <div class="mkt-detail-chart-wrap">
+            <canvas id="mkt-detail-canvas"></canvas>
+          </div>
+
+          <div class="mkt-stats-strip">
+            <div class="mkt-stat"><span class="mkt-stat-lbl">52W HIGH</span><span class="mkt-stat-val" id="mstat-high">—</span></div>
+            <div class="mkt-stat"><span class="mkt-stat-lbl">52W LOW</span><span class="mkt-stat-val" id="mstat-low">—</span></div>
+            <div class="mkt-stat"><span class="mkt-stat-lbl">VOLUME</span><span class="mkt-stat-val" id="mstat-vol">—</span></div>
+            <div class="mkt-stat"><span class="mkt-stat-lbl">MKT CAP</span><span class="mkt-stat-val" id="mstat-cap">—</span></div>
+            <div class="mkt-stat"><span class="mkt-stat-lbl">UPDATED</span><span class="mkt-stat-val" id="mstat-upd">—</span></div>
+          </div>
+
+          <button id="mkt-hear-btn" class="mkt-hear-btn">♪ HEAR BRIEFING</button>
+        </div><!-- /mkt-detail -->
+
+      </div><!-- /mkt-panel -->
 
     </div><!-- /body-cols -->
 
@@ -222,6 +392,8 @@
 
   </div>
   <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
   <script type="module" src="app.js?v=4"></script>
 </body>
 </html>
