@@ -6,8 +6,10 @@ import asyncio
 import io
 import logging
 import os
+import re as _re
 from pathlib import Path
 
+import numpy as _np
 import onnxruntime as _ort
 import soundfile as sf
 from fastapi import APIRouter, HTTPException
@@ -94,7 +96,59 @@ VOICES = [
 _VOICE_MAP = {v["id"]: v for v in VOICES}
 
 
-# ── Endpoints ──────────────────────────────────────────────────────────────────
+# ── Chunking helpers (Kokoro hard-caps at 510 phonemes per call) ──────────────
+# English averages ~0.5 phonemes/char, so 500 chars ≈ 250 phonemes — safely under
+# the limit even for phoneme-dense text.
+_MAX_CHUNK_CHARS = 500
+
+
+def _split_chunks(text: str) -> list[str]:
+    """Split text at sentence boundaries so each chunk stays under Kokoro's limit."""
+    sentences = _re.split(r'(?<=[.!?])\s+', text.strip())
+    chunks: list[str] = []
+    current = ''
+    for sentence in sentences:
+        if not sentence:
+            continue
+        candidate = f'{current} {sentence}'.strip() if current else sentence
+        if len(candidate) <= _MAX_CHUNK_CHARS:
+            current = candidate
+        else:
+            if current:
+                chunks.append(current)
+            if len(sentence) > _MAX_CHUNK_CHARS:
+                # Single sentence still too long — split on clause punctuation then hard-cut
+                parts = _re.split(r'(?<=[,;:])\s+', sentence)
+                sub = ''
+                for part in parts:
+                    candidate2 = f'{sub} {part}'.strip() if sub else part
+                    if len(candidate2) <= _MAX_CHUNK_CHARS:
+                        sub = candidate2
+                    else:
+                        if sub:
+                            chunks.append(sub)
+                        # Hard cut as last resort
+                        sub = part[:_MAX_CHUNK_CHARS]
+                if sub:
+                    chunks.append(sub)
+                current = ''
+            else:
+                current = sentence
+    if current:
+        chunks.append(current)
+    return chunks or [text[:_MAX_CHUNK_CHARS]]
+
+
+def _synthesize_chunked(kk: Kokoro, text: str, voice: str, speed: float, lang: str):
+    """Synthesize text with automatic chunking; returns (samples_array, sample_rate)."""
+    chunks = _split_chunks(text)
+    results = [kk.create(c, voice=voice, speed=speed, lang=lang) for c in chunks]
+    if len(results) == 1:
+        return results[0]
+    return _np.concatenate([r[0] for r in results]), results[0][1]
+
+
+
 
 @router.get("/voices")
 def list_voices():
@@ -127,7 +181,7 @@ async def synthesize(req: TTSRequest):
         loop = asyncio.get_running_loop()
 
         def _run_synthesis():
-            return kokoro.create(req.text, voice=req.voice, speed=req.speed, lang=lang)
+            return _synthesize_chunked(kokoro, req.text, req.voice, req.speed, lang)
 
         try:
             samples, sample_rate = await loop.run_in_executor(None, _run_synthesis)
@@ -144,7 +198,7 @@ async def synthesize(req: TTSRequest):
             kokoro = _get_kokoro()  # rebuilds with CPUExecutionProvider
 
             def _run_synthesis_cpu():
-                return kokoro.create(req.text, voice=req.voice, speed=req.speed, lang=lang)
+                return _synthesize_chunked(kokoro, req.text, req.voice, req.speed, lang)
 
             samples, sample_rate = await loop.run_in_executor(None, _run_synthesis_cpu)
         buf = io.BytesIO()

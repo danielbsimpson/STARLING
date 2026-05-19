@@ -121,6 +121,21 @@ export function detectBrowserTrigger(transcript) {
 }
 
 /**
+ * When a Wikipedia page is open, checks whether the transcript is a section-summary
+ * request ("summarize section X" / "summarize the X section").
+ * Returns the section name string if matched, otherwise null.
+ */
+export function detectWikiSectionTrigger(transcript) {
+  if (!_isOpen || !_currentUrl) return null;
+  if (!/wikipedia\.org\/wiki\//i.test(_currentUrl)) return null;
+
+  const t = transcript.trim();
+  const m = t.match(/summarize\s+section\s+(.+)/i)
+          || t.match(/summarize\s+(?:the\s+)?(.+?)\s+section/i);
+  return m ? m[1].trim() : null;
+}
+
+/**
  * Returns true if the transcript contains an explicit request to close the browser panel.
  */
 export function detectBrowserClose(transcript) {

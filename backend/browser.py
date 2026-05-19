@@ -23,8 +23,10 @@ _SKIP_TAGS = frozenset({
     'template', 'canvas',
 })
 
-# Limit extracted text to keep prompts manageable (~3 k tokens)
-_MAX_CHARS = 12_000
+# Limit extracted text to keep prompts manageable.
+# Wikipedia uses the MediaWiki plain-text API (no HTML noise) so can carry more.
+_MAX_CHARS      = 12_000   # general web scraping
+_MAX_WIKI_CHARS = 40_000   # Wikipedia API — clean text, worth sending in full
 
 
 class _TextExtractor(HTMLParser):
@@ -139,8 +141,9 @@ async def fetch_page_text(url: str):
         result = {'text': text_out, 'url': final_url}
         if js_rendered:
             result['js_rendered'] = True
-        if text_out and len(text_out) > _MAX_CHARS:
-            result['text'] = text_out[:_MAX_CHARS] + ' …[truncated]'
+        char_limit = _MAX_WIKI_CHARS if wiki else _MAX_CHARS
+        if text_out and len(text_out) > char_limit:
+            result['text'] = text_out[:char_limit] + ' …[truncated]'
         return result
 
     except httpx.TimeoutException:
@@ -149,3 +152,65 @@ async def fetch_page_text(url: str):
         return {'text': None, 'error': f'HTTP {exc.response.status_code}'}
     except Exception as exc:  # noqa: BLE001
         return {'text': None, 'error': str(exc)}
+
+
+@router.get('/browser/wiki-section')
+async def fetch_wiki_section(url: str, section: str):
+    """Fetch a specific named section from a Wikipedia article as plain text.
+
+    Fuzzy-matches the requested section name against the article's section list,
+    then fetches only that section's HTML and converts it to clean plain text.
+    Returns available section names when no match is found.
+    """
+    wiki = _WIKI_RE.match(url)
+    if not wiki:
+        return {'text': None, 'error': 'URL is not a Wikipedia article'}
+
+    lang  = wiki.group('lang')
+    title = unquote(wiki.group('title')).replace('_', ' ')
+
+    def _sync():
+        base = f'https://{lang}.wikipedia.org/w/api.php'
+        ua   = {'User-Agent': _WIKI_UA}
+
+        # 1. Retrieve section list
+        r = _requests.get(base, params={
+            'action': 'parse', 'page': title,
+            'prop': 'sections', 'format': 'json',
+        }, headers=ua, timeout=15)
+        r.raise_for_status()
+        sections = r.json().get('parse', {}).get('sections', [])
+
+        # 2. Fuzzy-match: exact → query-in-title → title-in-query
+        q = section.strip().lower()
+        matched = (
+            next((s for s in sections if s['line'].lower() == q), None)
+            or next((s for s in sections if q in s['line'].lower()), None)
+            or next((s for s in sections if s['line'].lower() in q), None)
+        )
+        if not matched:
+            return {'found': False, 'available': [s['line'] for s in sections]}
+
+        # 3. Fetch that section's rendered HTML and strip to plain text
+        r2 = _requests.get(base, params={
+            'action': 'parse', 'page': title,
+            'prop': 'text', 'section': matched['index'],
+            'format': 'json', 'disableeditsection': '1',
+        }, headers=ua, timeout=15)
+        r2.raise_for_status()
+        html = r2.json().get('parse', {}).get('text', {}).get('*', '')
+        text = _extract_text(html)
+        return {'found': True, 'text': text, 'section': matched['line']}
+
+    try:
+        result = await asyncio.get_running_loop().run_in_executor(None, _sync)
+    except Exception as exc:  # noqa: BLE001
+        return {'text': None, 'error': str(exc)}
+
+    if not result['found']:
+        return {
+            'text': None,
+            'error': f'Section "{section}" not found.',
+            'available_sections': result.get('available', []),
+        }
+    return {'text': result['text'], 'section': result['section']}

@@ -4,7 +4,7 @@ import { detectTimerTrigger, handleTimerTrigger, initTimerPanel, dismissTimerPan
 import { detectWeatherTrigger, openWeatherPanel, closeWeatherPanel, initWeatherPanel, startWeatherAutoDismiss } from './weather-panel.js';
 import { detectNewsTrigger, openNewsPanel, closeNewsPanel } from './news-panel.js';
 import { detectMarketTrigger, openMarketPanel, closeMarketPanel, setSendToOllama as _setMktSendToOllama, setOnClose as _setMktOnClose } from './stocks-panel.js';
-import { detectBrowserTrigger, detectBrowserClose, isBrowserPanelOpen, openBrowserPanel, closeBrowserPanel, getBrowserPageText, ensureBrowserPageText, getBrowserPageUrl, getBrowserJsRendered } from './browser-panel.js';
+import { detectBrowserTrigger, detectBrowserClose, detectWikiSectionTrigger, isBrowserPanelOpen, openBrowserPanel, closeBrowserPanel, getBrowserPageText, ensureBrowserPageText, getBrowserPageUrl, getBrowserJsRendered } from './browser-panel.js';
 import {
   ideasMode,
   detectIdeaCaptureTrigger,
@@ -1636,6 +1636,47 @@ async function _routeInput(text) {
         ],
       }
     );
+    fetchSystemStatus();
+    return;
+  }
+
+  // ── Wikipedia section summary ────────────────────────────────────────────────
+  // Only fires when a Wikipedia page is open and the transcript matches
+  // "summarize section X" or "summarize the X section".
+  const _wikiSection = detectWikiSectionTrigger(text);
+  if (_wikiSection) {
+    setState('thinking');
+    appendMessage('user', text);
+    try {
+      const _secRes  = await fetch(
+        `${BACKEND_BASE}/api/browser/wiki-section` +
+        `?url=${encodeURIComponent(getBrowserPageUrl())}` +
+        `&section=${encodeURIComponent(_wikiSection)}`
+      );
+      const _secData = await _secRes.json();
+      if (_secData.text) {
+        await sendToOllama(
+          `Summarize the following section titled "${_secData.section}" from the Wikipedia article. ` +
+          `Speak naturally in three to five sentences. Do not repeat the section title at the start.` +
+          `\n\nSECTION CONTENT:\n${_secData.text}`,
+          { ephemeralMessages: [{ role: 'system', content: SYSTEM_PROMPT }] }
+        );
+      } else {
+        const _available = _secData.available_sections?.length
+          ? ` Available sections include: ${_secData.available_sections.slice(0, 8).join(', ')}.`
+          : '';
+        await sendToOllama(
+          `Inform the user that the section "${_wikiSection}" was not found in the current Wikipedia article.${_available} Keep it to two sentences.`,
+          { ephemeralMessages: [{ role: 'system', content: SYSTEM_PROMPT }] }
+        );
+      }
+    } catch (err) {
+      console.error('[wiki-section] fetch failed:', err.message);
+      await sendToOllama(
+        'Inform the user that you were unable to retrieve the requested Wikipedia section due to a network error. One sentence.',
+        { ephemeralMessages: [{ role: 'system', content: SYSTEM_PROMPT }] }
+      );
+    }
     fetchSystemStatus();
     return;
   }
