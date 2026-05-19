@@ -4,7 +4,7 @@ import { detectTimerTrigger, handleTimerTrigger, initTimerPanel, dismissTimerPan
 import { detectWeatherTrigger, openWeatherPanel, closeWeatherPanel, initWeatherPanel, startWeatherAutoDismiss } from './weather-panel.js';
 import { detectNewsTrigger, openNewsPanel, closeNewsPanel } from './news-panel.js';
 import { detectMarketTrigger, openMarketPanel, closeMarketPanel, setSendToOllama as _setMktSendToOllama, setOnClose as _setMktOnClose } from './stocks-panel.js';
-import { detectBrowserTrigger, detectBrowserClose, isBrowserPanelOpen, openBrowserPanel, closeBrowserPanel, getBrowserPageText, ensureBrowserPageText } from './browser-panel.js';
+import { detectBrowserTrigger, detectBrowserClose, isBrowserPanelOpen, openBrowserPanel, closeBrowserPanel, getBrowserPageText, ensureBrowserPageText, getBrowserPageUrl, getBrowserJsRendered } from './browser-panel.js';
 import {
   ideasMode,
   detectIdeaCaptureTrigger,
@@ -1652,13 +1652,21 @@ async function _routeInput(text) {
         `use this page content as your primary source — do not rely on prior knowledge ` +
         `unless the page content is insufficient.\n\nPAGE CONTENT:\n${_pageCtx}`;
     } else if (getBrowserPageUrl()) {
-      // Page text unavailable (backend down or fetch failed) — at least surface the URL
-      // so the LLM knows what page the user is referring to.
-      _extraContext =
-        `The user currently has a browser panel open showing: ${getBrowserPageUrl()}. ` +
-        `The page content could not be read at this time. ` +
-        `If the user refers to "the page", "this", "the content", or asks you to summarize, ` +
-        `they mean that page — acknowledge it and answer from your training knowledge about that topic.`;
+      // Page text unavailable — distinguish JS-rendered SPA from a plain fetch failure.
+      if (getBrowserJsRendered()) {
+        _extraContext =
+          `The user has a browser panel open showing: ${getBrowserPageUrl()}. ` +
+          `This page is a JavaScript single-page application (SPA). The backend fetched its HTML ` +
+          `but received no readable text content because the page renders entirely in the browser via JS. ` +
+          `You cannot read, summarize, or describe its actual content. ` +
+          `Explicitly tell the user that this page uses client-side JavaScript rendering and its content ` +
+          `cannot be extracted. Do NOT guess or fabricate what the page might contain.`;
+      } else {
+        _extraContext =
+          `The user has a browser panel open showing: ${getBrowserPageUrl()}. ` +
+          `The page content could not be read (the backend fetch failed or returned no text). ` +
+          `Tell the user you were unable to read the page — do NOT guess or fabricate its contents.`;
+      }
     }
   }
   await sendToOllama(text, _extraContext ? { extraContext: _extraContext } : {});

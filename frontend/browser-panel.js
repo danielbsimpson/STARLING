@@ -11,9 +11,10 @@ const KNOWN_BLOCKED_DOMAINS = [
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
-let _isOpen     = false;
-let _pageText   = null;   // extracted plain-text of current page (null while fetching or closed)
-let _currentUrl = null;   // last URL we navigated to
+let _isOpen      = false;
+let _pageText    = null;   // extracted plain-text of current page (null while fetching or closed)
+let _currentUrl  = null;   // last URL we navigated to
+let _jsRendered  = false;  // true when the current page is a JS SPA that couldn't be read
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 
@@ -24,6 +25,7 @@ const urlBar     = document.getElementById('browser-url-bar');
 const fallback   = document.getElementById('browser-fallback');
 const extLink    = document.getElementById('browser-external-link');
 const iframeBox  = document.getElementById('browser-iframe-container');
+const readWarn   = document.getElementById('browser-read-warn');
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
@@ -47,6 +49,14 @@ export function getBrowserPageText() {
  */
 export function getBrowserPageUrl() {
   return _currentUrl;
+}
+
+/**
+ * Returns true if the current page was detected as a JavaScript-rendered SPA
+ * whose content could not be extracted server-side.
+ */
+export function getBrowserJsRendered() {
+  return _jsRendered;
 }
 
 /**
@@ -82,16 +92,19 @@ export function detectBrowserTrigger(transcript) {
     };
   }
 
-  // "open browser https://example.com" or "open browser example.com"
-  const openBrowserFull = t.match(/open\s+browser\s+(https?:\/\/\S+)/i);
-  if (openBrowserFull) {
-    const url = openBrowserFull[1];
-    return { url, label: url.replace(/^https?:\/\//, '') };
-  }
-  const openBrowserDomain = t.match(/open\s+browser\s+([\w-]+(?:\.[\w-]+)+\.\w{2,}(?:\/\S*)?)/i);
-  if (openBrowserDomain) {
-    const url = `https://${openBrowserDomain[1]}`;
-    return { url, label: openBrowserDomain[1] };
+  // "open browser [URL]" — tolerates spoken "HTTPS"/"HTTP" without "://" and
+  // Whisper-inserted spaces within a domain (e.g. "DanielB Simpson.com")
+  const openBrowserMatch = t.match(/open\s+browser\s+(.+)/i);
+  if (openBrowserMatch) {
+    let raw = openBrowserMatch[1].trim();
+    // "HTTPS example.com" → "https://example.com"
+    raw = raw.replace(/^(https?)\s+/i, '$1://');
+    // Collapse any spaces Whisper inserted inside the domain or path, then lowercase
+    raw = raw.replace(/\s+/g, '').toLowerCase();
+    // Ensure a scheme
+    if (!/^https?:\/\//.test(raw)) raw = `https://${raw}`;
+    const label = raw.replace(/^https?:\/\//, '');
+    return { url: raw, label };
   }
 
   // "browser search for X" / "browser search X" — DuckDuckGo plain-HTML endpoint (iframe-friendly)
@@ -129,12 +142,14 @@ export function openBrowserPanel(url) {
  */
 export function closeBrowserPanel() {
   if (!_isOpen) return;
-  _isOpen     = false;
-  _pageText   = null;
-  _currentUrl = null;
+  _isOpen      = false;
+  _pageText    = null;
+  _currentUrl  = null;
+  _jsRendered  = false;
   starlingEl.classList.remove('browser-mode');
   frame.src = 'about:blank';
   _showIframe();
+  readWarn.classList.add('hidden');
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
@@ -169,8 +184,10 @@ function _showFallback(url) {
 function _navigateTo(url) {
   _currentUrl  = url;
   _pageText    = null;  // clear until the page finishes loading
+  _jsRendered  = false;
   urlBar.value = url;
   extLink.href = url;
+  readWarn.classList.add('hidden');
 
   if (_isKnownBlocked(url)) {
     _showFallback(url);
@@ -191,11 +208,27 @@ async function _fetchPageText(url) {
   try {
     const res  = await fetch(`${BACKEND_BASE}/api/browser/page-text?url=${encodeURIComponent(url)}`);
     const data = await res.json();
-    if (data.error) console.error('[browser-panel] page-text error from backend:', data.error);
-    if (data.text && url === _currentUrl) _pageText = data.text;
+    if (url !== _currentUrl) return;  // navigated away before response arrived
+    if (data.error) {
+      console.error('[browser-panel] page-text error from backend:', data.error);
+      _showReadWarn('⚠ CANNOT READ PAGE');
+    } else if (data.text) {
+      _pageText = data.text;
+    } else if (data.js_rendered) {
+      _jsRendered = true;
+      _showReadWarn('⚠ JS-RENDERED — CONTENT UNAVAILABLE');
+    } else {
+      _showReadWarn('⚠ CANNOT READ PAGE');
+    }
   } catch (err) {
     console.error('[browser-panel] page-text fetch failed — is the backend running?', err.message);
+    if (url === _currentUrl) _showReadWarn('⚠ CANNOT READ PAGE');
   }
+}
+
+function _showReadWarn(msg) {
+  readWarn.textContent = msg;
+  readWarn.classList.remove('hidden');
 }
 
 // ── Toolbar event listeners ───────────────────────────────────────────────────

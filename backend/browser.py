@@ -132,9 +132,16 @@ async def fetch_page_text(url: str):
                 raw       = _extract_text(resp.text)
                 final_url = str(resp.url)
 
-        if len(raw) > _MAX_CHARS:
-            raw = raw[:_MAX_CHARS] + ' …[truncated]'
-        return {'text': raw.strip() or None, 'url': final_url}
+        text_out = raw.strip() or None
+        # Empty text from a successful HTTP fetch almost always means a JS-rendered
+        # SPA — the HTML shell has no visible content until JavaScript runs.
+        js_rendered = (text_out is None) and (not wiki)
+        result = {'text': text_out, 'url': final_url}
+        if js_rendered:
+            result['js_rendered'] = True
+        if text_out and len(text_out) > _MAX_CHARS:
+            result['text'] = text_out[:_MAX_CHARS] + ' …[truncated]'
+        return result
 
     except httpx.TimeoutException:
         return {'text': None, 'error': 'Request timed out'}
