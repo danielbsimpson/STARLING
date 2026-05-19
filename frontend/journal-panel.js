@@ -16,21 +16,30 @@ const journalTagsRow      = document.getElementById('journal-tags-row');
 const journalConfirmBtn   = document.getElementById('journal-confirm-btn');
 const journalRerecordBtn  = document.getElementById('journal-rerecord-btn');
 const journalDiscardBtn2  = document.getElementById('journal-discard-btn-2');
-const journalEntriesList  = document.getElementById('journal-entries-list');
-const journalEntriesTitle = document.getElementById('journal-entries-title');
-const journalEntriesClose = document.getElementById('journal-entries-close');
+const journalEntriesList    = document.getElementById('journal-entries-list');
+const journalEntriesTitle   = document.getElementById('journal-entries-title');
+const journalEntriesClose   = document.getElementById('journal-entries-close');
+const journalInterviewerBtn = document.getElementById('journal-interviewer-btn');
 
 const vDictation = document.getElementById('journal-dictation-view');
 const vReview    = document.getElementById('journal-review-view');
 const vEntries   = document.getElementById('journal-entries-view');
 
 // ── Mode state — exported as live binding so app.js reads the current value ───
-export let journalMode = false;   // true while in dictation mode (mic presses = segments)
+export let journalMode   = false;  // true while dictation or interview is active
+export let interviewMode = false;  // true while waiting for an interview answer
+
+// ── Constants ────────────────────────────────────────────────────────────────
+const MAX_INTERVIEW_QUESTIONS = 8;
+const MIN_INTERVIEW_QUESTIONS = 3;
 
 // ── Internal state ────────────────────────────────────────────────────────────
-let _segments    = [];    // transcript strings from each mic press
-let _startedAt   = null;  // ISO timestamp of when dictation began
-let _pendingSave = null;  // { summary, tags, rawTranscript } awaiting confirmation
+let _segments         = [];    // transcript strings from each manual dictation press
+let _startedAt        = null;  // ISO timestamp of when dictation began
+let _pendingSave      = null;  // { summary, tags, rawTranscript } awaiting confirmation
+let _interviewPairs   = [];    // [{ q, a }] completed Q&A pairs during interview mode
+let _pendingQuestion  = null;  // current question waiting for user's spoken answer
+let _interviewQACount = 0;     // number of completed Q&A pairs
 
 // ── Trigger detection ─────────────────────────────────────────────────────────
 
@@ -110,13 +119,19 @@ export function detectJournalReadTrigger(transcript) {
  * Resets all state, shows the dictation view, adds journal-mode class.
  */
 export function enterJournalMode() {
-  _segments  = [];
-  _startedAt = new Date().toISOString();
-  journalMode = true;
+  _segments         = [];
+  _interviewPairs   = [];
+  _pendingQuestion  = null;
+  _interviewQACount = 0;
+  interviewMode     = false;
+  _startedAt        = new Date().toISOString();
+  journalMode       = true;
+  journalInterviewerBtn?.classList.remove('hidden');
 
   _showView('dictation');
   journalTranscript.innerHTML =
-    '<span class="journal-placeholder">Start speaking. Each mic press adds a new segment. ' +
+    '<span class="journal-placeholder">Start speaking — each mic press adds a segment. ' +
+    'Or press INTERVIEWER to have the system ask you questions. ' +
     'Press SUBMIT or say "submit" when finished.</span>';
   journalSegCount.textContent = '0 segments';
 
@@ -150,9 +165,73 @@ export function appendJournalSegment(transcript) {
     `${_segments.length} segment${_segments.length !== 1 ? 's' : ''}`;
 }
 
-/** Returns true if there are any segments ready to submit. */
+/** Returns true if there is any content (segments or interview pairs) ready to submit. */
 export function journalHasSegments() {
-  return _segments.length > 0;
+  return _segments.length > 0 || _interviewPairs.length > 0;
+}
+
+// ── Interview mode ────────────────────────────────────────────────────────────
+
+/**
+ * Start the LLM-driven interview. Generates an opening question, speaks it aloud,
+ * and sets interviewMode = true so subsequent mic presses are treated as answers.
+ */
+export async function enterInterviewMode(callLLMFn, speakFn, systemPrompt) {
+  _interviewPairs   = [];
+  _interviewQACount = 0;
+  _pendingQuestion  = null;
+  interviewMode     = true;
+  journalInterviewerBtn?.classList.add('hidden');
+
+  journalTranscript.innerHTML =
+    '<span class="journal-placeholder">Interview mode — listen for each question, ' +
+    'then press the mic button and speak your answer.</span>';
+  journalSegCount.textContent = `0 of up to ${MAX_INTERVIEW_QUESTIONS} questions`;
+
+  const question = await _generateNextQuestion(callLLMFn, systemPrompt);
+  if (!question || !question.trim()) {
+    interviewMode = false;
+    journalInterviewerBtn?.classList.remove('hidden');
+    return;
+  }
+
+  _pendingQuestion = question.trim();
+  _renderInterviewTranscript();
+  speakFn(_pendingQuestion, () => {});
+}
+
+/**
+ * Handle a spoken answer during an active interview session.
+ * Records the answer, generates the next question (or wraps up when done).
+ */
+export async function handleInterviewAnswer(text, callLLMFn, speakFn, systemPrompt) {
+  if (!_pendingQuestion) return;
+
+  _interviewPairs.push({ q: _pendingQuestion, a: text.trim() });
+  _pendingQuestion  = null;
+  _interviewQACount++;
+  journalSegCount.textContent =
+    `${_interviewQACount} of up to ${MAX_INTERVIEW_QUESTIONS} questions answered`;
+  _renderInterviewTranscript();
+
+  if (_interviewQACount >= MAX_INTERVIEW_QUESTIONS) {
+    interviewMode = false;
+    _renderInterviewTranscript(true);
+    speakFn("That's all the questions. Say submit or press SUBMIT to save your entry.", () => {});
+    return;
+  }
+
+  const nextQ = await _generateNextQuestion(callLLMFn, systemPrompt);
+  if (!nextQ || !nextQ.trim() || nextQ.trim().toUpperCase() === 'DONE') {
+    interviewMode = false;
+    _renderInterviewTranscript(true);
+    speakFn("That covers everything. Say submit or press SUBMIT when you're ready to save.", () => {});
+    return;
+  }
+
+  _pendingQuestion = nextQ.trim();
+  _renderInterviewTranscript();
+  speakFn(_pendingQuestion, () => {});
 }
 
 // ── Submit ─────────────────────────────────────────────────────────────────────
@@ -167,9 +246,13 @@ export function journalHasSegments() {
  * @returns {boolean} true if submitted, false if no segments.
  */
 export async function submitJournalEntry(callLLMFn, systemPrompt) {
-  if (!_segments.length) return false;
+  if (!_segments.length && !_interviewPairs.length) return false;
 
-  const rawTranscript = _segments.join('\n\n');
+  const rawTranscript = _interviewPairs.length > 0
+    ? 'INTERVIEW SESSION:\n\n' + _interviewPairs.map((p, i) =>
+        `Q${i + 1}: ${p.q}\nA: ${p.a}`
+      ).join('\n\n')
+    : _segments.join('\n\n');
   const now = new Date();
   const dateLine = now.toLocaleDateString('en-US', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
@@ -262,12 +345,17 @@ export async function confirmJournalEntry() {
  * Discard the pending summary and restart dictation from scratch.
  */
 export function rerecordJournalEntry() {
-  _segments    = [];
-  _pendingSave = null;
-  journalMode  = true;   // back to dictation mode
+  _segments         = [];
+  _interviewPairs   = [];
+  _pendingQuestion  = null;
+  _interviewQACount = 0;
+  interviewMode     = false;
+  _pendingSave      = null;
+  journalMode       = true;
+  journalInterviewerBtn?.classList.remove('hidden');
   _showView('dictation');
   journalTranscript.innerHTML =
-    '<span class="journal-placeholder">Re-recording. Speak new segments and press SUBMIT when done.</span>';
+    '<span class="journal-placeholder">Re-recording. Speak segments or use INTERVIEWER. Press SUBMIT when done.</span>';
   journalSegCount.textContent = '0 segments';
 }
 
@@ -277,9 +365,13 @@ export function rerecordJournalEntry() {
  * Fully exit journal mode: hides panel, resets all state, removes CSS class.
  */
 export function exitJournalMode() {
-  journalMode  = false;
-  _segments    = [];
-  _pendingSave = null;
+  journalMode       = false;
+  interviewMode     = false;
+  _segments         = [];
+  _interviewPairs   = [];
+  _pendingQuestion  = null;
+  _interviewQACount = 0;
+  _pendingSave      = null;
   journalPanel.classList.add('hidden');
   document.getElementById('starling')?.classList.remove('journal-mode');
 }
@@ -342,16 +434,96 @@ export async function handleJournalRead(trigger) {
 /**
  * Wire all journal panel buttons. Call once after DOM is ready (bottom of app.js).
  */
-export function wireJournalButtons({ onSubmit, onConfirm, onRerecord, onDiscard, onEntriesClose }) {
-  journalSubmitBtn?.addEventListener('click',    onSubmit);
-  journalDiscardBtn?.addEventListener('click',   onDiscard);
-  journalConfirmBtn?.addEventListener('click',   onConfirm);
-  journalRerecordBtn?.addEventListener('click',  onRerecord);
-  journalDiscardBtn2?.addEventListener('click',  onDiscard);
-  journalEntriesClose?.addEventListener('click', onEntriesClose);
+export function wireJournalButtons({ onSubmit, onConfirm, onRerecord, onDiscard, onEntriesClose, onInterviewer }) {
+  journalSubmitBtn?.addEventListener('click',      onSubmit);
+  journalDiscardBtn?.addEventListener('click',     onDiscard);
+  journalConfirmBtn?.addEventListener('click',     onConfirm);
+  journalRerecordBtn?.addEventListener('click',    onRerecord);
+  journalDiscardBtn2?.addEventListener('click',    onDiscard);
+  journalEntriesClose?.addEventListener('click',   onEntriesClose);
+  journalInterviewerBtn?.addEventListener('click', onInterviewer);
 }
 
 // ── Private helpers ────────────────────────────────────────────────────────────
+
+async function _generateNextQuestion(callLLMFn, systemPrompt) {
+  const interviewSystemPrompt =
+    `You are a warm, curious personal journal interviewer. ` +
+    `Your job is to build a COMPLETE picture of the person's day by covering many different areas — ` +
+    `never dwelling on a single topic.\n\n` +
+    `DOMAINS TO WORK THROUGH (cover each before revisiting any):\n` +
+    `  1. Food & drink — what they ate and drank throughout the day\n` +
+    `  2. Physical & emotional state — energy, mood, any illness or discomfort\n` +
+    `  3. Work or tasks — what they worked on, completed, or struggled with\n` +
+    `  4. People — who they talked to, met, or spent time with\n` +
+    `  5. Movement or exercise — any physical activity\n` +
+    `  6. Highlights or low points — anything that went especially well or badly\n` +
+    `  7. Plans or decisions — anything decided, planned, or left unresolved\n\n` +
+    `STRICT RULES — follow these exactly:\n` +
+    `  - After each answer, move to a DIFFERENT domain. Do not ask a follow-up on the same topic unless the person gave an unsolicited rich answer that clearly invites one.\n` +
+    `  - If the person says anything was uneventful, not significant, brief, or unimportant, ACCEPT it immediately and move to a completely different domain. Never probe further on something they have already dismissed.\n` +
+    `  - Probe for specifics (exact foods, exact feelings, names, times, quantities) ONLY on topics the person actively engages with and expands on.\n` +
+    `  - Each new question must address a domain not yet meaningfully covered.\n\n` +
+    `This is question ${_interviewQACount + 1} of up to ${MAX_INTERVIEW_QUESTIONS}.\n` +
+    (_interviewQACount >= MIN_INTERVIEW_QUESTIONS
+      ? `If you have gathered at least one substantive answer across three or more different domains, respond with exactly the single word DONE. Otherwise ask one question on the most important uncovered domain.\n`
+      : '') +
+    `Return ONLY the question text (or DONE). No preamble, no quotation marks.`;
+
+  const priorMessages = [
+    { role: 'system', content: systemPrompt },
+    { role: 'system', content: interviewSystemPrompt },
+    ..._interviewPairs.flatMap(({ q, a }) => [
+      { role: 'assistant', content: q },
+      { role: 'user',      content: a },
+    ]),
+  ];
+
+  const userMsg = _interviewPairs.length === 0
+    ? "Start the interview. Ask your opening question about the person's day."
+    : 'Continue the interview with your next follow-up question.';
+
+  return await callLLMFn(userMsg, priorMessages);
+}
+
+function _renderInterviewTranscript(showSubmitHint = false) {
+  journalTranscript.innerHTML = '';
+
+  _interviewPairs.forEach(({ q, a }) => {
+    const qEl = document.createElement('div');
+    qEl.style.cssText = 'margin-bottom:3px;';
+    qEl.innerHTML =
+      `<span style="color:rgba(180,160,255,0.65);font-size:0.62em;letter-spacing:0.06em;margin-right:5px;">Q</span>` +
+      `<span style="color:#999;">${_esc(q)}</span>`;
+    journalTranscript.appendChild(qEl);
+
+    const aEl = document.createElement('div');
+    aEl.style.cssText = 'margin-bottom:9px;padding-left:14px;';
+    aEl.innerHTML =
+      `<span style="color:rgba(120,220,160,0.65);font-size:0.62em;letter-spacing:0.06em;margin-right:5px;">A</span>` +
+      `<span style="color:#ccc;">${_esc(a)}</span>`;
+    journalTranscript.appendChild(aEl);
+  });
+
+  if (_pendingQuestion) {
+    const pEl = document.createElement('div');
+    pEl.style.cssText = 'margin-bottom:3px;';
+    pEl.innerHTML =
+      `<span style="color:rgba(180,160,255,0.65);font-size:0.62em;letter-spacing:0.06em;margin-right:5px;">Q</span>` +
+      `<span style="color:#ddd;">${_esc(_pendingQuestion)}</span>`;
+    journalTranscript.appendChild(pEl);
+  }
+
+  if (showSubmitHint) {
+    const hint = document.createElement('div');
+    hint.style.cssText =
+      'margin-top:10px;color:rgba(180,160,255,0.45);font-size:0.62em;letter-spacing:0.06em;font-style:italic;';
+    hint.textContent = 'Interview complete — say "submit" or press SUBMIT to save.';
+    journalTranscript.appendChild(hint);
+  }
+
+  journalTranscript.scrollTop = journalTranscript.scrollHeight;
+}
 
 function _showView(which) {
   vDictation.classList.toggle('hidden', which !== 'dictation');

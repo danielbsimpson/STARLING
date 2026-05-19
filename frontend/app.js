@@ -16,6 +16,7 @@ import {
 } from './ideas-panel.js';
 import {
   journalMode,
+  interviewMode,
   detectJournalStartTrigger,
   detectJournalSubmit,
   detectJournalReadTrigger,
@@ -23,6 +24,8 @@ import {
   exitJournalMode,
   appendJournalSegment,
   journalHasSegments,
+  enterInterviewMode,
+  handleInterviewAnswer,
   submitJournalEntry,
   confirmJournalEntry,
   rerecordJournalEntry,
@@ -1375,6 +1378,11 @@ async function _routeInput(text) {
       _pendingJournalStatusTxt = statusTxt;
       await submitJournalEntry(_callLLMSilently, SYSTEM_PROMPT);
       setState('idle');
+    } else if (interviewMode) {
+      // Mic press during interview = answer to the current question
+      setState('thinking');
+      await handleInterviewAnswer(text, _callLLMSilently, enqueueSpeak, SYSTEM_PROMPT);
+      setState('idle');
     } else {
       appendJournalSegment(text);
     }
@@ -1861,6 +1869,11 @@ wireJournalButtons({
   },
   onEntriesClose: () => {
     exitJournalMode();
+  },
+  onInterviewer: async () => {
+    setState('thinking');
+    await enterInterviewMode(_callLLMSilently, enqueueSpeak, SYSTEM_PROMPT);
+    setState('idle');
   },
 });
 const { txt: _greetingTxt } = appendMessage('assistant', 'INITIALISING…');
