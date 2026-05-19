@@ -2242,6 +2242,312 @@ a.news-story-source-title:hover {
   margin-left: auto;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   JOURNAL PANEL
+   ─────────────────────────────────────────────────────────────────────────
+   Side-column expansion pattern identical to news-mode / mkt-mode.
+   Uses a violet accent: rgba(180, 160, 255, …)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Journal panel base elements ─────────────────────────────────────────── */
+
+.journal-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  box-sizing: border-box;
+  color: #ccc;
+  font-family: 'Courier New', monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.journal-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 8px;
+}
+
+.journal-view.hidden {
+  display: none;
+}
+
+.journal-header {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 4px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(180, 160, 255, 0.15);
+}
+
+.journal-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.journal-title {
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  color: rgba(180, 160, 255, 0.85);
+}
+
+.journal-timestamp {
+  font-size: 0.6rem;
+  color: #555;
+  letter-spacing: 0.08em;
+}
+
+.journal-review-hint {
+  font-size: 0.58rem;
+  color: #555;
+  letter-spacing: 0.03em;
+}
+
+.journal-transcript-box,
+.journal-summary-box {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 4px;
+}
+
+.journal-transcript-label {
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  color: #555;
+}
+
+.journal-transcript,
+.journal-summary {
+  flex: 1;
+  overflow-y: auto;
+  line-height: 1.55;
+  color: #bbb;
+  font-size: 0.7rem;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(180, 160, 255, 0.2) transparent;
+}
+
+.journal-transcript::-webkit-scrollbar,
+.journal-summary::-webkit-scrollbar { width: 3px; }
+.journal-transcript::-webkit-scrollbar-thumb,
+.journal-summary::-webkit-scrollbar-thumb { background: rgba(180, 160, 255, 0.2); border-radius: 2px; }
+
+.journal-placeholder {
+  color: #444;
+  font-style: italic;
+  font-size: 0.68rem;
+}
+
+.journal-segment-count {
+  font-size: 0.6rem;
+  color: rgba(180, 160, 255, 0.5);
+  letter-spacing: 0.07em;
+  text-align: right;
+}
+
+.journal-tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 18px;
+}
+
+.journal-tag {
+  font-size: 0.58rem;
+  letter-spacing: 0.06em;
+  color: rgba(180, 160, 255, 0.8);
+  border: 1px solid rgba(180, 160, 255, 0.25);
+  border-radius: 2px;
+  padding: 1px 5px;
+  white-space: nowrap;
+}
+
+.journal-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+
+.journal-btn {
+  font-family: 'Courier New', monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  padding: 5px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: transparent;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.journal-btn-submit {
+  color: rgba(180, 160, 255, 0.9);
+  border-color: rgba(180, 160, 255, 0.4);
+}
+.journal-btn-submit:hover {
+  background: rgba(180, 160, 255, 0.12);
+}
+
+.journal-btn-confirm {
+  color: rgba(120, 220, 160, 0.9);
+  border-color: rgba(120, 220, 160, 0.35);
+}
+.journal-btn-confirm:hover {
+  background: rgba(120, 220, 160, 0.1);
+}
+
+.journal-btn-rerecord {
+  color: rgba(220, 180, 80, 0.9);
+  border-color: rgba(220, 180, 80, 0.3);
+}
+.journal-btn-rerecord:hover {
+  background: rgba(220, 180, 80, 0.1);
+}
+
+.journal-btn-discard {
+  color: rgba(200, 100, 100, 0.8);
+  border-color: rgba(200, 100, 100, 0.2);
+}
+.journal-btn-discard:hover {
+  background: rgba(200, 100, 100, 0.08);
+}
+
+/* ── Entries list ────────────────────────────────────────────────────────── */
+
+.journal-entries-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(180, 160, 255, 0.2) transparent;
+}
+.journal-entries-list::-webkit-scrollbar { width: 3px; }
+.journal-entries-list::-webkit-scrollbar-thumb { background: rgba(180, 160, 255, 0.2); border-radius: 2px; }
+
+.journal-entry-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid rgba(180, 160, 255, 0.1);
+  border-radius: 4px;
+  background: rgba(180, 160, 255, 0.03);
+}
+
+.journal-entry-date {
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  color: rgba(180, 160, 255, 0.6);
+}
+
+.journal-entry-summary {
+  font-size: 0.68rem;
+  line-height: 1.5;
+  color: #bbb;
+}
+
+.journal-entry-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 2px;
+}
+
+.journal-close-btn {
+  background: transparent;
+  border: none;
+  color: #555;
+  font-size: 0.72rem;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  align-self: flex-start;
+  transition: color 0.2s;
+}
+.journal-close-btn:hover { color: #999; }
+
+/* ── Journal-mode layout (same pattern as news-mode / mkt-mode) ──────────── */
+
+.body-cols > .journal-panel {
+  flex-shrink: 0;
+  width: 0;
+  overflow: hidden;
+  opacity: 0;
+  margin-top: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  animation: none;
+  box-sizing: border-box;
+  transition: width 0.5s ease, opacity 0.4s ease 0.3s, padding 0.5s ease;
+}
+
+/* Keep display:flex so width transition works (overrides .hidden display:none) */
+.body-cols > .journal-panel.hidden {
+  display: flex;
+}
+
+/* Expand panel and restore visual styles in journal-mode */
+.starling.journal-mode .body-cols > .journal-panel {
+  width: 58%;
+  opacity: 1;
+  padding: 20px 20px 14px;
+  border: 1px solid rgba(180, 160, 255, 0.18);
+  border-radius: 10px;
+  background: rgba(180, 160, 255, 0.02);
+  margin-left: 1%;
+  overflow: hidden;
+}
+
+/* col-left shrinks to a narrow column */
+.starling.journal-mode .col-left {
+  width: 38%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: 16px;
+  transform: none;
+  overflow: hidden;
+}
+
+.starling.journal-mode .col-left .ring-section {
+  width: auto;
+}
+
+.starling.journal-mode .ring-section {
+  transform: translateY(-10px);
+  transition: transform 0.5s ease;
+}
+
+.starling.journal-mode .col-left .chat-panel {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  max-height: none;
+  opacity: 0.85;
+}
+
+.starling.journal-mode .col-left .msg {
+  font-size: 10px;
+  line-height: 1.45;
+  padding: 4px 0;
+}
+
 .mkt-detail-price {
   font-family: 'Share Tech Mono', monospace;
   font-size: clamp(0.85rem, 1.4vw, 1rem);
@@ -2358,5 +2664,197 @@ a.news-story-source-title:hover {
 .starling.mkt-mode .body-cols > .mkt-panel .mkt-view {
   flex: 1;
   min-height: 0;
+}
+
+/* ── Ideas Panel ─────────────────────────────────────────────────────────────── */
+
+.ideas-panel {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 14px 20px;
+  margin-top: 12px;
+  animation: weatherFadeIn 0.3s ease;
+}
+
+.ideas-panel.hidden { display: none; }
+
+/* Sub-view toggling */
+.ideas-view        { display: flex; flex-direction: column; gap: 10px; }
+.ideas-view.hidden { display: none; }
+
+/* Ideas mode — warm amber accent border */
+#starling.ideas-mode .ideas-panel {
+  border-color: rgba(255, 210, 100, 0.25);
+}
+
+/* Header */
+.ideas-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 8px;
+}
+
+.ideas-title {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: clamp(0.72rem, 1.3vw, 0.9rem);
+  color: #e0e0e0;
+  letter-spacing: 0.14em;
+}
+
+.ideas-hint {
+  font-size: 0.6rem;
+  color: #555;
+  letter-spacing: 0.08em;
+}
+
+/* Capture indicator */
+.ideas-capture-indicator {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+/* Pulsing amber dot — animates while waiting for input */
+.ideas-pulse {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255, 210, 100, 0.7);
+  animation: ideasPulse 1.4s ease infinite;
+  flex-shrink: 0;
+}
+
+@keyframes ideasPulse {
+  0%, 100% { opacity: 0.9; transform: scale(1);   }
+  50%       { opacity: 0.3; transform: scale(0.6); }
+}
+
+.ideas-waiting-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.68rem;
+  color: #888;
+  letter-spacing: 0.12em;
+}
+
+/* Cancel / close buttons */
+.ideas-cancel-btn,
+.ideas-close-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 5px;
+  color: #555;
+  cursor: pointer;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  padding: 4px 10px;
+  align-self: flex-start;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.ideas-cancel-btn:hover,
+.ideas-close-btn:hover {
+  color: #ff8888;
+  border-color: rgba(255, 100, 100, 0.3);
+}
+
+/* Ideas list */
+.ideas-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 300px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.1) transparent;
+}
+
+.idea-card {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  align-items: start;
+  gap: 8px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  transition: background 0.12s;
+}
+
+.idea-card:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.idea-index {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.62rem;
+  color: #444;
+  padding-top: 2px;
+  text-align: right;
+}
+
+.idea-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.idea-title {
+  font-size: 0.8rem;
+  color: #ddd;
+  line-height: 1.3;
+}
+
+.idea-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.idea-date {
+  font-size: 0.58rem;
+  color: #444;
+  letter-spacing: 0.06em;
+}
+
+.idea-tag {
+  background: rgba(255, 210, 100, 0.07);
+  border: 1px solid rgba(255, 210, 100, 0.18);
+  border-radius: 3px;
+  color: #c8a050;
+  font-size: 0.55rem;
+  letter-spacing: 0.07em;
+  padding: 1px 6px;
+}
+
+.idea-delete-btn {
+  background: transparent;
+  border: none;
+  color: #333;
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 2px 4px;
+  transition: color 0.15s;
+  align-self: start;
+}
+
+.idea-delete-btn:hover { color: #ff8888; }
+
+/* Footer count */
+.ideas-list-footer {
+  border-top: 1px solid rgba(255,255,255,0.05);
+  padding-top: 6px;
+}
+
+.ideas-count {
+  font-size: 0.6rem;
+  color: #444;
+  letter-spacing: 0.08em;
 }
 

@@ -47,6 +47,8 @@ from weather import router as weather_router
 from news import router as news_router
 from stocks import router as stocks_router
 from browser import router as browser_router
+from ideas_routes import router as ideas_router
+from journal_routes import router as journal_router
 from rag import ingest as _rag_ingest, get_status as _rag_get_status, INPUT_FOLDER as _RAG_INPUT_FOLDER
 
 app.include_router(stt_router)
@@ -56,6 +58,8 @@ app.include_router(weather_router)
 app.include_router(news_router)
 app.include_router(stocks_router)
 app.include_router(browser_router, prefix='/api')
+app.include_router(ideas_router)
+app.include_router(journal_router)
 
 
 @app.get("/health")

@@ -19,7 +19,7 @@ See [`TRIGGER_PHRASES.md`](./TRIGGER_PHRASES.md) for the full voice command refe
 | 5 | Stocks & Crypto | [`markdown/STOCKS.md`](../markdown/STOCKS.md) | yfinance (unofficial) | ✅ Done |
 | 6 | Wake Word & Interrupt | [`markdown/WAKE_WORD.md`](../markdown/WAKE_WORD.md) | None | 🔲 Planned |
 | 7 | In-UI Browser Panel | [`markdown/WEBCALL.md`](../markdown/WEBCALL.md) | None | ✅ Done |
-| 8 | Ideas Tracker | [`markdown/IDEAS_TRACKER.md`](../markdown/IDEAS_TRACKER.md) | Local JSON file | 🔲 Planned |
+| 8 | Ideas Vault | [`markdown/IDEAS_TRACKER.md`](../markdown/IDEAS_TRACKER.md) | Local JSON file | ✅ Done |
 | 9 | Voice Journal | [`markdown/JOURNAL.md`](../markdown/JOURNAL.md) | Local JSON files | 🔲 Planned |
 | 10 | Wikipedia RAG | [`markdown/WIKIPEDIA.md`](../markdown/WIKIPEDIA.md) | FAISS + embeddings | 🔲 Planned |
 | 11 | Google Calendar | [`markdown/CALENDAR.md`](../markdown/CALENDAR.md) | Google Calendar API (OAuth2) | 🔲 Planned |
@@ -40,11 +40,12 @@ reference.
 | 3 | Timer | Checked before Time to avoid "timer" matching time patterns |
 | 4 | Date | Checked before Time — date phrases are more specific |
 | 5 | Time | |
-| 6 | Weather | |
-| 7 | Market / Stocks / Crypto | More specific domain vocabulary, checked before News |
-| 8 | News | |
-| 9 | Browser / Web Panel | Wikipedia lookups, open URL, or DuckDuckGo search |
-| 10 | LLM fallback | Anything unmatched |
+| 6 | Ideas Vault | Both "idea/ideas" and "vault" must appear — very low false-positive rate |
+| 7 | Weather | |
+| 8 | Market / Stocks / Crypto | More specific domain vocabulary, checked before News |
+| 9 | News | |
+| 10 | Browser / Web Panel | Wikipedia lookups, open URL, or DuckDuckGo search |
+| 11 | LLM fallback | Anything unmatched |
 
 ---
 
@@ -163,6 +164,27 @@ Implementation guide: [`markdown/complete/NEWS.md`](../markdown/complete/NEWS.md
 
 ---
 
+## Ideas Vault
+
+Captures, lists, searches, and manages ideas stored to a local JSON file. All patterns
+require **both** `idea`/`ideas` **and** `vault` to appear in the phrase.
+
+**Capture triggers:**  
+`"store an idea in the vault"` · `"add an idea to the vault"` · `"capture for the ideas vault"` · `"save to the ideas vault"`
+
+**List triggers:**  
+`"open ideas vault"` · `"show the ideas vault"` · `"what's in the ideas vault"`
+
+**Search triggers:**  
+`"search the ideas vault for [topic]"` · `"find [topic] in the ideas vault"`
+
+**Discard / clear triggers:**  
+`"discard the last idea from the vault"` · `"clear the ideas vault"` · `"delete all ideas from the vault"`
+
+Implementation guide: [`markdown/IDEAS_TRACKER.md`](../markdown/IDEAS_TRACKER.md)
+
+---
+
 ## Stocks & Crypto
 
 Opens a live market data panel powered by Yahoo Finance (`yfinance`). Displays price,
@@ -217,7 +239,6 @@ Implementation guide: [`markdown/WEBCALL.md`](../markdown/WEBCALL.md)
 | Tool | Guide | Notes |
 |------|-------|-------|
 | Wake Word & Interrupt | [`WAKE_WORD.md`](../markdown/WAKE_WORD.md) | Passive listener; say "Hey Starling" to activate without pressing mic |
-| Ideas Tracker | [`IDEAS_TRACKER.md`](../markdown/IDEAS_TRACKER.md) | Voice capture and full-text search of ideas stored to local JSON |
 | Voice Journal | [`JOURNAL.md`](../markdown/JOURNAL.md) | Multi-turn voice journaling with search and playback |
 | Wikipedia RAG | [`WIKIPEDIA.md`](../markdown/WIKIPEDIA.md) | Fetch, chunk, and query Wikipedia articles via FAISS + embeddings |
 | Google Calendar | [`CALENDAR.md`](../markdown/CALENDAR.md) | Read today's / week's events via Google Calendar OAuth2 |

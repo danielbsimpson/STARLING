@@ -73,6 +73,32 @@
             </div>
             <div class="timer-list" id="timer-list"></div>
           </div>
+          <!-- Ideas Panel — hidden until capture or list mode is active -->
+          <div class="ideas-panel hidden" id="ideas-panel">
+            <!-- Capture prompt — shown while awaiting the idea mic press -->
+            <div class="ideas-view" id="ideas-capture-view">
+              <div class="ideas-header">
+                <div class="ideas-title">IDEA CAPTURE</div>
+                <div class="ideas-hint">Press mic and speak your idea</div>
+              </div>
+              <div class="ideas-capture-indicator">
+                <div class="ideas-pulse" id="ideas-pulse"></div>
+                <span class="ideas-waiting-label" id="ideas-waiting-label">WAITING FOR INPUT</span>
+              </div>
+              <button class="ideas-cancel-btn" id="ideas-cancel-btn">CANCEL</button>
+            </div>
+            <!-- List view — shown when reading back ideas -->
+            <div class="ideas-view hidden" id="ideas-list-view">
+              <div class="ideas-header">
+                <div class="ideas-title" id="ideas-list-title">MY IDEAS</div>
+                <button class="ideas-close-btn" id="ideas-close-btn">✕</button>
+              </div>
+              <div class="ideas-list" id="ideas-list"></div>
+              <div class="ideas-list-footer">
+                <span class="ideas-count" id="ideas-count">—</span>
+              </div>
+            </div>
+          </div>
           <div class="chat-inner" id="chat-inner"></div>
         </div>
       </div>
@@ -333,6 +359,64 @@
         </div><!-- /mkt-detail -->
 
       </div><!-- /mkt-panel -->
+
+      <!-- Journal Panel — zero-width in normal mode, expands in journal-mode -->
+      <div class="journal-panel hidden" id="journal-panel">
+
+        <!-- ── Dictation view ── -->
+        <div class="journal-view" id="journal-dictation-view">
+          <div class="journal-header">
+            <div class="journal-header-left">
+              <div class="journal-title">JOURNAL ENTRY</div>
+              <div class="journal-timestamp" id="journal-timestamp">—</div>
+            </div>
+          </div>
+          <div class="journal-transcript-box">
+            <div class="journal-transcript-label">TRANSCRIPT</div>
+            <div class="journal-transcript" id="journal-transcript">
+              <span class="journal-placeholder">Start speaking. Each mic press adds a new segment.
+Press SUBMIT when finished dictating.</span>
+            </div>
+          </div>
+          <div class="journal-segment-count" id="journal-segment-count">0 segments</div>
+          <div class="journal-actions">
+            <button class="journal-btn journal-btn-submit" id="journal-submit-btn">SUBMIT ↗</button>
+            <button class="journal-btn journal-btn-discard" id="journal-discard-btn">DISCARD ✕</button>
+          </div>
+        </div>
+
+        <!-- ── Review view — shown after LLM summarises ── -->
+        <div class="journal-view hidden" id="journal-review-view">
+          <div class="journal-header">
+            <div class="journal-header-left">
+              <div class="journal-title">REVIEW SUMMARY</div>
+              <div class="journal-review-hint">Confirm to save · Re-record to start over · Discard to cancel</div>
+            </div>
+          </div>
+          <div class="journal-summary-box">
+            <div class="journal-transcript-label">SUMMARY</div>
+            <div class="journal-summary" id="journal-summary"></div>
+          </div>
+          <div class="journal-tags-row" id="journal-tags-row"></div>
+          <div class="journal-actions">
+            <button class="journal-btn journal-btn-confirm" id="journal-confirm-btn">CONFIRM ✓</button>
+            <button class="journal-btn journal-btn-rerecord" id="journal-rerecord-btn">RE-RECORD ↺</button>
+            <button class="journal-btn journal-btn-discard" id="journal-discard-btn-2">DISCARD ✕</button>
+          </div>
+        </div>
+
+        <!-- ── Entries view — shown when reading back past entries ── -->
+        <div class="journal-view hidden" id="journal-entries-view">
+          <div class="journal-header">
+            <div class="journal-header-left">
+              <div class="journal-title" id="journal-entries-title">RECENT ENTRIES</div>
+            </div>
+            <button class="journal-close-btn" id="journal-entries-close">✕</button>
+          </div>
+          <div class="journal-entries-list" id="journal-entries-list"></div>
+        </div>
+
+      </div><!-- /journal-panel -->
 
       <!-- Browser Panel — zero-width in normal mode, expands in browser-mode -->
       <div class="browser-panel" id="browser-panel">

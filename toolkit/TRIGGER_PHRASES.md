@@ -15,11 +15,12 @@ The first matching tool wins; unmatched input falls through to the LLM.
 | 4 | Timer | Checked before Time to avoid "timer" matching time patterns |
 | 5 | Date | Checked before Time — date phrases are more specific |
 | 6 | Time | |
-| 7 | Weather | |
-| 8 | Market / Stocks / Crypto | Checked before News — more specific domain vocabulary |
-| 9 | News | |
-| 10 | Browser — open | Wikipedia lookups, open URL, or web search |
-| 11 | LLM fallback | Anything unmatched |
+| 7 | Ideas Vault | Both "idea/ideas" **and** "vault" must appear — very low false-positive rate |
+| 8 | Weather | |
+| 9 | Market / Stocks / Crypto | Checked before News — more specific domain vocabulary |
+| 10 | News | |
+| 11 | Browser — open | Wikipedia lookups, open URL, or web search |
+| 12 | LLM fallback | Anything unmatched |
 
 ---
 
@@ -130,7 +131,79 @@ Returns the current local time spoken aloud.
 
 ---
 
-## 5 · Weather
+## 7 · Ideas Vault
+
+Captures, lists, searches, and manages ideas stored to a local JSON file.
+**Both `idea`/`ideas` and `vault` must appear in the phrase** — this two-word combination
+is highly specific and extremely unlikely to appear in normal conversation or in phrases
+that target other tools (e.g. "search Wikipedia for bank vaults" will not trigger).
+
+### Capture — enter single-press capture mode
+
+Speak a capture phrase → panel enters "WAITING FOR INPUT" state → press mic and speak the
+idea → LLM extracts a title and tags, then saves to the vault.
+
+| Example phrase |
+|----------------|
+| `open ideas vault` |
+| `store an idea in the vault` |
+| `store idea into the vault` |
+| `save to the ideas vault` |
+| `add an idea to the vault` |
+| `capture for the ideas vault` |
+| `capture this idea for the vault` |
+| `log an idea to the vault` |
+| `note an idea in the vault` |
+
+**Required:** both `idea` or `ideas` **and** `vault` must appear in the phrase.  
+**Trigger verb:** `store` · `save` · `add` · `log` · `capture` · `record` · `note`
+
+> **Note:** `open ideas vault` alone routes to **list** (see below), not capture mode.
+> Use a verb like `store` or `capture` to enter capture mode.
+
+### List / Open
+
+| Example phrase |
+|----------------|
+| `open ideas vault` |
+| `show ideas vault` · `show the ideas vault` |
+| `list ideas vault` · `list the ideas vault` |
+| `display ideas vault` · `view ideas vault` |
+| `what's in the ideas vault` · `what is in the ideas vault` |
+| `ideas vault` _(bare mention)_ |
+
+### Search
+
+The query is extracted from the phrase automatically.
+
+| Example phrase | Query resolved |
+|----------------|---------------|
+| `search the vault for machine learning` | machine learning |
+| `search the ideas vault for renewable energy` | renewable energy |
+| `find machine learning in the vault` | machine learning |
+| `look for project ideas in the vault` | project ideas |
+
+### Discard last
+
+| Example phrase |
+|----------------|
+| `discard the last idea from the vault` |
+| `delete the last idea from the vault` |
+| `remove the latest idea from the vault` |
+
+### Clear all
+
+| Example phrase |
+|----------------|
+| `clear the ideas vault` |
+| `empty the ideas vault` |
+| `wipe the ideas vault` |
+| `delete all ideas from the vault` |
+| `remove all ideas from the vault` |
+
+---
+
+## 8 · Weather
 
 Opens the weather panel for the current location or a named city.
 Optional location is extracted after `in` / `for` / `at` following `weather` or `forecast`.
@@ -155,7 +228,7 @@ Optional location is extracted after `in` / `for` / `at` following `weather` or 
 
 ---
 
-## 6 · Market / Stocks / Crypto
+## 8 · Market / Stocks / Crypto
 
 Opens the market dashboard. The detected intent selects a view filter.
 Returns a LLM-spoken briefing scoped to the filter.
@@ -197,7 +270,7 @@ Returns a LLM-spoken briefing scoped to the filter.
 
 ---
 
-## 7 · News
+## 9 · News
 
 Opens the news panel and delivers a spoken briefing. Defaults to world news.
 Saying a category keyword anywhere in the phrase selects that feed.
@@ -252,7 +325,7 @@ The category keyword maps to the feed as shown below.
 
 ---
 
-## 8 · Browser / Web Panel
+## 10 · Browser / Web Panel
 
 Opens an embedded browser panel (iframe) in the UI. The close phrase is checked at the
 highest priority whenever the panel is open. The open trigger fires last — after all other
@@ -310,6 +383,11 @@ Opens a DuckDuckGo plain-HTML search (iframe-friendly).
 
 | Ambiguous phrase | Routes to | Why |
 |-----------------|-----------|-----|
+| `store idea into the vault` | ✅ Ideas Vault — capture | Both "idea" and "vault" present; capture verb matches |
+| `store idea into the bank vault` | ✅ Ideas Vault — capture | "bank" is ignored; both "idea" and "vault" still present |
+| `search Wikipedia for bank vaults` | ✅ Browser | No "idea/ideas" — vault guard blocks Ideas Vault |
+| `I have a good idea` | ✅ LLM | No "vault" — vault guard blocks Ideas Vault |
+| `open ideas vault` | ✅ Ideas Vault — list | No capture verb; routes to list view |
 | `stock briefing` | ✅ Market | Market is checked before News |
 | `market briefing` | ✅ Market | Market patterns match before News |
 | `crypto briefing` | ✅ Market | Crypto patterns match `crypto` bare word |
@@ -346,3 +424,4 @@ frontend file. Add patterns to the appropriate array and update this document.
 | Market | `frontend/stocks-panel.js` | `detectMarketTrigger()` |
 | News | `frontend/news-panel.js` | `detectNewsTrigger()` |
 | Browser | `frontend/browser-panel.js` | `detectBrowserTrigger()` / `detectBrowserClose()` |
+| Ideas Vault | `frontend/ideas-panel.js` | `detectIdeaCaptureTrigger()` / `detectIdeaReadTrigger()` |

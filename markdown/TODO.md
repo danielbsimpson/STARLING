@@ -1049,16 +1049,16 @@ Single-press capture: trigger phrase opens panel, next mic press is the idea, LL
 a short title, saved to `memory/ideas.json`. Simpler than Journal - no multi-segment
 accumulation, no approval step.
 
-- [ ] Create `backend/ideas_routes.py` - `POST /ideas/add`, `GET /ideas`, `GET /ideas/search`, `DELETE /ideas/{id}`, `DELETE /ideas`
-- [ ] Register `ideas_router` in `backend/main.py`
-- [ ] Add `IDEAS_FILE`, `IDEAS_MAX_RETURN` to `.env`
-- [ ] Create `frontend/ideas-panel.js` - `detectIdeaCaptureTrigger()`, `detectIdeaReadTrigger()`, `enterIdeasMode()`, `exitIdeasMode()`, `processIdea()`, `handleIdeaRead()`
-- [ ] Import in `app.js`; add `ideasMode` check at position 2 in `onstop` intercept chain
-- [ ] Add capture + read trigger intercepts in `onstop` + `handleSend`
-- [ ] Add `exitIdeasMode()` to clear button handler
-- [ ] Add ideas panel HTML to `index.html` (capture view + list view)
-- [ ] Add ideas panel CSS (amber/gold accent)
-- [ ] Add `memory/ideas.json` to `.gitignore`
+- [x] Create `backend/ideas_routes.py` - `POST /ideas/add`, `GET /ideas`, `GET /ideas/search`, `DELETE /ideas/{id}`, `DELETE /ideas`
+- [x] Register `ideas_router` in `backend/main.py`
+- [x] Add `IDEAS_FILE`, `IDEAS_MAX_RETURN` to `.env`
+- [x] Create `frontend/ideas-panel.js` - `detectIdeaCaptureTrigger()`, `detectIdeaReadTrigger()`, `enterIdeasMode()`, `exitIdeasMode()`, `processIdea()`, `handleIdeaRead()`
+- [x] Import in `app.js`; add `ideasMode` check at position 1 in `_routeInput` intercept chain
+- [x] Add capture + read trigger intercepts in `_routeInput` (voice and text paths unified)
+- [x] Add `exitIdeasMode()` to `dismissAllToolPanels()` (clears on any panel dismiss / clear button)
+- [x] Add ideas panel HTML to `index.html` (capture view + list view)
+- [x] Add ideas panel CSS (amber/gold accent)
+- [x] Add `memory/ideas.json` to `.gitignore`
 - [ ] Test capture: "Store my idea" → panel appears → speak idea → "Idea stored: [title]"
 - [ ] Test read-back: "Show my ideas" → numbered card list + LLM reads titles
 - [ ] Test discard: "Discard my last idea" → most recent removed + spoken confirmation

@@ -5,6 +5,30 @@ import { detectWeatherTrigger, openWeatherPanel, closeWeatherPanel, initWeatherP
 import { detectNewsTrigger, openNewsPanel, closeNewsPanel } from './news-panel.js';
 import { detectMarketTrigger, openMarketPanel, closeMarketPanel, setSendToOllama as _setMktSendToOllama, setOnClose as _setMktOnClose } from './stocks-panel.js';
 import { detectBrowserTrigger, detectBrowserClose, isBrowserPanelOpen, openBrowserPanel, closeBrowserPanel, getBrowserPageText, ensureBrowserPageText } from './browser-panel.js';
+import {
+  ideasMode,
+  detectIdeaCaptureTrigger,
+  detectIdeaReadTrigger,
+  enterIdeasMode,
+  exitIdeasMode,
+  processIdea,
+  handleIdeaRead,
+} from './ideas-panel.js';
+import {
+  journalMode,
+  detectJournalStartTrigger,
+  detectJournalSubmit,
+  detectJournalReadTrigger,
+  enterJournalMode,
+  exitJournalMode,
+  appendJournalSegment,
+  journalHasSegments,
+  submitJournalEntry,
+  confirmJournalEntry,
+  rerecordJournalEntry,
+  handleJournalRead,
+  wireJournalButtons,
+} from './journal-panel.js';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const MODEL = localStorage.getItem('starling_model') || 'llama3.2:3b';
@@ -283,6 +307,10 @@ const SYSTEM_PROMPT =
 // ── Conversation state ────────────────────────────────────────────────────────
 let conversationHistory = [{ role: 'system', content: SYSTEM_PROMPT }];
 
+// Reference to the assistant message <p> element showing journal status text.
+// Kept here so confirm/discard/rerecord callbacks can update the same bubble.
+let _pendingJournalStatusTxt = null;
+
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const starlingEl  = document.getElementById('starling');
 const chatInner   = document.getElementById('chat-inner');
@@ -538,6 +566,8 @@ function dismissAllToolPanels() {
   closeWeatherPanel();
   exitNewsMode();
   exitMarketMode();
+  exitIdeasMode();
+  exitJournalMode();
 }
 
 /**
@@ -935,6 +965,32 @@ function appendMessage(role, content) {
   return { wrap, txt };
 }
 
+// ── Silent LLM helper (no chat bubble, no TTS) ───────────────────────────────
+// Used for ephemeral backend-only calls, e.g. journal summarisation.
+async function _callLLMSilently(prompt, systemMessages) {
+  const messages = [...systemMessages, { role: 'user', content: prompt }];
+  try {
+    const res = await fetch(`${BACKEND_BASE}/chat/`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: MODEL, messages }),
+    });
+    if (!res.ok) return '';
+    const reader  = res.body.getReader();
+    const decoder = new TextDecoder();
+    let full = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      for (const line of decoder.decode(value, { stream: true }).split('\n')) {
+        if (!line.trim()) continue;
+        try { full += JSON.parse(line)?.message?.content ?? ''; } catch { /* skip */ }
+      }
+    }
+    return full;
+  } catch { return ''; }
+}
+
 // ── Ollama streaming chat ─────────────────────────────────────────────────────
 async function sendToOllama(userText, options = {}) {
   const { ephemeralMessages = null, extraContext = null } = options;
@@ -1301,6 +1357,43 @@ function _speakBrowser(text) {
 // Handles all trigger intercepts; falls through to the LLM for unmatched input.
 // Called by both handleSend (text path) and mediaRecorder.onstop (voice path).
 async function _routeInput(text) {
+  // ── Journal dictation mode: next mic press = a new segment ─────────────
+  // Checked FIRST — while journalMode is active, consume all input here.
+  if (journalMode) {
+    if (detectJournalSubmit(text)) {
+      if (!journalHasSegments()) {
+        // No content yet — just acknowledge and stay in mode
+        const spoken = 'Nothing recorded yet. Speak your journal entry, then say submit.';
+        appendMessage('user', text);
+        const { txt } = appendMessage('assistant', spoken);
+        enqueueSpeak(spoken, () => { txt.textContent = spoken; });
+        return;
+      }
+      setState('thinking');
+      appendMessage('user', text);
+      const { txt: statusTxt } = appendMessage('assistant', 'Generating summary…');
+      _pendingJournalStatusTxt = statusTxt;
+      await submitJournalEntry(_callLLMSilently, SYSTEM_PROMPT);
+      setState('idle');
+    } else {
+      appendJournalSegment(text);
+    }
+    return;
+  }
+
+  // ── Ideas capture mode: next mic/text press = the idea ───────────────────
+  // Checked FIRST — while ideasMode is active, all input is consumed as an idea.
+  if (ideasMode) {
+    setState('thinking');
+    appendMessage('user', text);
+    const { spoken } = await processIdea(text, sendToOllama, SYSTEM_PROMPT);
+    const { txt } = appendMessage('assistant', spoken);
+    enqueueSpeak(spoken, () => { txt.textContent = spoken; });
+    setState('idle');
+    fetchSystemStatus();
+    return;
+  }
+
   dismissAllToolPanels();
 
   // ── Browser close phrase ────────────────────────────────────────────────────
@@ -1327,6 +1420,43 @@ async function _routeInput(text) {
     return;
   }
 
+  // ── Journal start trigger ─────────────────────────────────────────────────
+  if (detectJournalStartTrigger(text)) {
+    appendMessage('user', text);
+    enterJournalMode();
+    const spoken = 'Journal entry started. Speak your entry — each mic press adds a segment. Say submit when finished.';
+    const { txt } = appendMessage('assistant', spoken);
+    enqueueSpeak(spoken, () => { txt.textContent = spoken; });
+    return;
+  }
+
+  // ── Journal read / search trigger ────────────────────────────────────────
+  const _jrnlRead = detectJournalReadTrigger(text);
+  if (_jrnlRead) {
+    setState('thinking');
+    appendMessage('user', text);
+    const jrnlContext = await handleJournalRead(_jrnlRead);
+    if (jrnlContext) {
+      await sendToOllama(
+        'Based on the journal entries provided, give a concise spoken summary. ' +
+        'Speak naturally as if briefing the user on their own notes. Two to four sentences.',
+        {
+          ephemeralMessages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'system', content: jrnlContext },
+          ],
+        }
+      );
+    } else {
+      const spoken = 'Could not retrieve journal entries right now.';
+      const { txt } = appendMessage('assistant', spoken);
+      enqueueSpeak(spoken, () => { txt.textContent = spoken; });
+      setState('idle');
+    }
+    fetchSystemStatus();
+    return;
+  }
+
   // Timer checked before time to avoid 'timer' matching time patterns
   const _timerTrigger = detectTimerTrigger(text);
   if (_timerTrigger) {
@@ -1343,6 +1473,44 @@ async function _routeInput(text) {
   if (detectTimeTrigger(text)) {
     setState('idle');
     handleTimeQuery(text);
+    return;
+  }
+
+  // ── Ideas capture trigger — enter single-press capture mode ───────────────
+  if (detectIdeaCaptureTrigger(text)) {
+    appendMessage('user', text);
+    enterIdeasMode();
+    const spoken = 'Ready. Press the mic and speak your idea.';
+    const { txt } = appendMessage('assistant', spoken);
+    enqueueSpeak(spoken, () => { txt.textContent = spoken; });
+    return;
+  }
+
+  // ── Ideas read / management trigger ──────────────────────────────────────
+  const _ideaReadTrigger = detectIdeaReadTrigger(text);
+  if (_ideaReadTrigger) {
+    setState('thinking');
+    appendMessage('user', text);
+    const { spoken, llmContext } = await handleIdeaRead(
+      _ideaReadTrigger, sendToOllama, SYSTEM_PROMPT
+    );
+    if (llmContext) {
+      // Let the LLM read the ideas list aloud
+      await sendToOllama(
+        'Read out this list of ideas naturally. State the total count, then read each title clearly. Keep it concise.',
+        {
+          ephemeralMessages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'system', content: llmContext },
+          ],
+        }
+      );
+    } else if (spoken) {
+      const { txt } = appendMessage('assistant', spoken);
+      enqueueSpeak(spoken, () => { txt.textContent = spoken; });
+      setState('idle');
+    }
+    fetchSystemStatus();
     return;
   }
 
@@ -1508,7 +1676,8 @@ textInput.addEventListener('input', _dismissClockPanel);
 // ── Clear conversation ────────────────────────────────────────────────────────
 clearBtn.addEventListener('click', () => {
   clearAudioQueue();
-  dismissAllToolPanels();
+  dismissAllToolPanels();    // calls exitJournalMode() which resets journalMode
+  _pendingJournalStatusTxt = null;
   exitPresMode();
   conversationHistory = [{ role: 'system', content: SYSTEM_PROMPT }];
   chatInner.innerHTML = '';
@@ -1651,5 +1820,48 @@ fetchContextLimit();
 _loadManifest();  // Phase 4: load subject→image manifest for dynamic dossier images
 _setMktSendToOllama(sendToOllama);  // provide LLM callback to stocks panel briefing
 _setMktOnClose(exitMarketMode);     // close button returns to conversation mode
+wireJournalButtons({
+  onSubmit: async () => {
+    if (!journalHasSegments()) return;
+    setState('thinking');
+    const { txt: statusTxt } = appendMessage('assistant', 'Generating summary…');
+    _pendingJournalStatusTxt = statusTxt;
+    await submitJournalEntry(_callLLMSilently, SYSTEM_PROMPT);
+    setState('idle');
+  },
+  onConfirm: async () => {
+    const saved = await confirmJournalEntry();
+    const spoken = saved ? 'Journal entry saved.' : 'Could not save the entry. Please try again.';
+    if (_pendingJournalStatusTxt) {
+      _pendingJournalStatusTxt.textContent = spoken;
+      _pendingJournalStatusTxt = null;
+    } else {
+      const { txt } = appendMessage('assistant', spoken);
+      enqueueSpeak(spoken, () => { txt.textContent = spoken; });
+    }
+    enqueueSpeak(spoken, () => {});
+    setState('idle');
+  },
+  onRerecord: () => {
+    rerecordJournalEntry();
+    if (_pendingJournalStatusTxt) _pendingJournalStatusTxt = null;
+  },
+  onDiscard: () => {
+    exitJournalMode();
+    const spoken = 'Journal entry discarded.';
+    if (_pendingJournalStatusTxt) {
+      _pendingJournalStatusTxt.textContent = spoken;
+      _pendingJournalStatusTxt = null;
+    } else {
+      const { txt } = appendMessage('assistant', spoken);
+      enqueueSpeak(spoken, () => { txt.textContent = spoken; });
+    }
+    enqueueSpeak(spoken, () => {});
+    setState('idle');
+  },
+  onEntriesClose: () => {
+    exitJournalMode();
+  },
+});
 const { txt: _greetingTxt } = appendMessage('assistant', 'INITIALISING…');
 warmupModels(_greetingTxt);  // async — heats Kokoro + Whisper, then reveals greeting
