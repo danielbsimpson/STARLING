@@ -5,7 +5,7 @@
 # All commands assume the repo root as working directory.
 # ─────────────────────────────────────────────────────────────────────────────
 
-.PHONY: help install backend frontend llama test lint
+.PHONY: help install up down backend frontend llama test lint
 
 # Detect OS for venv activation path
 ifeq ($(OS),Windows_NT)
@@ -23,6 +23,8 @@ help:
 	@echo ""
 	@echo "  S.T.A.R.L.I.N.G. — available make targets"
 	@echo ""
+	@echo "  make up         Start everything (llama-server + FastAPI) — primary entry point"
+	@echo "  make down        Stop all running S.T.A.R.L.I.N.G. processes"
 	@echo "  make install    Create venv, install deps, download Kokoro models"
 	@echo "  make backend    Start FastAPI backend with hot-reload (port 8000)"
 	@echo "  make frontend   Serve frontend with live-server for hot-reload (port 8001)"
@@ -68,6 +70,15 @@ test:
 lint:
 	$(PIP) install --quiet ruff
 	$(PYTHON) -m ruff check backend/
+
+# ── Launcher (up / down) ─────────────────────────────────────────────────────
+# Starts llama-server + FastAPI backend as supervised subprocesses.
+# Streams combined output to stdout. Press Ctrl+C (or `make down`) to stop.
+up:
+	$(PYTHON) scripts/launch.py
+
+down:
+	$(PYTHON) scripts/stop.py
 
 # ── RAG / memory ──────────────────────────────────────────────────────────────
 .PHONY: rag-ingest rag-status rag-clear

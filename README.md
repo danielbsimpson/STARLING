@@ -214,8 +214,38 @@ python scripts/download_models.py
 # Copy and configure environment variables
 cp .env.example .env
 # Edit .env — set LLM_BACKEND=llama and configure LLAMA_SERVER_URL / LLAMA_MODEL
+```
 
-# Start llama-server (Windows)
+**Start everything with one command:**
+
+```bash
+make up        # starts llama-server + FastAPI backend, streams combined output
+```
+
+```bat
+start.bat      # Windows double-click alternative (same as make up)
+```
+
+To stop:
+
+```bash
+make down      # sends termination signals to both processes, removes PID file
+```
+
+```bat
+stop.bat       # Windows double-click alternative (same as make down)
+```
+
+> `make up` reads config from `.env` (falling back to the same defaults as
+> `start_llama_server.bat`). Press **Ctrl+C** in the terminal to stop both
+> processes at once.
+
+---
+
+**Manual start (two terminals — for iterating on the backend):**
+
+```bat
+# Terminal 1 — LLM
 .\scripts\start_llama_server.bat
 
 # In a second terminal: start the FastAPI backend (must run from backend/ directory)
@@ -246,13 +276,32 @@ Every other tool has its own equivalent guide in `markdown/`.
 
 ### Prerequisites
 - Virtual environment already created and dependencies installed (see **Quickstart → 3b** above)
-- `llama-server.exe` on your PATH or path set inside `scripts\start_llama_server.bat`
+- `llama-server.exe` path configured in `.env` or `scripts\start_llama_server.bat`
 
 ---
 
-### Step 1 — Start the LLM (Terminal 1)
+### One-command start (recommended)
 
-Open a PowerShell terminal in the repository root and run:
+```powershell
+make up
+# or: .\start.bat   (double-click in Explorer)
+```
+
+Both processes start in a single terminal. Combined output is streamed with
+`[llama]` / `[backend]` prefixes. Press **Ctrl+C** to shut down cleanly.
+
+To stop from a different terminal (or script):
+
+```powershell
+make down
+# or: .\stop.bat
+```
+
+---
+
+### Manual start (two terminals — useful when iterating on backend code)
+
+#### Terminal 1 — LLM
 
 ```powershell
 .\scripts\start_llama_server.bat
@@ -266,15 +315,11 @@ main: server is listening on http://127.0.0.1:8080
 
 Leave this terminal running.
 
----
-
----
-
-### Step 2 — Start the Backend + UI (Terminal 2)
-
-Open a **new** PowerShell terminal in the repository root and run:
+#### Terminal 2 — Backend
 
 ```powershell
+make backend
+# or manually:
 .venv\Scripts\activate
 cd backend
 uvicorn main:app --reload --port 8000
