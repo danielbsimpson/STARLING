@@ -6,6 +6,17 @@ import { detectNewsTrigger, openNewsPanel, closeNewsPanel } from './news-panel.j
 import { detectMarketTrigger, openMarketPanel, closeMarketPanel, setSendToOllama as _setMktSendToOllama, setOnClose as _setMktOnClose } from './stocks-panel.js';
 import { detectBrowserTrigger, detectBrowserClose, detectWikiSectionTrigger, isBrowserPanelOpen, openBrowserPanel, closeBrowserPanel, getBrowserPageText, ensureBrowserPageText, getBrowserPageUrl, getBrowserJsRendered } from './browser-panel.js';
 import {
+  wikiMode,
+  detectWikiTrigger,
+  detectWikiExitTrigger,
+  startWikiSession,
+  enterWikiMode,
+  exitWikiMode,
+  appendWikiMessage,
+  getWikiHistory,
+  addToWikiHistory,
+} from './wiki-panel.js';
+import {
   ideasMode,
   detectIdeaCaptureTrigger,
   detectIdeaReadTrigger,
@@ -571,6 +582,7 @@ function dismissAllToolPanels() {
   exitMarketMode();
   exitIdeasMode();
   exitJournalMode();
+  exitWikiMode();
 }
 
 /**
@@ -1148,6 +1160,119 @@ async function sendToOllama(userText, options = {}) {
   }
 }
 
+// ── Wikipedia article chat ─────────────────────────────────────────────────────
+/**
+ * Stream a wiki-chat response from /wiki/chat and update the wiki transcript.
+ * isFirstTurn=true means history=[] and the user message is NOT added to
+ * history (the backend greeting initialises the conversation).
+ */
+async function sendWikiChat(userText, isFirstTurn = false) {
+  const history = isFirstTurn ? [] : getWikiHistory();
+
+  const { wrap, txt } = appendWikiMessage('assistant', '');
+  wrap.classList.add('wiki-streaming');
+
+  const abortCtrl = new AbortController();
+  _currentAbortCtrl = abortCtrl;
+
+  try {
+    const res = await fetch(`${BACKEND_BASE}/wiki/chat`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ message: userText, history }),
+      signal:  abortCtrl.signal,
+    });
+    if (!res.ok) throw new Error(`Wiki chat ${res.status}`);
+
+    const wikiTranscript = document.getElementById('wiki-transcript');
+    const reader         = res.body.getReader();
+    const decoder        = new TextDecoder();
+    let full                = '';
+    let sentBuf             = '';
+    let anySentenceEnqueued = false;
+
+    const sentenceRe = /[^.?!]*(?<![0-9])[.?!](?!\.)["')\]]*(\s|$)/g;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      for (const line of decoder.decode(value, { stream: true }).split('\n')) {
+        if (!line.trim()) continue;
+        try {
+          const parsed = JSON.parse(line);
+          if (parsed?.metrics) { updateLlmMetrics(parsed.metrics); continue; }
+          const token = parsed?.message?.content ?? '';
+          if (!token) continue;
+
+          full    += token;
+          sentBuf += token;
+
+          if (ttsMode === 'off') {
+            txt.textContent          = full;
+            wikiTranscript.scrollTop = wikiTranscript.scrollHeight;
+          }
+
+          const flushSentence = (sentence) => {
+            const clean = _sanitiseForTTS(sentence);
+            if (!clean) return;
+            const snapshot = full;
+            const _txt = txt; const _tr = wikiTranscript;
+            enqueueSpeak(clean, (audio) => {
+              const dur = audio && Number.isFinite(audio.duration) && audio.duration > 0
+                ? audio.duration : null;
+              if (dur) { _streamTextInto(_txt, _tr, snapshot, dur); }
+              else     { _txt.textContent = snapshot; if (_tr) _tr.scrollTop = _tr.scrollHeight; }
+            });
+            anySentenceEnqueued = true;
+          };
+
+          sentenceRe.lastIndex = 0;
+          let lastEnd = 0;
+          let match;
+          while ((match = sentenceRe.exec(sentBuf)) !== null) {
+            flushSentence(sentBuf.slice(lastEnd, sentenceRe.lastIndex).trim());
+            lastEnd = sentenceRe.lastIndex;
+          }
+          sentBuf = sentBuf.slice(lastEnd);
+        } catch { /* partial JSON — skip */ }
+      }
+    }
+
+    // Flush any remainder that didn't end with punctuation
+    if (sentBuf.trim()) {
+      const clean = _sanitiseForTTS(sentBuf.trim());
+      if (clean) {
+        const snapshot = full;
+        const _txt = txt; const _tr = wikiTranscript;
+        enqueueSpeak(clean, (audio) => {
+          const dur = audio && Number.isFinite(audio.duration) && audio.duration > 0
+            ? audio.duration : null;
+          if (dur) { _streamTextInto(_txt, _tr, snapshot, dur); }
+          else     { _txt.textContent = snapshot; if (_tr) _tr.scrollTop = _tr.scrollHeight; }
+        });
+        anySentenceEnqueued = true;
+      }
+    }
+
+    wrap.classList.remove('wiki-streaming');
+
+    // Record to wiki history: initial query goes in for both turns so the LLM
+    // has full context on subsequent messages.
+    addToWikiHistory('user', userText);
+    addToWikiHistory('assistant', full);
+
+    if (ttsMode === 'off' || !anySentenceEnqueued) setState('idle');
+    return full;
+  } catch (err) {
+    wrap.classList.remove('wiki-streaming');
+    if (err.name === 'AbortError') { setState('idle'); return null; }
+    txt.textContent = `[Error: ${err.message}]`;
+    setState('error');
+    setTimeout(() => setState('idle'), 4000);
+    return null;
+  }
+}
+
 // ── Text-to-Speech ────────────────────────────────────────────────────────────
 // State: 'kokoro' | 'browser' | 'off'
 let ttsMode  = localStorage.getItem('starling_tts_mode') || 'kokoro';
@@ -1402,6 +1527,20 @@ async function _routeInput(text) {
     return;
   }
 
+  // ── Wikipedia article mode: route all input to wiki chat ─────────────────
+  if (wikiMode) {
+    if (detectWikiExitTrigger(text)) {
+      exitWikiMode();
+      setState('idle');
+      return;
+    }
+    appendWikiMessage('user', text);
+    setState('thinking');
+    await sendWikiChat(text, false);
+    fetchSystemStatus();
+    return;
+  }
+
   dismissAllToolPanels();
 
   // ── Browser close phrase ────────────────────────────────────────────────────
@@ -1425,6 +1564,28 @@ async function _routeInput(text) {
     closeBrowserPanel();
     enterPresMode(_triggerResult.subject);
     setState('idle');
+    return;
+  }
+
+  // ── Wikipedia search trigger ──────────────────────────────────────────────
+  const _wikiQuery = detectWikiTrigger(text);
+  if (_wikiQuery) {
+    closeBrowserPanel();
+    setState('thinking');
+    appendMessage('user', text);
+    try {
+      const session = await startWikiSession(_wikiQuery);
+      enterWikiMode(session.title);
+      await sendWikiChat(_wikiQuery, true);   // first turn — backend produces greeting
+    } catch (err) {
+      const errMsg = err.message.includes('No Wikipedia articles found')
+        ? 'The Wikipedia index has not been built yet. Run scripts/ingest_wikipedia.py first.'
+        : `Could not start Wikipedia session: ${err.message}`;
+      const { txt } = appendMessage('assistant', errMsg);
+      enqueueSpeak(errMsg, () => { txt.textContent = errMsg; });
+      setState('idle');
+    }
+    fetchSystemStatus();
     return;
   }
 
@@ -1877,6 +2038,12 @@ fetchContextLimit();
 _loadManifest();  // Phase 4: load subject→image manifest for dynamic dossier images
 _setMktSendToOllama(sendToOllama);  // provide LLM callback to stocks panel briefing
 _setMktOnClose(exitMarketMode);     // close button returns to conversation mode
+
+// ── Wikipedia close button ────────────────────────────────────────────────────
+document.getElementById('wiki-close-btn')?.addEventListener('click', () => {
+  exitWikiMode();
+  setState('idle');
+});
 wireJournalButtons({
   onSubmit: async () => {
     if (!journalHasSegments()) return;

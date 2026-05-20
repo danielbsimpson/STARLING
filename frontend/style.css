@@ -2886,3 +2886,147 @@ a.news-story-source-title:hover {
   letter-spacing: 0.08em;
 }
 
+/* ── Wiki-mode layout (mirrors news-mode / mkt-mode pattern) ─────────────── */
+.body-cols > .wiki-panel {
+  flex-shrink: 0;
+  width: 0;
+  overflow: hidden;
+  opacity: 0;
+  margin-top: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  animation: none;
+  box-sizing: border-box;
+  transition: width 0.5s ease, opacity 0.4s ease 0.3s, padding 0.5s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Keep the element in the flex flow even when 'hidden' class is present */
+.body-cols > .wiki-panel.hidden {
+  display: flex;
+}
+
+/* Expand panel and restore visual styles in wiki-mode */
+.starling.wiki-mode .body-cols > .wiki-panel {
+  width: 55%;
+  opacity: 1;
+  padding: 16px 16px 12px;
+  border: 1px solid rgba(100, 180, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  margin-left: 1%;
+  overflow: hidden;
+}
+
+/* col-left narrows to a vertical column */
+.starling.wiki-mode .col-left {
+  width: clamp(220px, 25%, 320px);
+  flex-direction: column;
+}
+.starling.wiki-mode .col-left .ring-section {
+  width: 100%;
+}
+
+/* ── Wiki panel internal layout ─────────────────────────────────────────── */
+.wiki-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(100, 180, 255, 0.1);
+  flex-shrink: 0;
+}
+
+.wiki-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  overflow: hidden;
+}
+
+.wiki-icon {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  color: rgba(100, 180, 255, 0.7);
+}
+
+.wiki-title {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  color: #aaccff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wiki-meta {
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.3);
+  padding: 6px 0 8px;
+  flex-shrink: 0;
+}
+
+.wiki-close-btn {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.4);
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.wiki-close-btn:hover {
+  border-color: rgba(255, 100, 100, 0.5);
+  color: #ff9999;
+}
+
+.wiki-transcript {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 8px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 180, 255, 0.2) transparent;
+}
+
+/* ── Wiki chat message bubbles ──────────────────────────────────────────── */
+.wiki-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wiki-msg-lbl {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.55rem;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.25);
+}
+
+.wiki-msg.wiki-user .wiki-msg-lbl  { color: rgba(100, 200, 255, 0.5); }
+.wiki-msg.wiki-asst .wiki-msg-lbl  { color: rgba(180, 255, 200, 0.4); }
+
+.wiki-msg-text {
+  font-size: 0.72rem;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+/* Blinking cursor on the streaming assistant message */
+.wiki-msg.wiki-streaming .wiki-msg-text::after {
+  content: '▋';
+  animation: blink 1s step-start infinite;
+  opacity: 0.7;
+}
+

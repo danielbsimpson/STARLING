@@ -5,6 +5,7 @@ from pathlib import Path
 
 import httpx
 from fastapi import BackgroundTasks, FastAPI, HTTPException
+from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -50,6 +51,16 @@ from browser import router as browser_router
 from ideas_routes import router as ideas_router
 from journal_routes import router as journal_router
 from rag import ingest as _rag_ingest, get_status as _rag_get_status, INPUT_FOLDER as _RAG_INPUT_FOLDER
+from wikipedia_rag import (
+    load_index        as _wiki_load_index,
+    get_embed_model   as _wiki_get_embed_model,
+    start_wikipedia_session,
+    get_session       as _wiki_get_session,
+    clear_session     as _wiki_clear_session,
+    retrieve_chunks   as _wiki_retrieve_chunks,
+    build_wiki_system_prompt,
+    get_wiki_status,
+)
 
 app.include_router(stt_router)
 app.include_router(llm_router)
@@ -60,6 +71,23 @@ app.include_router(stocks_router)
 app.include_router(browser_router, prefix='/api')
 app.include_router(ideas_router)
 app.include_router(journal_router)
+
+
+# ── Startup warm-up ───────────────────────────────────────────────────────────
+
+@app.on_event("startup")
+async def startup_event():
+    """Pre-load the Wikipedia index and embedding model so the first request is fast."""
+    import asyncio
+    import logging
+    _log = logging.getLogger(__name__)
+    try:
+        # Run blocking model load in a thread so it doesn't block the event loop
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, _wiki_load_index)
+        _log.info("Wikipedia: startup warm-up complete")
+    except Exception as exc:
+        _log.warning(f"Wikipedia: startup warm-up failed (non-fatal) — {exc}")
 
 
 @app.get("/health")
@@ -95,6 +123,93 @@ def rag_manifest():
         return json.loads(manifest_path.read_text(encoding="utf-8"))
     except Exception:
         return []
+
+
+# ── Wikipedia RAG endpoints ───────────────────────────────────────────────────
+
+class WikiSearchRequest(BaseModel):
+    query: str
+
+class WikiChatRequest(BaseModel):
+    message: str
+    history: list   # list of {"role": str, "content": str}
+
+@app.post("/wiki/start")
+async def wiki_start(req: WikiSearchRequest):
+    """Find the best-matching Wikipedia article and start a Q&A session."""
+    try:
+        session = start_wikipedia_session(req.query)
+        return session.to_status()
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Wiki session error: {exc}")
+
+
+@app.get("/wiki/status")
+async def wiki_status():
+    """Return the Wikipedia index and current session status."""
+    return get_wiki_status()
+
+
+@app.post("/wiki/clear")
+async def wiki_clear():
+    """End the current Wikipedia session."""
+    _wiki_clear_session()
+    return {"cleared": True}
+
+
+@app.post("/wiki/chat")
+async def wiki_chat(req: WikiChatRequest):
+    """
+    Stream an article-scoped LLM response for the active Wikipedia session.
+    Retrieves relevant article chunks, injects them into the system prompt,
+    and forwards to the configured LLM backend (llama-server or Ollama).
+    """
+    from fastapi.responses import StreamingResponse
+
+    session = _wiki_get_session()
+    if session is None:
+        raise HTTPException(
+            status_code=400,
+            detail="No active Wikipedia session. POST /wiki/start first.",
+        )
+
+    # Retrieve relevant article chunks for the current query
+    excerpts    = _wiki_retrieve_chunks(req.message, top_k=4)
+    system_prompt = build_wiki_system_prompt(excerpts)
+
+    # Build message list: wiki system → conversation history → current user turn
+    messages = [{"role": "system", "content": system_prompt}]
+    for h in req.history:
+        role    = h.get("role", "user")
+        content = h.get("content", "")
+        if role in ("user", "assistant") and content:
+            messages.append({"role": role, "content": content})
+    messages.append({"role": "user", "content": req.message})
+
+    if LLM_BACKEND == "llama":
+        from llama_server import _stream_as_ndjson, DEFAULT_MODEL as _WIKI_MODEL
+        payload = {
+            "model":       _WIKI_MODEL,
+            "messages":    messages,
+            "temperature": float(os.getenv("LLAMA_TEMPERATURE", "0.7")),
+            "stream":      True,
+        }
+        return StreamingResponse(
+            _stream_as_ndjson(payload), media_type="application/x-ndjson"
+        )
+    else:
+        from ollama import _stream_ollama, DEFAULT_MODEL as _WIKI_MODEL
+        payload = {
+            "model":    _WIKI_MODEL,
+            "messages": messages,
+            "options":  {"temperature": float(os.getenv("OLLAMA_TEMPERATURE", "0.7"))},
+            "stream":   True,
+        }
+        return StreamingResponse(
+            _stream_ollama(payload), media_type="application/x-ndjson"
+        )
 
 
 

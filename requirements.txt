@@ -31,3 +31,12 @@ tzdata>=2024.1
 
 # Weather location geocoding (Tool 3, Enhancement 2)
 geopy>=2.4.0
+
+# Wikipedia RAG (Tool 10 — Phase 1)
+# sentence-transformers is installed AFTER fastembed to avoid onnxruntime conflicts.
+# Install order: pip install onnxruntime-gpu  →  pip install fastembed  →  pip install sentence-transformers
+sentence-transformers>=2.7.0
+# Ingestion-only deps (only needed to run scripts/ingest_wikipedia.py once):
+mwxml>=0.3.3
+mwparserfromhell>=0.6.6
+tqdm>=4.66.4
