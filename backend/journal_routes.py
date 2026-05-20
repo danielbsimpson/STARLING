@@ -9,12 +9,14 @@ DELETE /journal/entry/{entry_id}.
 import json
 import os
 import re
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+import session_log
 
 router = APIRouter()
 
@@ -63,6 +65,12 @@ def save_journal_entry(body: JournalEntryIn):
     Save a journal entry to disk as a JSON file.
     Filename is derived from the entry timestamp for natural chronological sorting.
     """
+    _t0 = time.monotonic()
+    session_log.log("tool_call", {
+        "endpoint": "/journal/entry",
+        "method":   "POST",
+        "params_summary": "submit",
+    })
     _JOURNAL_DIR.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -88,6 +96,12 @@ def save_journal_entry(body: JournalEntryIn):
         "tags":           [t.strip().lower() for t in body.tags if t.strip()],
     }
     path.write_text(json.dumps(entry, ensure_ascii=False, indent=2), encoding="utf-8")
+    session_log.log("tool_result", {
+        "endpoint":      "/journal/entry",
+        "status_code":   201,
+        "duration_ms":   round((time.monotonic() - _t0) * 1000),
+        "result_summary": f"id={entry['id']}, summary={entry['summary'][:60]}",
+    })
     return entry
 
 
@@ -101,6 +115,8 @@ def list_journal_entries(
     Return recent journal entries, newest first.
     Optional ?date=today or ?date=YYYY-MM-DD filters to a specific day.
     """
+    _t0 = time.monotonic()
+    session_log.log("tool_call", {"endpoint": "/journal/entries", "method": "GET", "params_summary": f"date={date}"})
     paths = _all_entry_paths(newest_first=True)
 
     if date:
@@ -120,6 +136,7 @@ def list_journal_entries(
         except Exception:
             continue
 
+    session_log.log("tool_result", {"endpoint": "/journal/entries", "status_code": 200, "duration_ms": round((time.monotonic() - _t0) * 1000), "result_summary": f"total={total}, returned={len(entries)}"})
     return {"entries": entries, "total": total, "offset": offset, "limit": limit}
 
 

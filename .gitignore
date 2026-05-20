@@ -29,6 +29,11 @@ Thumbs.db
 # ChromaDB (generated at runtime)
 **/chroma_db/
 
+# Session activity logs (generated at runtime)
+backend/memory/logs/
+backend/memory/.starling.pid
+
+
 # Weather cache (contains location data — do not commit)
 backend/memory/weather_cache.json
 

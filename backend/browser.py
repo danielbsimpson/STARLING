@@ -7,12 +7,14 @@ Runs server-side to avoid iframe cross-origin restrictions.
 
 import asyncio
 import re
+import time
 from html.parser import HTMLParser
 from urllib.parse import unquote
 
 import httpx
 import requests as _requests
 from fastapi import APIRouter
+import session_log
 
 router = APIRouter()
 
@@ -119,6 +121,13 @@ async def fetch_page_text(url: str):
     if not url.startswith(('http://', 'https://')):
         return {'text': None, 'error': 'Invalid URL scheme'}
 
+    _t0 = time.monotonic()
+    session_log.log("tool_call", {
+        "endpoint": "/api/browser/page-text",
+        "method":   "GET",
+        "params_summary": f"url={url[:120]}",
+    })
+
     try:
         async with httpx.AsyncClient(
             timeout=15,
@@ -144,13 +153,22 @@ async def fetch_page_text(url: str):
         char_limit = _MAX_WIKI_CHARS if wiki else _MAX_CHARS
         if text_out and len(text_out) > char_limit:
             result['text'] = text_out[:char_limit] + ' …[truncated]'
+        session_log.log("tool_result", {
+            "endpoint":      "/api/browser/page-text",
+            "status_code":   200,
+            "duration_ms":   round((time.monotonic() - _t0) * 1000),
+            "result_summary": f"url={url[:80]}, chars={len(text_out) if text_out else 0}",
+        })
         return result
 
     except httpx.TimeoutException:
+        session_log.log("tool_result", {"endpoint": "/api/browser/page-text", "status_code": 408, "duration_ms": round((time.monotonic() - _t0) * 1000), "result_summary": "timeout"})
         return {'text': None, 'error': 'Request timed out'}
     except httpx.HTTPStatusError as exc:
+        session_log.log("tool_result", {"endpoint": "/api/browser/page-text", "status_code": exc.response.status_code, "duration_ms": round((time.monotonic() - _t0) * 1000), "result_summary": f"HTTP {exc.response.status_code}"})
         return {'text': None, 'error': f'HTTP {exc.response.status_code}'}
     except Exception as exc:  # noqa: BLE001
+        session_log.log("tool_result", {"endpoint": "/api/browser/page-text", "status_code": 500, "duration_ms": round((time.monotonic() - _t0) * 1000), "result_summary": str(exc)[:200]})
         return {'text': None, 'error': str(exc)}
 
 

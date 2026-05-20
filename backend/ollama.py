@@ -1,10 +1,12 @@
 """backend/ollama.py — Streaming chat relay to the local Ollama API."""
 
 import os
+import time
 import httpx
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+import session_log
 
 router = APIRouter(prefix="/chat", tags=["ollama"])
 
@@ -50,4 +52,40 @@ async def chat(req: ChatRequest):
         "options": {"temperature": req.temperature},
         "stream": True,
     }
-    return StreamingResponse(_stream_ollama(payload), media_type="application/x-ndjson")
+
+    session_log.log("llm_request", {
+        "model":               req.model,
+        "message_count":       len(messages),
+        "system_prompt_hash":  session_log.system_prompt_hash(SYSTEM_PROMPT),
+        "temperature":         req.temperature,
+    })
+
+    async def _logging_stream():
+        t0 = time.monotonic()
+        assembled: list[str] = []
+        import json as _json
+        async for chunk in _stream_ollama(payload):
+            yield chunk
+            # Accumulate message content for the post-stream log entry
+            try:
+                for line in chunk.decode("utf-8", errors="replace").split("\n"):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    obj = _json.loads(line)
+                    content = obj.get("message", {}).get("content", "")
+                    if content:
+                        assembled.append(content)
+                    if obj.get("done"):
+                        full_text = "".join(assembled)[:4000]
+                        elapsed_ms = round((time.monotonic() - t0) * 1000)
+                        session_log.log("llm_response", {
+                            "model":               req.model,
+                            "full_text":           full_text,
+                            "token_count_estimate": len(full_text.split()),
+                            "duration_ms":         elapsed_ms,
+                        })
+            except Exception:
+                pass
+
+    return StreamingResponse(_logging_stream(), media_type="application/x-ndjson")

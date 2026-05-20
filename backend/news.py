@@ -17,6 +17,8 @@ from email.utils import parsedate_to_datetime
 import feedparser
 import httpx
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+import session_log
+import session_log
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -383,6 +385,13 @@ async def get_news(
             detail=f"Unknown news category '{category}'. Valid categories: {sorted(VALID_CATEGORIES)}",
         )
 
+    _t0 = time.time()
+    session_log.log("tool_call", {
+        "endpoint": "/news",
+        "method":   "GET",
+        "params_summary": f"category={category}",
+    })
+
     cache_key = f"news_{category}"
 
     # ── Serve from raw cache if fresh ─────────────────────────────────────────
@@ -393,6 +402,14 @@ async def get_news(
         # Re-trigger synthesis if it hasn't started yet (e.g. after a server restart)
         if _SYNTHESIS_ON and cache_key not in _synth_busy and not _synth_cache.get(cache_key):
             background_tasks.add_task(_run_synthesis_bg, cached["data"]["headlines"], category)
+        _headlines = cached["data"].get("headlines", [])
+        _first = _headlines[0]["title"][:100] if _headlines else ""
+        session_log.log("tool_result", {
+            "endpoint":      "/news",
+            "status_code":   200,
+            "duration_ms":   round((time.time() - _t0) * 1000),
+            "result_summary": f"source=cache, total={len(_headlines)}, first={_first}",
+        })
         return resp
 
     feed_urls = _get_feeds_for_category(category)
@@ -430,6 +447,13 @@ async def get_news(
         _synth_cache.pop(cache_key, None)  # clear stale synth for this fresh fetch
         background_tasks.add_task(_run_synthesis_bg, all_items, category)
 
+    _first_hl = all_items[0]["title"][:100] if all_items else ""
+    session_log.log("tool_result", {
+        "endpoint":      "/news",
+        "status_code":   200,
+        "duration_ms":   round((time.time() - _t0) * 1000),
+        "result_summary": f"total={len(all_items)}, first={_first_hl}",
+    })
     return data
 
 

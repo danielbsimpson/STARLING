@@ -23,12 +23,14 @@ Enhancement 2 — Location-Aware Weather Queries:
 import asyncio
 import json
 import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query
+import session_log
 
 try:
     from geopy.geocoders import Nominatim
@@ -280,7 +282,12 @@ async def get_weather(
     """
     is_default = location is None
 
-    # Geocode to lat/lon
+    _t0 = time.monotonic()
+    session_log.log("tool_call", {
+        "endpoint": "/weather",
+        "method":   "GET",
+        "params_summary": f"location={location or _DEFAULT_LABEL}",
+    })
     if location:
         if _GEOPY_AVAILABLE:
             home_lat, home_lon = await _get_home_coords()
@@ -308,6 +315,13 @@ async def get_weather(
                 data = dict(last["data"])
                 data["source"]            = "cache"
                 data["cache_age_seconds"] = int(age_s)
+                _elapsed_ms = round((time.monotonic() - _t0) * 1000)
+                session_log.log("tool_result", {
+                    "endpoint":      "/weather",
+                    "status_code":   200,
+                    "duration_ms":   _elapsed_ms,
+                    "result_summary": f"source=cache, condition={data.get('current', {}).get('condition', '?')}, temp={data.get('current', {}).get('temp', '?')}",
+                })
                 return data
 
     # Cache miss or forced refresh — call Open-Meteo
@@ -325,6 +339,13 @@ async def get_weather(
     cache[key] = entries
     _save_cache(cache)
 
+    _elapsed_ms = round((time.monotonic() - _t0) * 1000)
+    session_log.log("tool_result", {
+        "endpoint":      "/weather",
+        "status_code":   200,
+        "duration_ms":   _elapsed_ms,
+        "result_summary": f"condition={data.get('current', {}).get('condition', '?')}, temp={data.get('current', {}).get('temp', '?')}",
+    })
     return data
 
 

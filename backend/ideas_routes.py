@@ -7,6 +7,7 @@ Exposes POST /ideas/add, GET /ideas, GET /ideas/search, DELETE /ideas/{id}, DELE
 
 import json
 import os
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,6 +15,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+import session_log
 
 router = APIRouter()
 
@@ -64,6 +66,12 @@ class IdeaOut(BaseModel):
 @router.post("/ideas/add", response_model=IdeaOut, status_code=201)
 def add_idea(body: IdeaIn):
     """Append a new idea to ideas.json."""
+    _t0 = time.monotonic()
+    session_log.log("tool_call", {
+        "endpoint": "/ideas/add",
+        "method":   "POST",
+        "params_summary": body.raw_text[:80],
+    })
     ideas = _load()
 
     try:
@@ -82,17 +90,26 @@ def add_idea(body: IdeaIn):
     }
     ideas.append(idea)
     _save(ideas)
+    session_log.log("tool_result", {
+        "endpoint":      "/ideas/add",
+        "status_code":   201,
+        "duration_ms":   round((time.monotonic() - _t0) * 1000),
+        "result_summary": f"id={idea['id']}, title={idea['title'][:60]}",
+    })
     return idea
 
 
 @router.get("/ideas")
 def list_ideas(limit: int = 20, offset: int = 0, newest_first: bool = True):
     """Return paginated ideas, optionally sorted newest-first."""
+    _t0 = time.monotonic()
+    session_log.log("tool_call", {"endpoint": "/ideas", "method": "GET", "params_summary": f"limit={limit}"})
     ideas = _load()
     if newest_first:
         ideas = list(reversed(ideas))
     total  = len(ideas)
     sliced = ideas[offset: offset + min(limit, _MAX_RETURN)]
+    session_log.log("tool_result", {"endpoint": "/ideas", "status_code": 200, "duration_ms": round((time.monotonic() - _t0) * 1000), "result_summary": f"total={total}, returned={len(sliced)}"})
     return {"ideas": sliced, "total": total, "offset": offset, "limit": limit}
 
 

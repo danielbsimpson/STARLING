@@ -50,6 +50,8 @@ from stocks import router as stocks_router
 from browser import router as browser_router
 from ideas_routes import router as ideas_router
 from journal_routes import router as journal_router
+from log_routes import router as log_router
+import session_log
 from rag import ingest as _rag_ingest, get_status as _rag_get_status, INPUT_FOLDER as _RAG_INPUT_FOLDER
 from wikipedia_rag import (
     load_index        as _wiki_load_index,
@@ -71,6 +73,7 @@ app.include_router(stocks_router)
 app.include_router(browser_router, prefix='/api')
 app.include_router(ideas_router)
 app.include_router(journal_router)
+app.include_router(log_router)
 
 
 # ── Startup warm-up ───────────────────────────────────────────────────────────
@@ -81,6 +84,7 @@ async def startup_event():
     import asyncio
     import logging
     _log = logging.getLogger(__name__)
+    session_log.log_session_start(llm_backend=LLM_BACKEND, pid=os.getpid())
     try:
         # Run blocking model load in a thread so it doesn't block the event loop
         loop = asyncio.get_event_loop()
@@ -90,9 +94,18 @@ async def startup_event():
         _log.warning(f"Wikipedia: startup warm-up failed (non-fatal) — {exc}")
 
 
+@app.on_event("shutdown")
+async def shutdown_event():
+    session_log.log_session_end()
+
+
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {
+        "status":          "ok",
+        "log_viewer":      "/log/viewer",
+        "current_session": session_log.get_session_id(),
+    }
 
 
 # ── RAG endpoints ─────────────────────────────────────────────────────────────

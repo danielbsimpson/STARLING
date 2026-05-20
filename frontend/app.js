@@ -44,6 +44,19 @@ import {
   wireJournalButtons,
 } from './journal-panel.js';
 
+// ── Session event logger ──────────────────────────────────────────────────────
+/**
+ * Fire-and-forget: POST a frontend event to the session log.
+ * Never awaited so it never delays the dispatch path.
+ */
+function logEvent(eventType, data) {
+  fetch(`${BACKEND_BASE}/log/event`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ event_type: eventType, data, source: 'frontend' }),
+  }).catch(() => { /* ignore — log failure must never break the UI */ });
+}
+
 // ── Config ────────────────────────────────────────────────────────────────────
 const MODEL = localStorage.getItem('starling_model') || 'llama3.2:3b';
 
@@ -1488,6 +1501,7 @@ async function _routeInput(text) {
   // ── Journal dictation mode: next mic press = a new segment ─────────────
   // Checked FIRST — while journalMode is active, consume all input here.
   if (journalMode) {
+    logEvent('tool_dispatch', { tool: 'journal', trigger_phrase: text });
     if (detectJournalSubmit(text)) {
       if (!journalHasSegments()) {
         // No content yet — just acknowledge and stay in mode
@@ -1517,6 +1531,7 @@ async function _routeInput(text) {
   // ── Ideas capture mode: next mic/text press = the idea ───────────────────
   // Checked FIRST — while ideasMode is active, all input is consumed as an idea.
   if (ideasMode) {
+    logEvent('tool_dispatch', { tool: 'ideas', trigger_phrase: text });
     setState('thinking');
     appendMessage('user', text);
     const { spoken } = await processIdea(text, sendToOllama, SYSTEM_PROMPT);
@@ -1534,6 +1549,7 @@ async function _routeInput(text) {
       setState('idle');
       return;
     }
+    logEvent('tool_dispatch', { tool: 'wiki', trigger_phrase: text });
     appendWikiMessage('user', text);
     setState('thinking');
     await sendWikiChat(text, false);
@@ -1561,6 +1577,7 @@ async function _routeInput(text) {
   }
   const _triggerResult = _parseTrigger(text);
   if (_triggerResult.matched) {
+    logEvent('tool_dispatch', { tool: 'dossier', trigger_phrase: text });
     closeBrowserPanel();
     enterPresMode(_triggerResult.subject);
     setState('idle');
@@ -1570,6 +1587,7 @@ async function _routeInput(text) {
   // ── Wikipedia search trigger ──────────────────────────────────────────────
   const _wikiQuery = detectWikiTrigger(text);
   if (_wikiQuery) {
+    logEvent('tool_dispatch', { tool: 'wiki', trigger_phrase: text });
     closeBrowserPanel();
     setState('thinking');
     appendMessage('user', text);
@@ -1591,6 +1609,7 @@ async function _routeInput(text) {
 
   // ── Journal start trigger ─────────────────────────────────────────────────
   if (detectJournalStartTrigger(text)) {
+    logEvent('tool_dispatch', { tool: 'journal', trigger_phrase: text });
     appendMessage('user', text);
     enterJournalMode();
     const spoken = 'Journal entry started. Speak your entry — each mic press adds a segment. Say submit when finished.';
@@ -1602,6 +1621,7 @@ async function _routeInput(text) {
   // ── Journal read / search trigger ────────────────────────────────────────
   const _jrnlRead = detectJournalReadTrigger(text);
   if (_jrnlRead) {
+    logEvent('tool_dispatch', { tool: 'journal', trigger_phrase: text });
     setState('thinking');
     appendMessage('user', text);
     const jrnlContext = await handleJournalRead(_jrnlRead);
@@ -1629,17 +1649,20 @@ async function _routeInput(text) {
   // Timer checked before time to avoid 'timer' matching time patterns
   const _timerTrigger = detectTimerTrigger(text);
   if (_timerTrigger) {
+    logEvent('tool_dispatch', { tool: 'timer', trigger_phrase: text });
     setState('idle');
     handleTimerTrigger(text, _timerTrigger);
     return;
   }
   // Date checked before time — phrases are more specific
   if (detectDateTrigger(text)) {
+    logEvent('tool_dispatch', { tool: 'date', trigger_phrase: text });
     setState('idle');
     handleDateQuery(text);
     return;
   }
   if (detectTimeTrigger(text)) {
+    logEvent('tool_dispatch', { tool: 'time', trigger_phrase: text });
     setState('idle');
     handleTimeQuery(text);
     return;
@@ -1647,6 +1670,7 @@ async function _routeInput(text) {
 
   // ── Ideas capture trigger — enter single-press capture mode ───────────────
   if (detectIdeaCaptureTrigger(text)) {
+    logEvent('tool_dispatch', { tool: 'ideas', trigger_phrase: text });
     appendMessage('user', text);
     enterIdeasMode();
     const spoken = 'Ready. Press the mic and speak your idea.';
@@ -1658,6 +1682,7 @@ async function _routeInput(text) {
   // ── Ideas read / management trigger ──────────────────────────────────────
   const _ideaReadTrigger = detectIdeaReadTrigger(text);
   if (_ideaReadTrigger) {
+    logEvent('tool_dispatch', { tool: 'ideas', trigger_phrase: text });
     setState('thinking');
     appendMessage('user', text);
     const { spoken, llmContext } = await handleIdeaRead(
@@ -1685,6 +1710,7 @@ async function _routeInput(text) {
 
   const _wxTrigger = detectWeatherTrigger(text);
   if (_wxTrigger) {
+    logEvent('tool_dispatch', { tool: 'weather', trigger_phrase: text });
     closeBrowserPanel();
     setState('thinking');
     appendMessage('user', text);
@@ -1723,6 +1749,7 @@ async function _routeInput(text) {
   // ── Market / stocks / crypto intercept (checked before news — more specific) ──
   const mktTrigger = detectMarketTrigger(text);
   if (mktTrigger) {
+    logEvent('tool_dispatch', { tool: 'stocks', trigger_phrase: text });
     closeBrowserPanel();
     setState('thinking');
     appendMessage('user', text);
@@ -1755,6 +1782,7 @@ async function _routeInput(text) {
 
   const newsCategory = detectNewsTrigger(text);
   if (newsCategory) {
+    logEvent('tool_dispatch', { tool: 'news', trigger_phrase: text });
     closeBrowserPanel();
     setState('thinking');
     appendMessage('user', text);
@@ -1784,6 +1812,7 @@ async function _routeInput(text) {
   // ── Browser / web trigger ────────────────────────────────────────────────────
   const _browserTrigger = detectBrowserTrigger(text);
   if (_browserTrigger) {
+    logEvent('tool_dispatch', { tool: 'browser', trigger_phrase: text, url: _browserTrigger.url });
     setState('thinking');
     appendMessage('user', text);
     openBrowserPanel(_browserTrigger.url);
@@ -1871,6 +1900,7 @@ async function _routeInput(text) {
       }
     }
   }
+  logEvent('tool_dispatch', { tool: 'llm_fallback', trigger_phrase: text });
   await sendToOllama(text, _extraContext ? { extraContext: _extraContext } : {});
   fetchSystemStatus();
 }
@@ -1879,6 +1909,7 @@ async function _routeInput(text) {
 async function handleSend() {
   const text = textInput.value.trim();
   if (!text) return;
+  logEvent('user_text', { text });
   _rttStart = performance.now();
   clearAudioQueue();
   textInput.value = '';
@@ -1941,6 +1972,8 @@ async function startRecording() {
         if (!r.ok) throw new Error(`STT ${r.status}`);
         const { transcript } = await r.json();
         if (!transcript) { setState('idle'); return; }
+
+        logEvent('user_speech_frontend', { transcript });
 
         // Preserve RTT timestamp across clearAudioQueue before routing
         const rttSnap = _rttStart;

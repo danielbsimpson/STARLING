@@ -4,6 +4,7 @@ import os
 import sys
 import tempfile
 import logging
+import time
 
 # On Windows, ctranslate2 only registers its own DLL dir, so CUDA runtime DLLs
 # (cublas64_12.dll, cudart64_12.dll) bundled by nvidia pip packages won't be
@@ -24,6 +25,7 @@ if sys.platform == "win32":
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from faster_whisper import WhisperModel
+import session_log
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +119,12 @@ async def transcribe(audio: UploadFile = File(...)):
             raise
 
         logger.info("Transcribed %.1fs: %s", info.duration, transcript[:80])
+        session_log.log("user_speech", {
+            "transcript":    transcript,
+            "duration_ms":   round(info.duration * 1000),
+            "whisper_model": _WHISPER_MODEL_SIZE,
+            "device":        _active_device,
+        })
     finally:
         os.remove(tmp_path)
 

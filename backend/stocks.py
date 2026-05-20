@@ -23,6 +23,7 @@ from zoneinfo import ZoneInfo
 
 import yfinance as yf
 from fastapi import APIRouter, BackgroundTasks, Body, HTTPException, Query
+import session_log
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -458,6 +459,12 @@ async def put_watchlist(body: dict = Body(...)):
 @router.get("/stocks")
 async def get_stocks():
     """Return live price data grouped by watchlist; backward-compat flat 'tickers' + 'llm_context' included."""
+    _t0 = time.time()
+    session_log.log("tool_call", {
+        "endpoint": "/stocks",
+        "method":   "GET",
+        "params_summary": "watchlist",
+    })
     watchlist = _load_watchlist()
     symbols   = _flat_tickers(watchlist)
 
@@ -483,7 +490,7 @@ async def get_stocks():
     flat = [ticker_map[s] for s in symbols if s in ticker_map]
     market_open = _is_us_market_open()
 
-    return {
+    _result = {
         "groups":        groups_out,
         "default_group": watchlist.get("default_group", "all"),
         "tickers":       flat,           # backward compat
@@ -494,6 +501,13 @@ async def get_stocks():
         "fetched_at":    datetime.now(timezone.utc).isoformat(),
         "currency_sym":  _CURRENCY_SYM,
     }
+    session_log.log("tool_result", {
+        "endpoint":      "/stocks",
+        "status_code":   200,
+        "duration_ms":   round((time.time() - _t0) * 1000),
+        "result_summary": f"tickers={[t['symbol'] for t in flat]}, failed={failed}",
+    })
+    return _result
 
 
 @router.get("/stocks/cache/status")
