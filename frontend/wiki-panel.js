@@ -33,11 +33,15 @@ let _wikiHistory            = [];   // [{role, content}, ...]
  * Returns the extracted search query string, or null if no trigger matched.
  */
 export function detectWikiTrigger(text) {
+  // Requires "local" or "offline" to distinguish from the browser-panel Wikipedia lookup.
+  // Examples: "local wikipedia search X", "local wiki article on X",
+  //           "search local wikipedia for X", "offline wikipedia X"
   const patterns = [
-    /\bwikipedia\s+search\s+(?:for\s+)?(.+)/i,
-    /\bsearch\s+wikipedia\s+(?:for\s+)?(.+)/i,
-    /\blook\s+up\s+(.+?)\s+on\s+wikipedia\b/i,
-    /\bwikipedia\s+(.+)/i,
+    /\blocal\s+(?:wikipedia|wiki)\s+(?:(?:search|article|lookup)\s+(?:for|on|about)?\s*)?(.+)/i,
+    /\bsearch\s+local\s+(?:wikipedia|wiki)\s+(?:for\s+)?(.+)/i,
+    /\b(?:look\s+up|find)\s+(.+?)\s+on\s+local\s+(?:wikipedia|wiki)\b/i,
+    /\boffline\s+(?:wikipedia|wiki)\s+(?:(?:for|on|about|search(?:\s+for)?)\s+)?(.+)/i,
+    /\bsearch\s+offline\s+(?:wikipedia|wiki)\s+(?:for\s+)?(.+)/i,
   ];
   for (const re of patterns) {
     const m = text.match(re);

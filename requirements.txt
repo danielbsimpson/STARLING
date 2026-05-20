@@ -36,6 +36,7 @@ geopy>=2.4.0
 # sentence-transformers is installed AFTER fastembed to avoid onnxruntime conflicts.
 # Install order: pip install onnxruntime-gpu  →  pip install fastembed  →  pip install sentence-transformers
 sentence-transformers>=2.7.0
+einops>=0.7.0  # required by nomic-ai/nomic-embed-text-v1 custom model code
 # Ingestion-only deps (only needed to run scripts/ingest_wikipedia.py once):
 mwxml>=0.3.3
 mwparserfromhell>=0.6.6

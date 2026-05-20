@@ -11,7 +11,7 @@ Run from the repository root:
 Download the dump first (see markdown/WIKIPEDIA.md — Step 1):
     Invoke-WebRequest `
       -Uri "https://dumps.wikimedia.org/simplewiki/latest/simplewiki-latest-pages-articles.xml.bz2" `
-      -OutFile "data\\wikipedia\\simplewiki-latest-pages-articles.xml.bz2"
+      -OutFile "assets\\wikipedia\\simplewiki-latest-pages-articles.xml.bz2"
 """
 
 import bz2
@@ -31,7 +31,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 logger = logging.getLogger(__name__)
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-DUMP_PATH       = Path("data/wikipedia/simplewiki-latest-pages-articles.xml.bz2")
+DUMP_PATH       = Path("assets/wikipedia/simplewiki-latest-pages-articles.xml.bz2")
 CHROMA_PATH     = "backend/memory/chroma_db"
 WIKI_COLLECTION = "wikipedia_articles"
 
@@ -150,7 +150,7 @@ def main():
         if page.namespace != 0:
             continue
         revision = next(iter(page), None)
-        if revision is None or revision.redirect:
+        if revision is None or page.redirect:
             continue
         chunks = extract_chunks(page.title, revision.text or "")
         all_chunks.extend(chunks)
@@ -177,7 +177,7 @@ def main():
 
         for chunk, emb in zip(batch_meta, embeddings):
             chunk_id = hashlib.md5(
-                f"{chunk['title']}:{chunk['section']}:{chunk['text'][:60]}".encode()
+                f"{chunk['title']}:{chunk['section']}:{chunk['text']}".encode()
             ).hexdigest()
             ids.append(chunk_id)
             docs.append(chunk["text"])          # raw text (no prefix) stored in DB

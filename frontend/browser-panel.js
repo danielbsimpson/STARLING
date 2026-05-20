@@ -80,12 +80,17 @@ export async function ensureBrowserPageText() {
 export function detectBrowserTrigger(transcript) {
   const t = transcript.trim();
 
-  // "look up X on Wikipedia" / "search Wikipedia for X" / "wikipedia for/about X"
-  const wikiMatch = t.match(/(?:search|look up|open|find)\s+(.+?)\s+on\s+wikipedia/i)
-                 || t.match(/(?:search|look up)\s+wikipedia\s+for\s+(.+)/i)
-                 || t.match(/wikipedia\s+(?:for|on|about)\s+(.+)/i);
+  // Wikipedia via browser panel — phrase must contain "browser" or "in browser" /
+  // "browser window" to disambiguate from the local Wikipedia RAG tool ("local wiki").
+  // Examples: "browser wikipedia X", "look up X on Wikipedia in browser",
+  //           "search Wikipedia in the browser window for X"
+  const wikiMatch = t.match(/\bbrowser(?:\s+window)?\s+(?:wikipedia|wiki)\s+(?:(?:for|on|about|search(?:\s+for)?)\s+)?(.+)/i)
+                 || t.match(/(?:search|look up|open|find)\s+(.+?)\s+on\s+wikipedia\s+in(?:\s+the)?\s+browser(?:\s+window)?/i)
+                 || t.match(/(?:wikipedia|wiki)\s+in(?:\s+the)?\s+browser(?:\s+window)?\s+(?:for|on|about)?\s*(.+)/i)
+                 || t.match(/(?:search|look up)\s+wikipedia\s+in(?:\s+the)?\s+browser(?:\s+window)?\s+(?:for\s+)?(.+)/i);
   if (wikiMatch) {
-    const topic = wikiMatch[1].trim();
+    const topic = (wikiMatch[1] || '').trim();
+    if (!topic) return null;
     return {
       url:   `https://en.wikipedia.org/wiki/${encodeURIComponent(topic)}`,
       label: `the Wikipedia article on "${topic}"`,

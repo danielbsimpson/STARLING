@@ -53,7 +53,7 @@ the core chat pipeline. Tools 1–5 and 7 are complete; Tools 6, 8–12 are plan
 | 7 | In-UI Browser Panel | None | ✅ Done |
 | 8 | Ideas Tracker | Local JSON file | ✅ Done |
 | 9 | Voice Journal | Local JSON files | ✅ Done |
-| 10 | Wikipedia RAG | FAISS + embeddings | 🔲 Planned |
+| 10 | Wikipedia RAG | ChromaDB + nomic-embed-text | ✅ Done |
 | 11 | Google Calendar | Google Calendar API (OAuth2) | 🔲 Planned |
 | 12 | Gmail | Gmail API (OAuth2) | 🔲 Planned |
 
@@ -107,10 +107,13 @@ llm-speech-UI/
 │   ├── config.js           # Shared config (BACKEND_BASE)
 │   ├── app.js              # Main application logic and voice dispatch router
 │   ├── browser-panel.js    # Tool: in-UI browser panel
+│   ├── ideas-panel.js      # Tool: ideas vault
+│   ├── journal-panel.js    # Tool: voice journal
 │   ├── news-panel.js       # Tool: news briefing panel
 │   ├── stocks-panel.js     # Tool: stocks & crypto panel
 │   ├── timer-panel.js      # Tool: voice-activated timers
-│   └── weather-panel.js    # Tool: weather forecast panel
+│   ├── weather-panel.js    # Tool: weather forecast panel
+│   └── wiki-panel.js       # Tool: local Wikipedia RAG Q&A
 ├── backend/                # FastAPI server
 │   ├── main.py             # App entry point, router registration, system-status
 │   ├── stt.py              # Speech-to-text via faster-whisper
@@ -122,6 +125,7 @@ llm-speech-UI/
 │   ├── news.py             # News briefing endpoint (RSS / feedparser)
 │   ├── stocks.py           # Stocks & crypto market data endpoint (yfinance)
 │   ├── weather.py          # Weather forecast endpoint (Open-Meteo)
+│   ├── wikipedia_rag.py    # Wikipedia RAG — session, retrieval, prompt builder
 │   └── memory/             # Runtime data — caches and ChromaDB
 │       ├── input/          # Drop .md / .txt files here; run 'make rag-ingest' to index
 │       └── chroma_db/      # Vector store (auto-created on first ingest)
@@ -467,8 +471,10 @@ To use Whisper, set `STT_ENGINE=whisper` in `.env` and ensure the FastAPI backen
 | `/journal/entries` | GET | List journal entries (newest first) |
 | `/journal/search` | GET | Search journal entries by keyword |
 | `/journal/entry/{id}` | DELETE | Delete a journal entry |
-| `/wiki/search` | POST | Wikipedia RAG — fetch and index article |
-| `/wiki/chat` | POST | Wikipedia RAG — guardrailed Q&A session |
+| `/wiki/start` | POST | Wikipedia RAG — start a local article Q&A session |
+| `/wiki/status` | GET | Wikipedia RAG — active session and index status |
+| `/wiki/clear` | POST | Wikipedia RAG — end the active session |
+| `/wiki/chat` | POST | Wikipedia RAG — guardrailed article Q&A (streams NDJSON) |
 | `/calendar/today` | GET | Today's Google Calendar events |
 | `/calendar/week` | GET | 7-day Google Calendar events |
 | `/gmail/unread` | GET | List unread Gmail messages |

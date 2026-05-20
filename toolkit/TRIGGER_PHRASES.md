@@ -10,17 +10,23 @@ The first matching tool wins; unmatched input falls through to the LLM.
 | Priority | Tool | Notes |
 |----------|------|-------|
 | 1 | Browser — close | Only when browser panel is open; checked before everything else |
-| 2 | Dossier — exit | |
-| 3 | Dossier — open | |
-| 4 | Timer | Checked before Time to avoid "timer" matching time patterns |
-| 5 | Date | Checked before Time — date phrases are more specific |
-| 6 | Time | |
-| 7 | Ideas Vault | Both "idea/ideas" **and** "vault" must appear — very low false-positive rate |
-| 8 | Weather | |
-| 9 | Market / Stocks / Crypto | Checked before News — more specific domain vocabulary |
-| 10 | News | |
-| 11 | Browser — open | Wikipedia lookups, open URL, or web search |
-| 12 | LLM fallback | Anything unmatched |
+| 2 | Wikipedia RAG — exit | Only when wiki panel is active |
+| 3 | Journal — in-mode routing | Only when journal dictation / interview is active |
+| 4 | Dossier — exit | |
+| 5 | Dossier — open | |
+| 6 | Wikipedia RAG — open | Requires **"local"** or **"offline"** keyword |
+| 7 | Journal — start | |
+| 8 | Journal — read / search | |
+| 9 | Timer | Checked before Time to avoid "timer" matching time patterns |
+| 10 | Date | Checked before Time — date phrases are more specific |
+| 11 | Time | |
+| 12 | Ideas Vault — capture | Both "idea/ideas" **and** "vault" must appear |
+| 13 | Ideas Vault — read / manage | Both "idea/ideas" **and** "vault" must appear |
+| 14 | Weather | |
+| 15 | Market / Stocks / Crypto | Checked before News — more specific domain vocabulary |
+| 16 | News | |
+| 17 | Browser — open | Requires **"browser"** keyword; Wikipedia lookup also requires **"browser"** |
+| 18 | LLM fallback | Anything unmatched |
 
 ---
 
@@ -128,6 +134,97 @@ Returns the current local time spoken aloud.
 | `time please` · `time now` |
 | `what time is it right now` |
 | `how late is it` |
+
+---
+
+## 5 · Voice Journal
+
+Opens a multi-segment dictation panel. Each mic press adds a segment; the LLM
+silently generates a summary and tags on submit. Supports standard dictation,
+guided interviewer Q&A mode, read-back, and keyword search.
+
+### Start a journal entry
+
+| Example phrase |
+|----------------|
+| `start journal entry` |
+| `new journal entry` |
+| `begin a journal entry` |
+| `open journal entry` |
+| `create a journal entry` |
+| `journal entry` |
+| `journal note` |
+| `start a new entry` |
+| `interviewer mode` · `interview mode` |
+
+### Read / list entries
+
+| Example phrase | Action |
+|----------------|--------|
+| `show journal` | List recent entries |
+| `open journal entries` | List recent entries |
+| `read my journal` | List recent entries |
+| `journal history` | List recent entries |
+| `journal entries` | List recent entries |
+| `today's journal entries` | Today only |
+| `what did I write today` | Today only |
+| `read my last journal entry` | Latest entry |
+| `show my recent journal` | Latest entries |
+
+### Search
+
+| Example phrase | Query resolved |
+|----------------|---------------|
+| `search journal for anxiety` | anxiety |
+| `find in journal for project ideas` | project ideas |
+| `what did I write about travel` | travel |
+| `what did I say about my goals` | my goals |
+
+### In-dictation commands (active only while journalMode is true)
+
+| Example phrase | Action |
+|----------------|--------|
+| `submit` · `done` · `finished` | Submit entry for LLM review |
+| `save entry` · `complete` | Submit entry |
+| `end entry` · `that's all` | Submit entry |
+
+---
+
+## 6 · Wikipedia RAG (Local / Offline)
+
+Searches the locally-ingested Simple English Wikipedia dump (ChromaDB) and opens
+a guardrailed Q&A session in the wiki panel.
+
+**Requires the word "local" or "offline" in the phrase** — this distinguishes it
+from the browser-panel Wikipedia lookup, which requires "browser" instead.
+
+### Open triggers
+
+| Example phrase | Query resolved |
+|----------------|---------------|
+| `local wikipedia search quantum physics` | quantum physics |
+| `local wiki article on the French Revolution` | the French Revolution |
+| `local wiki quantum physics` | quantum physics |
+| `search local wikipedia for black holes` | black holes |
+| `search local wiki for Marie Curie` | Marie Curie |
+| `look up photosynthesis on local wikipedia` | photosynthesis |
+| `find Alan Turing on local wiki` | Alan Turing |
+| `offline wikipedia Marie Curie` | Marie Curie |
+| `offline wiki search for the Roman Empire` | the Roman Empire |
+| `search offline wikipedia for DNA` | DNA |
+
+### Exit triggers (active only while wiki panel is open)
+
+| Example phrase |
+|----------------|
+| `exit wikipedia` · `close wikipedia` |
+| `exit wiki` · `close wiki` |
+| `leave article` · `stop wikipedia` |
+| `end wikipedia mode` |
+| `back to chat` · `back to main` |
+| `go back` |
+| `never mind` · `nevermind` · `cancel that` |
+| `close the panel` · `close this article` |
 
 ---
 
@@ -344,19 +441,20 @@ summarisation.
 | `hide browser` · `hide the browser` |
 | `shut browser` · `shut the browser` |
 
-### Wikipedia lookup (priority 10)
+### Wikipedia lookup in browser (priority 17)
 
-Extracts the topic and navigates to the English Wikipedia article.
+Extracts the topic and navigates to the English Wikipedia article in the browser panel.
+**Requires "browser" or "browser window" or "in browser" in the phrase.**  
+To query the local offline Wikipedia instead, use the **"local wiki"** / **"offline wikipedia"** triggers (priority 6).
 
 | Example phrase | Topic resolved |
 |----------------|---------------|
-| `look up black holes on Wikipedia` | black holes |
-| `search Wikipedia for the French Revolution` | the French Revolution |
-| `open quantum computing on Wikipedia` | quantum computing |
-| `find Marie Curie on Wikipedia` | Marie Curie |
-| `wikipedia about photosynthesis` | photosynthesis |
-| `wikipedia on the Roman Empire` | the Roman Empire |
-| `wikipedia for Alan Turing` | Alan Turing |
+| `browser wikipedia quantum physics` | quantum physics |
+| `browser window wikipedia black holes` | black holes |
+| `search quantum computing on Wikipedia in browser` | quantum computing |
+| `look up Marie Curie on Wikipedia in browser` | Marie Curie |
+| `wikipedia in browser for photosynthesis` | photosynthesis |
+| `search Wikipedia in the browser window for Alan Turing` | Alan Turing |
 
 ### Open URL (priority 10)
 
@@ -383,9 +481,18 @@ Opens a DuckDuckGo plain-HTML search (iframe-friendly).
 
 | Ambiguous phrase | Routes to | Why |
 |-----------------|-----------|-----|
+| `local wikipedia search quantum physics` | ✅ Wikipedia RAG | "local" keyword present — routes to offline ChromaDB |
+| `local wiki black holes` | ✅ Wikipedia RAG | "local" keyword present |
+| `offline wikipedia Marie Curie` | ✅ Wikipedia RAG | "offline" keyword present |
+| `browser wikipedia quantum physics` | ✅ Browser panel | "browser" keyword present — opens Wikipedia in iframe |
+| `look up black holes on Wikipedia in browser` | ✅ Browser panel | "in browser" present — browser takes precedence |
+| `search Wikipedia for black holes` | ✅ LLM fallback | Neither "local"/"offline" nor "browser" — falls through to LLM |
+| `look up black holes on Wikipedia` | ✅ LLM fallback | No qualifying keyword — falls through to LLM |
+| `start journal entry` | ✅ Journal | Journal start trigger matches |
+| `show journal` | ✅ Journal | Journal read trigger matches |
 | `store idea into the vault` | ✅ Ideas Vault — capture | Both "idea" and "vault" present; capture verb matches |
 | `store idea into the bank vault` | ✅ Ideas Vault — capture | "bank" is ignored; both "idea" and "vault" still present |
-| `search Wikipedia for bank vaults` | ✅ Browser | No "idea/ideas" — vault guard blocks Ideas Vault |
+| `search Wikipedia for bank vaults` | ✅ LLM fallback | No "local"/"offline"/"browser" — vault guard also blocks Ideas Vault |
 | `I have a good idea` | ✅ LLM | No "vault" — vault guard blocks Ideas Vault |
 | `open ideas vault` | ✅ Ideas Vault — list | No capture verb; routes to list view |
 | `stock briefing` | ✅ Market | Market is checked before News |
@@ -425,3 +532,5 @@ frontend file. Add patterns to the appropriate array and update this document.
 | News | `frontend/news-panel.js` | `detectNewsTrigger()` |
 | Browser | `frontend/browser-panel.js` | `detectBrowserTrigger()` / `detectBrowserClose()` |
 | Ideas Vault | `frontend/ideas-panel.js` | `detectIdeaCaptureTrigger()` / `detectIdeaReadTrigger()` |
+| Voice Journal | `frontend/journal-panel.js` | `detectJournalStartTrigger()` / `detectJournalReadTrigger()` |
+| Wikipedia RAG | `frontend/wiki-panel.js` | `detectWikiTrigger()` / `detectWikiExitTrigger()` |

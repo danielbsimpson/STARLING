@@ -20,8 +20,8 @@ See [`TRIGGER_PHRASES.md`](./TRIGGER_PHRASES.md) for the full voice command refe
 | 6 | Wake Word & Interrupt | [`markdown/WAKE_WORD.md`](../markdown/WAKE_WORD.md) | None | 🔲 Planned |
 | 7 | In-UI Browser Panel | [`markdown/WEBCALL.md`](../markdown/WEBCALL.md) | None | ✅ Done |
 | 8 | Ideas Vault | [`markdown/IDEAS_TRACKER.md`](../markdown/IDEAS_TRACKER.md) | Local JSON file | ✅ Done |
-| 9 | Voice Journal | [`markdown/JOURNAL.md`](../markdown/JOURNAL.md) | Local JSON files | 🔲 Planned |
-| 10 | Wikipedia RAG | [`markdown/WIKIPEDIA.md`](../markdown/WIKIPEDIA.md) | FAISS + embeddings | 🔲 Planned |
+| 9 | Voice Journal | [`markdown/JOURNAL.md`](../markdown/JOURNAL.md) | Local JSON files | ✅ Done |
+| 10 | Wikipedia RAG | [`markdown/WIKIPEDIA.md`](../markdown/WIKIPEDIA.md) | ChromaDB + nomic-embed-text | ✅ Done |
 | 11 | Google Calendar | [`markdown/CALENDAR.md`](../markdown/CALENDAR.md) | Google Calendar API (OAuth2) | 🔲 Planned |
 | 12 | Gmail | [`markdown/GMAIL.md`](../markdown/GMAIL.md) | Gmail API (OAuth2) | 🔲 Planned |
 
@@ -35,17 +35,24 @@ reference.
 
 | Priority | Tool | Notes |
 |----------|------|-------|
-| 1 | Dossier — exit | Checked before everything else |
-| 2 | Dossier — open | |
-| 3 | Timer | Checked before Time to avoid "timer" matching time patterns |
-| 4 | Date | Checked before Time — date phrases are more specific |
-| 5 | Time | |
-| 6 | Ideas Vault | Both "idea/ideas" and "vault" must appear — very low false-positive rate |
-| 7 | Weather | |
-| 8 | Market / Stocks / Crypto | More specific domain vocabulary, checked before News |
-| 9 | News | |
-| 10 | Browser / Web Panel | Wikipedia lookups, open URL, or DuckDuckGo search |
-| 11 | LLM fallback | Anything unmatched |
+| 1 | Browser — close | Only when browser panel is open; checked before everything else |
+| 2 | Wikipedia RAG — exit | Only when wiki panel is active |
+| 3 | Journal — in-mode routing | Only when journal dictation / interview is active |
+| 4 | Dossier — exit | |
+| 5 | Dossier — open | |
+| 6 | Wikipedia RAG — open | Requires **"local"** or **"offline"** keyword |
+| 7 | Journal — start | |
+| 8 | Journal — read / search | |
+| 9 | Timer | Checked before Time to avoid "timer" matching time patterns |
+| 10 | Date | Checked before Time — date phrases are more specific |
+| 11 | Time | |
+| 12 | Ideas Vault — capture | Both "idea/ideas" **and** "vault" must appear |
+| 13 | Ideas Vault — read / manage | Both "idea/ideas" **and** "vault" must appear |
+| 14 | Weather | |
+| 15 | Market / Stocks / Crypto | More specific domain vocabulary, checked before News |
+| 16 | News | |
+| 17 | Browser — open | Requires **"browser"** keyword; Wikipedia also requires **"browser"** |
+| 18 | LLM fallback | Anything unmatched |
 
 ---
 
@@ -234,12 +241,42 @@ Implementation guide: [`markdown/WEBCALL.md`](../markdown/WEBCALL.md)
 
 ---
 
+## Voice Journal
+
+Opens a dictation panel for multi-segment voice journaling. Each mic press appends a
+segment; on submit the LLM silently generates a summary and tags. Supports a guided
+interviewer mode and read-back / keyword search of saved entries.
+
+**Start triggers:** `start journal entry` · `new journal entry` · `journal note` · `begin a journal entry` · `interviewer mode`
+
+**Read triggers:** `show journal` · `open journal entries` · `journal history` · `read my last journal entry` · `today's journal entries`
+
+**Search triggers:** `search journal for [topic]` · `what did I write about [topic]`
+
+Implementation guide: [`markdown/JOURNAL.md`](../markdown/JOURNAL.md)
+
+---
+
+## Wikipedia RAG (Local / Offline)
+
+Searches the locally-ingested Simple English Wikipedia dump (ChromaDB + nomic-embed-text)
+and opens a guardrailed Q&A session in the wiki panel. **Requires "local" or "offline" in
+the phrase** to avoid conflict with the browser-panel Wikipedia lookup (which requires
+"browser").
+
+**Open triggers:** `local wikipedia search [query]` · `local wiki article on [topic]` · `search local wikipedia for [query]` · `offline wikipedia [topic]` · `find [topic] on local wiki`
+
+**Exit triggers:** `exit wikipedia` · `close wiki` · `back to chat` · `go back` · `never mind`
+
+Configuration: run `python scripts/ingest_wikipedia.py` once to build the index.  
+Implementation guide: [`markdown/WIKIPEDIA.md`](../markdown/WIKIPEDIA.md)
+
+---
+
 ## Planned Tools
 
 | Tool | Guide | Notes |
 |------|-------|-------|
 | Wake Word & Interrupt | [`WAKE_WORD.md`](../markdown/WAKE_WORD.md) | Passive listener; say "Hey Starling" to activate without pressing mic |
-| Voice Journal | [`JOURNAL.md`](../markdown/JOURNAL.md) | Multi-turn voice journaling with search and playback |
-| Wikipedia RAG | [`WIKIPEDIA.md`](../markdown/WIKIPEDIA.md) | Fetch, chunk, and query Wikipedia articles via FAISS + embeddings |
 | Google Calendar | [`CALENDAR.md`](../markdown/CALENDAR.md) | Read today's / week's events via Google Calendar OAuth2 |
 | Gmail | [`GMAIL.md`](../markdown/GMAIL.md) | Inbox summary, message read-out, and trash via Gmail API OAuth2 |
