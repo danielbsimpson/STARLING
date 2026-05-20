@@ -316,8 +316,8 @@ Tools are ordered from lowest to highest disruption to the existing pipeline:
 | 5 | Stocks & Crypto | `STOCKS.md` | 1 new router file | `yfinance`, `tzdata` | ✅ Done |
 | 6 | Wake Word & Interrupt | `WAKE_WORD.md` | None | None | ⏸️ On Hold (future — standalone unit required) |
 | 7 | In-UI Browser Panel | `WEBCALL.md` | None | None | ✅ Done |
-| 8 | Ideas Tracker | `IDEAS_TRACKER.md` | 1 new router file | None | 🟡 Medium |
-| 9 | Journal | `JOURNAL.md` | 1 new router file | None | 🟡 Med-High |
+| 8 | Ideas Tracker | `IDEAS_TRACKER.md` | 1 new router file | None | ✅ Done |
+| 9 | Journal | `JOURNAL.md` | 1 new router file | None | ✅ Done |
 | 10 | Wikipedia RAG | `WIKIPEDIA.md` | 1 new router file | `faiss-cpu` / `chromadb`, embeddings model | 🟠 High |
 | 11 | Google Calendar | `CALENDAR.md` | 1 new router file | `google-api-python-client` | 🔴 High |
 | 12 | Gmail | `GMAIL.md` | 1 new router file | `google-api-python-client` | 🔴 High |

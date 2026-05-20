@@ -29,7 +29,9 @@ Microphone → Speech-to-Text → llama-server (LLM on GPU) → Text-to-Speech �
 - 🌤️ **Weather panel** — 7-day forecast from Open-Meteo (free, no API key); named-location queries via Nominatim geocoding; disk-cached with 1-hour TTL; LLM spoken summary
 - 📰 **News briefing panel** — RSS headlines with background LLM synthesis; category filtering (tech, sports, world, finance, etc.)
 - 📈 **Stocks & crypto panel** — live market data via Yahoo Finance; equities, crypto, and indices; filter tabs; OPEN/CLOSED market badge; LLM spoken briefing
-- 🌐 **In-UI browser panel** — say `"look up [topic] on Wikipedia"`, `"open browser [url]"`, or `"browser search for [query]"` to open an embedded iframe; page text is extracted server-side and injected as LLM context for on-page Q&A and summarisation
+- 🌐 **In-UI browser panel** — say `"look up [topic] on Wikipedia"`, `"open browser [url]"`, or `"browser search for [query]"` to open an embedded iframe; page text is extracted server-side and injected as LLM context for on-page Q&A and summarisation; JS-rendered SPAs are detected and reported; Wikipedia sections can be summarised on demand with `"summarize section [name]"`
+- 💡 **Ideas vault** — say `"store idea in the vault"` to enter single-press capture mode; ideas are LLM-tagged and saved locally; retrieve with `"open ideas vault"`, search with `"search the vault for [topic]"`, or discard the last with `"discard the last idea from the vault"`
+- 📓 **Voice journal** — say `"start journal entry"` to begin multi-segment dictation or `"interviewer mode"` for a guided Q&A session; on submit the LLM silently generates a summary and tags; confirm or re-record before saving; read back entries and search by keyword or date
 
 > Tool panel screenshots and full trigger phrase reference: [`toolkit/README.md`](./toolkit/README.md)
 
@@ -49,8 +51,8 @@ the core chat pipeline. Tools 1–5 and 7 are complete; Tools 6, 8–12 are plan
 | 5 | Stocks & Crypto | yfinance (unofficial) | ✅ Done |
 | 6 | Wake Word & Interrupt | None | 🔲 Planned |
 | 7 | In-UI Browser Panel | None | ✅ Done |
-| 8 | Ideas Tracker | Local JSON file | 🔲 Planned |
-| 9 | Voice Journal | Local JSON files | 🔲 Planned |
+| 8 | Ideas Tracker | Local JSON file | ✅ Done |
+| 9 | Voice Journal | Local JSON files | ✅ Done |
 | 10 | Wikipedia RAG | FAISS + embeddings | 🔲 Planned |
 | 11 | Google Calendar | Google Calendar API (OAuth2) | 🔲 Planned |
 | 12 | Gmail | Gmail API (OAuth2) | 🔲 Planned |
@@ -456,13 +458,14 @@ To use Whisper, set `STT_ENGINE=whisper` in `.env` and ensure the FastAPI backen
 | `/stocks` | GET | Live price data for configured watchlist (equities + crypto); 5-min cache |
 | `/stocks/cache` | DELETE | Bust the stocks cache for an immediate re-fetch |
 | `/api/browser/page-text` | POST | Extract plain text from a URL for LLM context injection |
+| `/api/browser/wiki-section` | GET | Fetch a named Wikipedia section as plain text |
 | `/ideas/add` | POST | Save a new idea |
 | `/ideas` | GET / DELETE | List or clear all ideas |
 | `/ideas/{id}` | DELETE | Delete one idea by id |
 | `/ideas/search` | GET | Full-text search across ideas |
-| `/journal/save` | POST | Save a journal entry |
-| `/journal/entries` | GET | List journal entries |
-| `/journal/search` | GET | Search journal entries |
+| `/journal/entry` | POST | Save a journal entry (summary + raw transcript + tags) |
+| `/journal/entries` | GET | List journal entries (newest first) |
+| `/journal/search` | GET | Search journal entries by keyword |
 | `/journal/entry/{id}` | DELETE | Delete a journal entry |
 | `/wiki/search` | POST | Wikipedia RAG — fetch and index article |
 | `/wiki/chat` | POST | Wikipedia RAG — guardrailed Q&A session |
@@ -520,8 +523,8 @@ High-level milestones:
 - [x] LLM metrics bar — prompt tokens, generation speed, time, and context window fill percentage
 - [x] **Voice-triggered dossier / presentation mode** — voice trigger intercept, neon border animation, four-zone layout reconfiguration, manifest-driven image + structured text loading, LLM auto-briefing via sentence-chunked TTS
 - [x] **RAG memory system** — ChromaDB + BM25/vector fusion; `make rag-ingest` indexes any `.md`/`.txt` files dropped into `memory/input/`
-- [x] **Phase 11 (Tools 1–5, 7)** — Time & date panel, voice-activated timers, weather forecast panel (Open-Meteo), news briefing panel (RSS + background LLM synthesis), stocks & crypto market panel (Yahoo Finance / yfinance; parallel fetch, filter tabs, OPEN/CLOSED badge, spoken briefing), and in-UI browser panel (embedded iframe, server-side page-text extraction, LLM context injection for on-page Q&A)
-- [ ] **Phase 11 (Tools 6, 8–12)** — Wake word, ideas tracker, journal, Wikipedia RAG, Google Calendar, Gmail; see [`markdown/`](./markdown/) for implementation guides
+- [x] **Phase 11 (Tools 1–5, 7–9)** — Time & date panel, voice-activated timers, weather forecast panel (Open-Meteo), news briefing panel (RSS + background LLM synthesis), stocks & crypto market panel (Yahoo Finance / yfinance; parallel fetch, filter tabs, OPEN/CLOSED badge, spoken briefing), in-UI browser panel (embedded iframe, server-side page-text extraction, JS-SPA detection, Wikipedia section summarisation, LLM context injection for on-page Q&A), ideas vault (single-press voice capture, tag extraction, full-text search, list and discard via voice), and voice journal (multi-segment dictation, guided interview mode, silent LLM summarisation + tagging, confirm/re-record flow, read-back and search)
+- [ ] **Phase 11 (Tools 6, 10–12)** — Wake word, Wikipedia RAG, Google Calendar, Gmail; see [`markdown/`](./markdown/) for implementation guides
 - [ ] Electron desktop app packaging
 - [ ] GraphRAG knowledge graph memory
 
