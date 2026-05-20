@@ -37,10 +37,10 @@ Microphone → Speech-to-Text → llama-server (LLM on GPU) → Text-to-Speech �
 
 ---
 
-## Planned Tool Kit (Phase 11)
+## Voice Tool Kit
 
 A suite of voice-activated tools built as self-contained dispatch intercepts — none modify
-the core chat pipeline. Tools 1–5 and 7 are complete; Tools 6, 8–12 are planned.
+the core chat pipeline.
 
 | # | Tool | Backend | Status |
 |---|---|---|---|
@@ -53,12 +53,12 @@ the core chat pipeline. Tools 1–5 and 7 are complete; Tools 6, 8–12 are plan
 | 7 | In-UI Browser Panel | None | ✅ Done |
 | 8 | Ideas Tracker | Local JSON file | ✅ Done |
 | 9 | Voice Journal | Local JSON files | ✅ Done |
-| 10 | Wikipedia RAG | ChromaDB + nomic-embed-text | 🔧 In Development |
+| 10 | Wikipedia RAG | ChromaDB + fastembed | ✅ Done |
 | 11 | Google Calendar | Google Calendar API (OAuth2) | 🔲 Planned |
 | 12 | Gmail | Gmail API (OAuth2) | 🔲 Planned |
 
 See [`toolkit/README.md`](./toolkit/README.md) for screenshots, trigger phrase reference,
-and per-tool documentation. Full implementation guides in [`markdown/`](./markdown/).
+and per-tool documentation. Implementation plans for upcoming features are in [`plan/`](./plan/).
 
 ---
 
@@ -109,11 +109,12 @@ llm-speech-UI/
 │   ├── browser-panel.js    # Tool: in-UI browser panel
 │   ├── ideas-panel.js      # Tool: ideas vault
 │   ├── journal-panel.js    # Tool: voice journal
+│   ├── log-dashboard.html  # Session activity log dashboard
 │   ├── news-panel.js       # Tool: news briefing panel
 │   ├── stocks-panel.js     # Tool: stocks & crypto panel
 │   ├── timer-panel.js      # Tool: voice-activated timers
 │   ├── weather-panel.js    # Tool: weather forecast panel
-│   └── wiki-panel.js       # Tool: local Wikipedia RAG Q&A
+│   └── wiki-panel.js       # Tool: Wikipedia RAG Q&A
 ├── backend/                # FastAPI server
 │   ├── main.py             # App entry point, router registration, system-status
 │   ├── stt.py              # Speech-to-text via faster-whisper
@@ -122,45 +123,57 @@ llm-speech-UI/
 │   ├── ollama.py           # Ollama streaming relay (fallback, LLM_BACKEND=ollama)
 │   ├── rag.py              # RAG module — ingest, retrieve, format, status
 │   ├── browser.py          # Browser page-text extraction endpoint
+│   ├── ideas_routes.py     # Ideas vault endpoints
+│   ├── journal_routes.py   # Voice journal endpoints
+│   ├── log_routes.py       # Session activity log endpoints
 │   ├── news.py             # News briefing endpoint (RSS / feedparser)
+│   ├── session_log.py      # Session event recording
 │   ├── stocks.py           # Stocks & crypto market data endpoint (yfinance)
 │   ├── weather.py          # Weather forecast endpoint (Open-Meteo)
 │   ├── wikipedia_rag.py    # Wikipedia RAG — session, retrieval, prompt builder
-│   └── memory/             # Runtime data — caches and ChromaDB
-│       ├── input/          # Drop .md / .txt files here; run 'make rag-ingest' to index
-│       └── chroma_db/      # Vector store (auto-created on first ingest)
+│   └── memory/             # Runtime data — caches, JSON stores, and ChromaDB
+│       ├── chroma_db/      # Vector store (auto-created on first ingest)
+│       ├── journal/        # Journal entry files (JSON, one per entry)
+│       ├── ideas.json      # Ideas vault store
+│       ├── watchlist.json  # Stocks watchlist
+│       └── weather_cache.json  # Weather API response cache
 ├── assets/
 │   ├── images/
 │   │   └── manifest.json           # Subject → image / dossier mapping for presentation mode
 │   ├── dossier_images/             # Subject portrait images
-│   └── dossier_descriptions/       # Structured subject profiles (.md files)
+│   ├── dossier_descriptions/       # Structured subject profiles (.md files)
+│   ├── wikipedia/                  # Cached Wikipedia article data
+│   ├── ui_mockup.html              # UI design mockup reference
+│   └── archived/                   # Completed and archived implementation guides (git-ignored)
+│       └── complete/               # Guides for fully implemented features
+├── plan/                   # Implementation plans for upcoming features
+│   ├── CALENDAR.md                         # Tool: Google Calendar integration
+│   ├── GMAIL.md                            # Tool: Gmail inbox & summarisation
+│   ├── TOOL_AWARENESS.md                   # Fuzzy tool detection & recovery
+│   ├── WAKE_WORD.md                        # Tool: wake word + interrupt
+│   ├── feature-boot-shutdown-animation-1.md
+│   ├── feature-cross-platform-auto-detect-1.md
+│   ├── feature-dream-state-shutdown-pipeline-1.md
+│   ├── feature-electron-packaging-1.md
+│   ├── feature-mac-m4-compatibility-1.md
+│   ├── feature-prompt-registry-1.md
+│   ├── feature-sleep-mode-1.md
+│   └── feature-starling-soul-personality-1.md
 ├── toolkit/                # Voice trigger reference and tool documentation
 │   ├── README.md           # Per-tool screenshots, trigger phrases, and implementation notes
 │   └── TRIGGER_PHRASES.md  # Full voice command reference with dispatch priority order
-├── markdown/               # Implementation guides for planned and completed features
-│   ├── TODO.md             # Full phased build checklist (Phases 1–11)
-│   ├── TOOL_AWARENESS.md   # Notes on tool detection and dispatch chain design
-│   ├── WAKE_WORD.md        # Tool: wake word ("Hey Starling") + interrupt
-│   ├── IDEAS_TRACKER.md    # Tool: voice ideas capture & review
-│   ├── JOURNAL.md          # Tool: multi-turn voice journal
-│   ├── WIKIPEDIA.md        # Tool: Wikipedia RAG Q&A
-│   ├── CALENDAR.md         # Tool: Google Calendar integration
-│   ├── GMAIL.md            # Tool: Gmail inbox & summarisation
-│   └── complete/           # Guides for already-implemented features
-│       ├── IDEAS.md        # (general improvement brainstorm log)
-│       ├── RAG_IMPLEMENTATION.md
-│       ├── RSS_FEEDS.md    # RSS feed sources and configuration reference
-│       ├── TIME.md         # Tool: time & date queries
-│       ├── TIMER.md        # Tool: voice-activated timers
-│       ├── WEATHER.md      # Tool: weather forecast panel
-│       ├── NEWS.md         # Tool: news briefing panel
-│       ├── STOCKS.md       # Tool: stocks & crypto panel
-│       └── WEBCALL.md      # Tool: in-UI browser panel
 ├── models/                 # Local model files (e.g., kokoro-v1.0.onnx)
 ├── scripts/
 │   ├── setup.sh                # One-shot install script
 │   ├── download_models.py      # Download Kokoro model files
-│   └── start_llama_server.bat  # Launch llama-server on Windows (CUDA)
+│   ├── ingest_wikipedia.py     # Ingest Wikipedia articles into vector store
+│   ├── launch.py               # Cross-platform process launcher
+│   ├── start_llama_server.bat  # Launch llama-server on Windows (CUDA)
+│   ├── stop.py                 # Stop all running processes
+│   └── test_integration.py     # End-to-end integration test
+├── start.bat               # Windows one-click launcher (llama-server + backend)
+├── stop.bat                # Windows one-click shutdown
+├── Makefile                # make up / down / backend / frontend / rag-ingest / lint
 ├── .env.example            # Environment variable template
 ├── requirements.txt        # Python dependencies
 └── README.md
@@ -560,7 +573,7 @@ Browsers enforce an autoplay policy that blocks `audio.play()` until the user ha
 
 ## Roadmap
 
-See [`markdown/TODO.md`](./markdown/TODO.md) for the full phased build checklist.
+See [`TODO.md`](./TODO.md) for the full list of planned enhancements with links to implementation plans.
 
 High-level milestones:
 - [x] Project scaffolding and documentation
@@ -574,10 +587,12 @@ High-level milestones:
 - [x] LLM metrics bar — prompt tokens, generation speed, time, and context window fill percentage
 - [x] **Voice-triggered dossier / presentation mode** — voice trigger intercept, neon border animation, four-zone layout reconfiguration, manifest-driven image + structured text loading, LLM auto-briefing via sentence-chunked TTS
 - [x] **RAG memory system** — ChromaDB + BM25/vector fusion; `make rag-ingest` indexes any `.md`/`.txt` files dropped into `memory/input/`
-- [x] **Phase 11 (Tools 1–5, 7–9)** — Time & date panel, voice-activated timers, weather forecast panel (Open-Meteo), news briefing panel (RSS + background LLM synthesis), stocks & crypto market panel (Yahoo Finance / yfinance; parallel fetch, filter tabs, OPEN/CLOSED badge, spoken briefing), in-UI browser panel (embedded iframe, server-side page-text extraction, JS-SPA detection, Wikipedia section summarisation, LLM context injection for on-page Q&A), ideas vault (single-press voice capture, tag extraction, full-text search, list and discard via voice), and voice journal (multi-segment dictation, guided interview mode, silent LLM summarisation + tagging, confirm/re-record flow, read-back and search)
-- [ ] **Phase 11 (Tools 6, 10–12)** — Wake word, Wikipedia RAG, Google Calendar, Gmail; see [`markdown/`](./markdown/) for implementation guides
-- [ ] Electron desktop app packaging
-- [ ] GraphRAG knowledge graph memory
+- [x] **Voice tool kit (Tools 1–5, 7–10)** — Time & date, timers, weather (Open-Meteo), news briefing (RSS + LLM synthesis), stocks & crypto (Yahoo Finance / yfinance), in-UI browser panel, ideas vault, voice journal, Wikipedia RAG
+- [ ] **Wake word & interrupt** — "Hey Starling" always-on listener + mid-speech interrupt; see [`plan/WAKE_WORD.md`](./plan/WAKE_WORD.md)
+- [ ] **Google Calendar & Gmail** — OAuth2 integrations; see [`plan/CALENDAR.md`](./plan/CALENDAR.md) and [`plan/GMAIL.md`](./plan/GMAIL.md)
+- [ ] **Electron desktop app** — standalone installer for Windows/macOS/Linux; see [`plan/feature-electron-packaging-1.md`](./plan/feature-electron-packaging-1.md)
+- [ ] **Dream state / soul / sleep mode** — session-end LLM reflection, persistent personality file, inactivity retreat; see [`plan/`](./plan/)
+- [ ] **Cross-platform & macOS Apple Silicon** — hardware auto-detect, CPU fallback, M4 Mac Mini support; see [`plan/`](./plan/)
 
 ---
 
