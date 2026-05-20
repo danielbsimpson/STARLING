@@ -157,6 +157,23 @@ def main():
 
     logger.info(f"Extracted {len(all_chunks):,} text chunks from dump")
 
+    # Deduplicate by content — some articles share identical short sections.
+    # Pre-attach the ID so the upsert loop doesn't recompute it per chunk.
+    seen_ids: set[str] = set()
+    deduped: list[dict] = []
+    for c in all_chunks:
+        cid = hashlib.md5(
+            f"{c['title']}:{c['section']}:{c['text']}".encode()
+        ).hexdigest()
+        if cid not in seen_ids:
+            seen_ids.add(cid)
+            c["_id"] = cid
+            deduped.append(c)
+    removed = len(all_chunks) - len(deduped)
+    if removed:
+        logger.info(f"Removed {removed:,} duplicate chunks — {len(deduped):,} unique remain")
+    all_chunks = deduped
+
     # Embed and upsert in rolling batches to keep memory usage bounded
     total_ingested = 0
     for start in tqdm(range(0, len(all_chunks), INGEST_CHUNK), desc="Ingesting batches"):
@@ -176,10 +193,7 @@ def main():
         embeds: list      = []
 
         for chunk, emb in zip(batch_meta, embeddings):
-            chunk_id = hashlib.md5(
-                f"{chunk['title']}:{chunk['section']}:{chunk['text']}".encode()
-            ).hexdigest()
-            ids.append(chunk_id)
+            ids.append(chunk["_id"])
             docs.append(chunk["text"])          # raw text (no prefix) stored in DB
             metas.append({
                 "title":   chunk["title"],

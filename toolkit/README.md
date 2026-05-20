@@ -21,7 +21,7 @@ See [`TRIGGER_PHRASES.md`](./TRIGGER_PHRASES.md) for the full voice command refe
 | 7 | In-UI Browser Panel | [`markdown/WEBCALL.md`](../markdown/WEBCALL.md) | None | ✅ Done |
 | 8 | Ideas Vault | [`markdown/IDEAS_TRACKER.md`](../markdown/IDEAS_TRACKER.md) | Local JSON file | ✅ Done |
 | 9 | Voice Journal | [`markdown/JOURNAL.md`](../markdown/JOURNAL.md) | Local JSON files | ✅ Done |
-| 10 | Wikipedia RAG | [`markdown/WIKIPEDIA.md`](../markdown/WIKIPEDIA.md) | ChromaDB + nomic-embed-text | ✅ Done |
+| 10 | Wikipedia RAG | [`markdown/WIKIPEDIA.md`](../markdown/WIKIPEDIA.md) | ChromaDB + nomic-embed-text | 🔧 In Development |
 | 11 | Google Calendar | [`markdown/CALENDAR.md`](../markdown/CALENDAR.md) | Google Calendar API (OAuth2) | 🔲 Planned |
 | 12 | Gmail | [`markdown/GMAIL.md`](../markdown/GMAIL.md) | Gmail API (OAuth2) | 🔲 Planned |
 

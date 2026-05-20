@@ -1089,25 +1089,25 @@ summarises the full session, user confirms before saving to disk.
 
 ---
 
-### Tool 10 - Wikipedia RAG (`WIKIPEDIA.md`) 🟠
+### Tool 10 - Wikipedia RAG (`WIKIPEDIA.md`) � In Development
 
 > **Guide:** `markdown/WIKIPEDIA.md`  
-> **Pipeline risk:** High - new Python dependencies (`faiss-cpu` or `chromadb`, `sentence-transformers` or `nomic-embed-text`), a one-time corpus ingestion step, and in-memory session management on the backend. The trigger phrase `"wikipedia search"` is distinct from `"dossier"` and does not affect the existing RAG path. All existing files remain untouched.
+> **Stack:** ChromaDB + nomic-embed-text-v1 (768-dim, cosine). Vector store at `backend/memory/chroma_db`, collection `wikipedia_articles`.
+> **Dump:** Simple English Wikipedia — release **2026-05-01**, downloaded **2026-05-19** (`assets/wikipedia/simplewiki-latest-pages-articles.xml.bz2`, ~553 k articles, ~626 k chunks after sectioning).
 
-Implement Phase 1 first (Simple English Wikipedia, ~250 MB, ~200,000 articles). Phases 2-3
-(full English Wikipedia, live API, custom embeddings) are optional expansions.
-
-- [ ] `pip install faiss-cpu sentence-transformers` (or `chromadb` as vector store alternative)
-- [ ] Download Simple English Wikipedia dump (see guide for direct URL)
-- [ ] Create `backend/wikipedia_rag.py` - ingestion pipeline, FAISS index, `WikipediaSession` class
-- [ ] Create `backend/wiki_routes.py` - `POST /wiki/search`, `POST /wiki/chat`, `DELETE /wiki/session`
-- [ ] Register `wiki_router` in `backend/main.py`
-- [ ] Add `WIKI_INDEX_PATH`, `WIKI_EMBED_MODEL`, `WIKI_TOP_K` to `.env`
-- [ ] Create `frontend/wiki-panel.js` - `detectWikiTrigger()`, `openWikiPanel()`, session Q&A flow
-- [ ] Import in `app.js` and add wiki intercept block in `onstop` + `handleSend`
-- [ ] Add wiki panel HTML + CSS
-- [ ] Run one-time ingestion: `python backend/wikipedia_rag.py --ingest` (allow 30-60 min)
-- [ ] Test: "Wikipedia search" → Starling asks what to look up → Q&A grounded in article → no hallucination
+- [x] `pip install chromadb sentence-transformers einops mwxml mwparserfromhell tqdm`
+- [x] Install PyTorch 2.11.0+cu128 (CUDA 12.8 — RTX 4060 verified)
+- [x] Download Simple English Wikipedia dump (2026-05-01 release)
+- [x] Create `scripts/ingest_wikipedia.py` — parse dump, section-chunk, embed, upsert to ChromaDB
+- [x] Create `backend/wikipedia_rag.py` — session management, chunk retrieval, system prompt builder
+- [x] Create `backend/wiki_routes.py` — `POST /wiki/start`, `GET /wiki/status`, `POST /wiki/clear`, `POST /wiki/chat`
+- [x] Register `wiki_router` in `backend/main.py`
+- [x] Create `frontend/wiki-panel.js` — `detectWikiTrigger()` (requires "local"/"offline" keyword), session Q&A flow
+- [x] Import in `app.js` and add wiki intercept block in `onstop` + `handleSend`
+- [x] Add wiki panel HTML + CSS
+- [ ] Run one-time ingestion: `python scripts/ingest_wikipedia.py` (allow 1-3 h on GPU; dedup pass included)
+- [ ] Test end-to-end: "local wikipedia search quantum physics" → wiki panel opens → Q&A grounded in articles
+- [ ] Test exit: "exit wikipedia" / "close wiki" → panel closes, session cleared
 
 ---
 

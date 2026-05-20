@@ -53,7 +53,7 @@ the core chat pipeline. Tools 1–5 and 7 are complete; Tools 6, 8–12 are plan
 | 7 | In-UI Browser Panel | None | ✅ Done |
 | 8 | Ideas Tracker | Local JSON file | ✅ Done |
 | 9 | Voice Journal | Local JSON files | ✅ Done |
-| 10 | Wikipedia RAG | ChromaDB + nomic-embed-text | ✅ Done |
+| 10 | Wikipedia RAG | ChromaDB + nomic-embed-text | 🔧 In Development |
 | 11 | Google Calendar | Google Calendar API (OAuth2) | 🔲 Planned |
 | 12 | Gmail | Gmail API (OAuth2) | 🔲 Planned |
 
