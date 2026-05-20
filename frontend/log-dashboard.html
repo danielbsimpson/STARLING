@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>S.T.A.R.L.I.N.G. — Log Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;600&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      background: #060606;
+      color: #c8c8c8;
+      font-family: 'Exo 2', sans-serif;
+      font-size: 13px;
+      overflow: hidden;
+    }
+
+    /* ── Layout ───────────────────────────────────────────────────────────── */
+
+    .dashboard {
+      display: flex;
+      height: 100vh;
+    }
+
+    .sidebar {
+      width: 240px;
+      flex-shrink: 0;
+      background: #0a0a0a;
+      border-right: 1px solid rgba(200,200,200,0.06);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .main-panel {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar ──────────────────────────────────────────────────────────── */
+
+    .sidebar-title {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 4px;
+      color: rgba(200,200,200,0.3);
+      text-transform: uppercase;
+      padding: 16px 14px 8px;
+      flex-shrink: 0;
+    }
+
+    .session-list {
+      flex: 1;
+      overflow-y: auto;
+      padding-bottom: 8px;
+    }
+
+    .session-list::-webkit-scrollbar { width: 4px; }
+    .session-list::-webkit-scrollbar-track { background: transparent; }
+    .session-list::-webkit-scrollbar-thumb { background: rgba(200,200,200,0.08); border-radius: 2px; }
+
+    .session-item {
+      padding: 8px 14px;
+      cursor: pointer;
+      border-left: 2px solid transparent;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      color: rgba(200,200,200,0.45);
+      line-height: 1.5;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+
+    .session-item:hover {
+      background: rgba(255,255,255,0.03);
+      color: rgba(200,200,200,0.7);
+    }
+
+    .session-item.active {
+      border-left-color: #5599ff;
+      color: #88aaff;
+      background: rgba(85,153,255,0.05);
+    }
+
+    .session-item .sess-id { display: block; }
+    .session-item .sess-meta { color: rgba(200,200,200,0.28); font-size: 9px; }
+
+    .sidebar-error {
+      padding: 12px 14px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      color: #ff6677;
+    }
+
+    /* ── Legend ───────────────────────────────────────────────────────────── */
+
+    .legend {
+      padding: 12px 14px;
+      border-top: 1px solid rgba(200,200,200,0.06);
+      flex-shrink: 0;
+    }
+
+    .legend-title {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 3px;
+      color: rgba(200,200,200,0.2);
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin-bottom: 4px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 9px;
+      color: rgba(200,200,200,0.35);
+    }
+
+    .legend-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* ── Top Bar ──────────────────────────────────────────────────────────── */
+
+    .top-bar {
+      flex-shrink: 0;
+      padding: 12px 16px 0;
+      background: #080808;
+      border-bottom: 1px solid rgba(200,200,200,0.06);
+    }
+
+    .dash-title {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 4px;
+      color: rgba(85,153,255,0.5);
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .filter-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      padding-bottom: 10px;
+    }
+
+    .type-filters {
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+    }
+
+    .type-btn {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 1px;
+      padding: 3px 8px;
+      border-radius: 3px;
+      border: 1px solid;
+      cursor: pointer;
+      background: transparent;
+      opacity: 0.35;
+      transition: opacity 0.15s;
+    }
+
+    .type-btn.active { opacity: 1; }
+
+    #search-box {
+      background: #111;
+      border: 1px solid rgba(200,200,200,0.1);
+      color: #c8c8c8;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 3px;
+      width: 200px;
+      outline: none;
+    }
+
+    #search-box:focus { border-color: rgba(85,153,255,0.4); }
+
+    #search-box::placeholder { color: rgba(200,200,200,0.2); }
+
+    .filter-row button {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 1px;
+      padding: 4px 12px;
+      background: #111;
+      border: 1px solid rgba(200,200,200,0.1);
+      color: rgba(200,200,200,0.5);
+      border-radius: 3px;
+      cursor: pointer;
+      text-transform: uppercase;
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    .filter-row button:hover {
+      color: #88aaff;
+      border-color: rgba(85,153,255,0.3);
+    }
+
+    #refresh-toggle.live {
+      color: #66ffaa;
+      border-color: rgba(102,255,170,0.3);
+    }
+
+    .event-count {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      color: rgba(200,200,200,0.25);
+      margin-left: auto;
+      white-space: nowrap;
+    }
+
+    /* ── Table ────────────────────────────────────────────────────────────── */
+
+    .table-wrap {
+      flex: 1;
+      overflow-y: auto;
+      min-height: 0;
+    }
+
+    .table-wrap::-webkit-scrollbar { width: 5px; }
+    .table-wrap::-webkit-scrollbar-track { background: transparent; }
+    .table-wrap::-webkit-scrollbar-thumb { background: rgba(200,200,200,0.08); border-radius: 2px; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    thead th {
+      background: #0c0c0c;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 2px;
+      color: rgba(85,153,255,0.6);
+      text-transform: uppercase;
+      text-align: left;
+      padding: 7px 10px;
+      border-bottom: 1px solid rgba(200,200,200,0.06);
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    tbody tr { cursor: pointer; }
+    tbody tr:hover td { background: rgba(255,255,255,0.02); }
+    tbody tr.expanded td { background: rgba(85,153,255,0.04); }
+
+    td {
+      padding: 5px 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.025);
+      vertical-align: top;
+    }
+
+    td.col-num {
+      color: rgba(200,200,200,0.2);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      width: 36px;
+    }
+
+    td.col-ts {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      color: rgba(200,200,200,0.35);
+      white-space: nowrap;
+      width: 90px;
+    }
+
+    td.col-ms {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      color: rgba(200,200,200,0.25);
+      white-space: nowrap;
+      width: 70px;
+    }
+
+    td.col-src {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      color: rgba(200,200,200,0.3);
+      width: 50px;
+    }
+
+    td.col-event {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      white-space: nowrap;
+      width: 160px;
+    }
+
+    td.col-summary {
+      font-size: 11px;
+      color: rgba(200,200,200,0.6);
+      max-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    tr.detail-row td {
+      padding: 0;
+      background: #0c0c10;
+      cursor: default;
+    }
+
+    .detail-inner {
+      padding: 10px 16px 10px 46px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      color: #aabbcc;
+      white-space: pre-wrap;
+      word-break: break-all;
+      border-bottom: 1px solid rgba(85,153,255,0.1);
+      max-height: 260px;
+      overflow-y: auto;
+    }
+
+    .hidden { display: none !important; }
+
+    .empty-msg {
+      padding: 60px 40px;
+      text-align: center;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: rgba(200,200,200,0.15);
+      text-transform: uppercase;
+    }
+
+    /* ── Event type colours ───────────────────────────────────────────────── */
+
+    .ev-session_start, .ev-session_end { color: #66ffaa; }
+    .ev-user_speech        { color: #88ccff; }
+    .ev-user_speech_frontend { color: #66aaee; }
+    .ev-user_text          { color: #aaddff; }
+    .ev-tool_dispatch      { color: #ffdd88; }
+    .ev-tool_call          { color: #ffaa44; }
+    .ev-tool_result        { color: #44cc88; }
+    .ev-llm_request        { color: #cc88ff; }
+    .ev-llm_response       { color: #aa66ee; }
+    .ev-error              { color: #ff6677; }
+
+    /* ── Stats strip ──────────────────────────────────────────────────────── */
+
+    .stats-strip {
+      flex-shrink: 0;
+      padding: 8px 16px;
+      background: #080808;
+      border-top: 1px solid rgba(200,200,200,0.06);
+      display: flex;
+      gap: 24px;
+      align-items: center;
+      flex-wrap: wrap;
+      min-height: 34px;
+    }
+
+    .stat-chip {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 1px;
+      color: rgba(200,200,200,0.35);
+    }
+
+    .stat-chip span {
+      color: rgba(200,200,200,0.7);
+      margin-left: 4px;
+    }
+
+    .stat-chip.tools-list span { color: #ffdd88; }
+  </style>
+</head>
+<body>
+<noscript>
+  <p style="padding:20px;font-family:monospace;color:#c8c8c8">JavaScript is required to view the log dashboard.</p>
+</noscript>
+
+<div class="dashboard">
+
+  <!-- ── Sidebar ──────────────────────────────────────────────────────────── -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-title">Sessions</div>
+    <div class="session-list" id="session-list"></div>
+
+    <div class="legend">
+      <div class="legend-title">Event Types</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#66ffaa"></span>session_start / end</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#88ccff"></span>user_speech</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#66aaee"></span>user_speech_frontend</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#aaddff"></span>user_text</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#ffdd88"></span>tool_dispatch</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#ffaa44"></span>tool_call</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#44cc88"></span>tool_result</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#cc88ff"></span>llm_request</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#aa66ee"></span>llm_response</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#ff6677"></span>error</div>
+    </div>
+  </aside>
+
+  <!-- ── Main panel ───────────────────────────────────────────────────────── -->
+  <main class="main-panel" id="main-panel">
+
+    <div class="top-bar">
+      <div class="dash-title">S.T.A.R.L.I.N.G. &mdash; Log Dashboard</div>
+      <div class="filter-row">
+        <div class="type-filters" id="type-filters"></div>
+        <input type="search" id="search-box" placeholder="search events…" autocomplete="off" />
+        <button id="export-btn">Export JSONL</button>
+        <button id="refresh-toggle">Auto-Refresh: Off</button>
+        <span class="event-count" id="event-count"></span>
+      </div>
+    </div>
+
+    <div class="table-wrap" id="table-wrap">
+      <div class="empty-msg" id="empty-msg">Select a session to view its events.</div>
+      <table id="log-table" class="hidden">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Time</th>
+            <th>+ms</th>
+            <th>Src</th>
+            <th>Event</th>
+            <th>Summary</th>
+          </tr>
+        </thead>
+        <tbody id="log-body"></tbody>
+      </table>
+    </div>
+
+    <div class="stats-strip" id="stats-strip"></div>
+
+  </main>
+</div>
+
+<script>
+'use strict';
+
+// ── Constants ────────────────────────────────────────────────────────────────
+
+const EVENT_COLORS = {
+  session_start:        '#66ffaa',
+  session_end:          '#66ffaa',
+  user_speech:          '#88ccff',
+  user_speech_frontend: '#66aaee',
+  user_text:            '#aaddff',
+  tool_dispatch:        '#ffdd88',
+  tool_call:            '#ffaa44',
+  tool_result:          '#44cc88',
+  llm_request:          '#cc88ff',
+  llm_response:         '#aa66ee',
+  error:                '#ff6677',
+};
+
+const EVENT_SUMMARY = {
+  user_speech:          d => d.transcript ? `"${d.transcript.slice(0, 80)}"` : '',
+  user_speech_frontend: d => d.transcript ? `"${d.transcript.slice(0, 80)}"` : '',
+  user_text:            d => d.text       ? `"${d.text.slice(0, 80)}"` : '',
+  tool_dispatch:        d => `tool: ${d.tool || '?'}${d.trigger_phrase ? ` — "${d.trigger_phrase.slice(0, 50)}"` : ''}`,
+  tool_call:            d => `${d.endpoint || ''} ${d.method || ''} — ${d.params_summary || ''}`,
+  tool_result:          d => `${d.endpoint || ''} ${d.status_code != null ? d.status_code : ''} ${d.duration_ms != null ? d.duration_ms + 'ms' : ''} — ${(d.result_summary || '').slice(0, 60)}`,
+  llm_request:          d => `model: ${d.model || '?'}, msgs: ${d.message_count || 0}, hash: ${d.system_prompt_hash || ''}`,
+  llm_response:         d => `${d.token_count_estimate || 0} tokens, ${d.duration_ms || 0}ms — "${(d.full_text || '').slice(0, 60)}"`,
+  session_start:        d => `llm: ${d.llm_backend || ''}, pid: ${d.pid || ''}`,
+  session_end:          d => `duration: ${d.duration_s != null ? d.duration_s + 's' : '?'}, events: ${d.event_count != null ? d.event_count : ''}`,
+  error:                d => `${d.source || ''}: ${(d.message || d.error || '').slice(0, 80)}`,
+};
+
+// ── State ────────────────────────────────────────────────────────────────────
+
+let _sessions      = [];
+let _activeSessionId = null;
+let _allEvents     = [];
+let _liveSessionId = null;
+let _refreshInterval = null;
+let _activeTypes   = new Set();
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatBytes(bytes) {
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function fmtTime(isoStr) {
+  // Extract HH:MM:SS.mmm from ISO 8601 string
+  if (!isoStr) return '';
+  const t = isoStr.includes('T') ? isoStr.split('T')[1] : isoStr;
+  return t.slice(0, 12); // HH:MM:SS.mmm
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function summarise(ev) {
+  const fn = EVENT_SUMMARY[ev.event];
+  if (fn) {
+    try { return fn(ev.data || {}); } catch { /* fall through */ }
+  }
+  return JSON.stringify(ev.data || {}).slice(0, 120);
+}
+
+// ── Session list ─────────────────────────────────────────────────────────────
+
+async function loadSessionList() {
+  const listEl = document.getElementById('session-list');
+  listEl.innerHTML = '<div class="session-item" style="opacity:0.4">Loading…</div>';
+  try {
+    const r = await fetch('/log/sessions');
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    _sessions = await r.json();
+    renderSessionList();
+    if (_sessions.length > 0) {
+      await selectSession(_sessions[0].session_id);
+    }
+  } catch (e) {
+    listEl.innerHTML = `<div class="sidebar-error">Failed to load sessions:<br>${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderSessionList() {
+  const listEl = document.getElementById('session-list');
+  if (_sessions.length === 0) {
+    listEl.innerHTML = '<div class="session-item" style="opacity:0.3">No sessions found.</div>';
+    return;
+  }
+  listEl.innerHTML = '';
+  for (const s of _sessions) {
+    const div = document.createElement('div');
+    div.className = 'session-item' + (s.session_id === _activeSessionId ? ' active' : '');
+    div.dataset.id = s.session_id;
+    // Format display: "2026-05-20 14:30:00"
+    const displayId = s.session_id.replace('session_', '').replace('_', ' ').replace(/-/g, (m, offset) => offset > 9 ? ':' : '-');
+    div.innerHTML = `<span class="sess-id">${escapeHtml(displayId)}</span>
+                     <span class="sess-meta">${s.event_count} events &nbsp; ${formatBytes(s.size_bytes)}</span>`;
+    div.addEventListener('click', () => selectSession(s.session_id));
+    listEl.appendChild(div);
+  }
+}
+
+// ── Session loading ───────────────────────────────────────────────────────────
+
+async function selectSession(sessionId) {
+  // Stop auto-refresh if switching sessions
+  if (_refreshInterval && sessionId !== _activeSessionId) {
+    _stopAutoRefresh();
+  }
+
+  _activeSessionId = sessionId;
+
+  // Update sidebar active state
+  document.querySelectorAll('.session-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.id === sessionId);
+  });
+
+  // Clear existing table state
+  document.getElementById('empty-msg').textContent = 'Loading…';
+  document.getElementById('empty-msg').classList.remove('hidden');
+  document.getElementById('log-table').classList.add('hidden');
+  document.getElementById('stats-strip').innerHTML = '';
+  document.getElementById('type-filters').innerHTML = '';
+  document.getElementById('event-count').textContent = '';
+
+  try {
+    const r = await fetch(`/log/sessions/${sessionId}`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const text = await r.text();
+    _allEvents = [];
+    for (const line of text.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        _allEvents.push(JSON.parse(trimmed));
+      } catch {
+        // skip malformed lines
+      }
+    }
+  } catch (e) {
+    document.getElementById('empty-msg').textContent = `Failed to load session: ${e.message}`;
+    return;
+  }
+
+  // Determine unique event types present (in order of first occurrence)
+  const seen = new Set();
+  for (const ev of _allEvents) {
+    if (!seen.has(ev.event)) seen.add(ev.event);
+  }
+  _activeTypes = new Set(seen);
+
+  renderTypeFilters(seen);
+  renderTable();
+  loadStats(sessionId);
+
+  // Detect live session
+  try {
+    const hr = await fetch('/health');
+    if (hr.ok) {
+      const hd = await hr.json();
+      _liveSessionId = hd.current_session || null;
+    }
+  } catch { _liveSessionId = null; }
+
+  _updateRefreshButton();
+}
+
+// ── Type filter buttons ───────────────────────────────────────────────────────
+
+function renderTypeFilters(orderedTypes) {
+  const container = document.getElementById('type-filters');
+  container.innerHTML = '';
+  for (const type of orderedTypes) {
+    const colour = EVENT_COLORS[type] || '#c8c8c8';
+    const btn = document.createElement('button');
+    btn.className = 'type-btn active';
+    btn.textContent = type;
+    btn.style.color = colour;
+    btn.style.borderColor = colour;
+    btn.dataset.type = type;
+    btn.addEventListener('click', () => {
+      if (_activeTypes.has(type)) {
+        _activeTypes.delete(type);
+        btn.classList.remove('active');
+      } else {
+        _activeTypes.add(type);
+        btn.classList.add('active');
+      }
+      renderTable();
+    });
+    container.appendChild(btn);
+  }
+}
+
+// ── Event table ───────────────────────────────────────────────────────────────
+
+function renderTable() {
+  const search = document.getElementById('search-box').value.toLowerCase();
+
+  // Find session start timestamp for elapsed-ms column
+  let sessionStartMs = null;
+  const startEv = _allEvents.find(ev => ev.event === 'session_start');
+  if (startEv && startEv.ts) {
+    try { sessionStartMs = new Date(startEv.ts).getTime(); } catch { /* ignore */ }
+  }
+
+  // Filter
+  const visible = _allEvents.filter(ev => {
+    if (!_activeTypes.has(ev.event)) return false;
+    if (search) {
+      const haystack = (ev.event + ' ' + (ev.source || '') + ' ' + JSON.stringify(ev.data || {})).toLowerCase();
+      if (!haystack.includes(search)) return false;
+    }
+    return true;
+  });
+
+  const countEl = document.getElementById('event-count');
+  countEl.textContent = `${visible.length} / ${_allEvents.length} events`;
+
+  const tbody = document.getElementById('log-body');
+  const table = document.getElementById('log-table');
+  const emptyMsg = document.getElementById('empty-msg');
+
+  if (visible.length === 0) {
+    table.classList.add('hidden');
+    emptyMsg.classList.remove('hidden');
+    emptyMsg.textContent = _allEvents.length === 0 ? 'Session log is empty.' : 'No events match current filters.';
+    return;
+  }
+
+  table.classList.remove('hidden');
+  emptyMsg.classList.add('hidden');
+
+  tbody.innerHTML = '';
+
+  for (let i = 0; i < visible.length; i++) {
+    const ev = visible[i];
+    const colour = EVENT_COLORS[ev.event] || '#c8c8c8';
+
+    let elapsedStr = '';
+    if (sessionStartMs !== null && ev.ts) {
+      try {
+        const elapsed = Math.round(new Date(ev.ts).getTime() - sessionStartMs);
+        elapsedStr = `+${elapsed}`;
+      } catch { /* ignore */ }
+    }
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="col-num">${i + 1}</td>
+      <td class="col-ts">${escapeHtml(fmtTime(ev.ts))}</td>
+      <td class="col-ms">${escapeHtml(elapsedStr)}</td>
+      <td class="col-src">${escapeHtml(ev.source || '')}</td>
+      <td class="col-event"><span class="ev-${escapeHtml(ev.event || '')}">${escapeHtml(ev.event || '')}</span></td>
+      <td class="col-summary">${escapeHtml(summarise(ev))}</td>`;
+
+    tr.addEventListener('click', () => toggleDetail(tr, ev));
+    tbody.appendChild(tr);
+  }
+}
+
+// ── Row detail ────────────────────────────────────────────────────────────────
+
+function toggleDetail(rowEl, ev) {
+  const next = rowEl.nextElementSibling;
+  if (next && next.classList.contains('detail-row')) {
+    next.remove();
+    rowEl.classList.remove('expanded');
+    return;
+  }
+  const detailTr = document.createElement('tr');
+  detailTr.className = 'detail-row';
+  const td = document.createElement('td');
+  td.setAttribute('colspan', '6');
+  const inner = document.createElement('div');
+  inner.className = 'detail-inner';
+  inner.textContent = JSON.stringify(ev.data, null, 2);
+  td.appendChild(inner);
+  detailTr.appendChild(td);
+  rowEl.insertAdjacentElement('afterend', detailTr);
+  rowEl.classList.add('expanded');
+}
+
+// ── Stats strip ───────────────────────────────────────────────────────────────
+
+async function loadStats(sessionId) {
+  const strip = document.getElementById('stats-strip');
+  strip.textContent = '';
+  try {
+    const r = await fetch(`/log/stats/${sessionId}`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d = await r.json();
+
+    const chips = [
+      { label: 'EVENTS',          value: d.total_events,                    cls: '' },
+      { label: 'DURATION',        value: d.duration_s != null ? `${d.duration_s}s` : 'live', cls: '' },
+      { label: 'LLM CALLS',       value: d.llm_calls,                       cls: '' },
+      { label: 'TOOL DISPATCHES', value: d.tool_dispatches,                  cls: '' },
+      { label: 'ERRORS',          value: d.error_count,                     cls: '', errColor: d.error_count > 0 },
+      { label: 'TOOLS',           value: (d.tools_used || []).join(', ') || 'none', cls: 'tools-list' },
+    ];
+
+    for (const chip of chips) {
+      const span = document.createElement('div');
+      span.className = `stat-chip${chip.cls ? ' ' + chip.cls : ''}`;
+      const valSpan = document.createElement('span');
+      if (chip.errColor) valSpan.style.color = '#ff6677';
+      valSpan.textContent = chip.value;
+      span.textContent = chip.label;
+      span.appendChild(valSpan);
+      strip.appendChild(span);
+    }
+  } catch (e) {
+    strip.textContent = `Stats unavailable: ${e.message}`;
+    strip.style.color = 'rgba(200,200,200,0.25)';
+    strip.style.fontFamily = "'Share Tech Mono', monospace";
+    strip.style.fontSize = '9px';
+  }
+}
+
+// ── Export ────────────────────────────────────────────────────────────────────
+
+document.getElementById('export-btn').addEventListener('click', () => {
+  if (!_activeSessionId) return;
+  const a = document.createElement('a');
+  a.href = `/log/sessions/${_activeSessionId}`;
+  a.download = `${_activeSessionId}.jsonl`;
+  a.click();
+});
+
+// ── Auto-refresh ──────────────────────────────────────────────────────────────
+
+function _stopAutoRefresh() {
+  if (_refreshInterval) {
+    clearInterval(_refreshInterval);
+    _refreshInterval = null;
+  }
+  _updateRefreshButton();
+}
+
+function _updateRefreshButton() {
+  const btn = document.getElementById('refresh-toggle');
+  if (_refreshInterval) {
+    btn.textContent = 'Auto-Refresh: On';
+    btn.classList.add('live');
+  } else {
+    btn.textContent = 'Auto-Refresh: Off';
+    btn.classList.remove('live');
+  }
+}
+
+document.getElementById('refresh-toggle').addEventListener('click', () => {
+  if (_refreshInterval) {
+    _stopAutoRefresh();
+    return;
+  }
+  if (_activeSessionId !== _liveSessionId) return;
+  _refreshInterval = setInterval(async () => {
+    await selectSession(_activeSessionId);
+    const wrap = document.getElementById('table-wrap');
+    wrap.scrollTop = wrap.scrollHeight;
+  }, 5000);
+  _updateRefreshButton();
+});
+
+// ── Search ────────────────────────────────────────────────────────────────────
+
+document.getElementById('search-box').addEventListener('input', renderTable);
+
+// ── Bootstrap ────────────────────────────────────────────────────────────────
+
+loadSessionList();
+</script>
+</body>
+</html>
