@@ -61,17 +61,34 @@ def _kill(pid: int, name: str) -> None:
         print(f"  ! {name}: {exc}")
 
 
-def main() -> None:
-    if not PID_FILE.exists():
-        print("S.T.A.R.L.I.N.G. is not running.")
-        sys.exit(0)
+def _kill_by_name_windows(proc_name: str) -> None:
+    """Fallback: kill all processes matching a name via taskkill."""
+    result = subprocess.run(
+        ["taskkill", "/F", "/IM", proc_name],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        print(f"  ✓ {proc_name} stopped (by name).")
+    else:
+        msg = result.stderr.strip() or result.stdout.strip()
+        if "not found" in msg.lower():
+            print(f"  - {proc_name}: not running.")
+        else:
+            print(f"  - {proc_name}: {msg}")
 
-    try:
-        data: dict = json.loads(PID_FILE.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError) as exc:
-        print(f"Could not read PID file: {exc}")
-        PID_FILE.unlink(missing_ok=True)
-        sys.exit(1)
+
+def main() -> None:
+    pid_file_missing = not PID_FILE.exists()
+    data: dict = {}
+
+    if not pid_file_missing:
+        try:
+            data = json.loads(PID_FILE.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            print(f"Could not read PID file: {exc}")
+            PID_FILE.unlink(missing_ok=True)
+            data = {}
 
     print("Stopping S.T.A.R.L.I.N.G.…")
 
@@ -83,6 +100,13 @@ def main() -> None:
         _kill(int(backend_pid), "backend")
     if llama_pid:
         _kill(int(llama_pid), "llama-server")
+
+    # Fallback: kill by process name to catch stale-PID or --reload child cases
+    if IS_WINDOWS:
+        _kill_by_name_windows("llama-server.exe")
+        # Only wipe uvicorn workers if we had a PID file (avoid killing unrelated pythons)
+        if not pid_file_missing or not data:
+            _kill_by_name_windows("uvicorn.exe")
 
     try:
         PID_FILE.unlink(missing_ok=True)

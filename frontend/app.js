@@ -345,6 +345,57 @@ const micBtn      = document.getElementById('mic-btn');
 const textInput   = document.getElementById('text-input');
 const sendBtn     = document.getElementById('send-btn');
 const clearBtn    = document.getElementById('clear-btn');
+const powerBtn    = document.getElementById('power-btn');
+
+// ── Power / shutdown ──────────────────────────────────────────────────────────
+// _sphereAnimPhase is read by the power button guard and will be set to
+// 'booting' or 'shutting_down' by feature-boot-shutdown-animation when that
+// feature is implemented.  For now it is always 'none'.
+let _sphereAnimPhase = 'none';
+
+/**
+ * Final step of the shutdown sequence: POST to the backend and show the
+ * offline overlay.  The boot-shutdown-animation feature will call this from
+ * _onShutdownAnimationComplete() instead of invoking it directly.
+ */
+function _triggerSystemShutdown() {
+  fetch(`${BACKEND_BASE}/system/shutdown`, { method: 'POST' }).catch(() => {});
+  setTimeout(() => {
+    document.getElementById('offline-overlay').classList.add('visible');
+  }, 1200);
+}
+
+/**
+ * Entry point for the shutdown flow.  Click the power button → this runs.
+ * When feature-boot-shutdown-animation is added, replace the body of this
+ * function with the sphere-retreat animation; call _triggerSystemShutdown()
+ * from _onShutdownAnimationComplete() at the end of that animation.
+ */
+function startShutdown() {
+  // Disable all interactive controls so nothing fires during shutdown
+  [micBtn, sendBtn, textInput, powerBtn].forEach(el => el && (el.disabled = true));
+  _triggerSystemShutdown();
+}
+
+// Two-click confirmation: first click arms the button (label → ✕), second
+// click within 2 s confirms.  A timeout resets it if the user doesn't confirm.
+let _shutdownConfirmTimer = null;
+powerBtn && powerBtn.addEventListener('click', () => {
+  if (_sphereAnimPhase !== 'none') return;  // animation in progress — ignore
+  if (powerBtn.classList.contains('confirming')) {
+    clearTimeout(_shutdownConfirmTimer);
+    powerBtn.classList.remove('confirming');
+    powerBtn.textContent = 'SHUTDOWN';
+    startShutdown();
+  } else {
+    powerBtn.classList.add('confirming');
+    powerBtn.textContent = 'CONFIRM?';
+    _shutdownConfirmTimer = setTimeout(() => {
+      powerBtn.classList.remove('confirming');
+      powerBtn.textContent = 'SHUTDOWN';
+    }, 2000);
+  }
+});
 
 const statModel   = document.getElementById('stat-model');
 const statStatus  = document.getElementById('stat-status');

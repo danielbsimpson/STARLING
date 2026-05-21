@@ -1,10 +1,12 @@
+import asyncio
 import json
 import os
 import re
+import signal
 from pathlib import Path
 
 import httpx
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -106,6 +108,20 @@ def health():
         "log_viewer":      "/log/viewer",
         "current_session": session_log.get_session_id(),
     }
+
+
+_LOCALHOST_HOSTS = {"127.0.0.1", "::1", "localhost"}
+
+@app.post("/system/shutdown")
+async def system_shutdown(request: Request):
+    """Gracefully shut down the S.T.A.R.L.I.N.G. backend. Localhost only."""
+    if request.client is None or request.client.host not in _LOCALHOST_HOSTS:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    session_log.log_session_end()
+    # TODO: trigger dream state here (feature-dream-state-shutdown-pipeline-1)
+    loop = asyncio.get_event_loop()
+    loop.call_later(0.5, lambda: os.kill(os.getpid(), signal.SIGTERM))
+    return {"ok": True, "message": "Shutting down"}
 
 
 # ── RAG endpoints ─────────────────────────────────────────────────────────────

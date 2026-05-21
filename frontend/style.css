@@ -77,10 +77,61 @@ html, body {
 .hdr-fullname {
   font-family: 'Share Tech Mono', monospace;
   font-size: 8px; letter-spacing: 2.5px;
-  color: rgba(200,200,200,0.22); text-transform: uppercase; margin-top: 3px;
+  color: rgba(200,200,200,0.22); text-transform: uppercase;
 }
 .hdr-stats { display: flex; gap: 20px; align-items: flex-end; }
 .stat { text-align: right; }
+
+/* ── Power button ────────────────────────────────────────────────────────── */
+.hdr-name-row {
+  display: flex; align-items: baseline; gap: 16px;
+  margin-bottom: 7px;
+}
+.power-btn {
+  background: transparent;
+  border: 1px solid rgba(220,80,80,0.25);
+  color: rgba(220,100,100,0.55);
+  font-size: 9px; letter-spacing: 3px;
+  padding: 3px 7px; height: 20px;
+  border-radius: 2px; cursor: pointer;
+  font-family: 'Share Tech Mono', monospace;
+  transition: color 0.2s, border-color 0.2s, box-shadow 0.2s;
+  white-space: nowrap;
+  position: static;
+  align-self: flex-start;
+  margin-bottom: 3px;
+}
+.power-btn:hover {
+  border-color: rgba(255,80,80,0.6);
+  color: rgba(255,110,110,0.9);
+  box-shadow: 0 0 10px rgba(255,60,60,0.18);
+}
+.power-btn.confirming {
+  border-color: rgba(255,80,80,0.85);
+  color: rgba(255,120,120,1);
+  box-shadow: 0 0 14px rgba(255,60,60,0.3);
+}
+.power-btn:disabled {
+  opacity: 0.2; cursor: default; pointer-events: none;
+}
+
+/* ── Offline overlay ─────────────────────────────────────────────────────── */
+.offline-overlay {
+  position: fixed; inset: 0;
+  background: #060606;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9999;
+  opacity: 0; pointer-events: none;
+  transition: opacity 1.2s ease;
+}
+.offline-overlay.visible {
+  opacity: 1; pointer-events: all;
+}
+.offline-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px; letter-spacing: 6px;
+  color: rgba(200,200,200,0.2); text-transform: uppercase;
+}
 .stat-lbl {
   font-family: 'Share Tech Mono', monospace;
   font-size: 8px; letter-spacing: 2px;

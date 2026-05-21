@@ -5,10 +5,18 @@ python-dotenv>=1.0.0
 pydantic>=2.0.0
 python-multipart>=0.0.9
 faster-whisper>=1.0.0
+# onnxruntime-gpu MUST be installed last (after fastembed, chromadb, sentence-transformers)
+# because those packages pull in the CPU-only `onnxruntime` as a transitive dep, which
+# overwrites onnxruntime.dll with a mismatched revision that breaks CUDAExecutionProvider.
+# After any full pip install, run: pip install --force-reinstall --no-deps onnxruntime-gpu
 onnxruntime-gpu>=1.20.0
+# All nvidia-* wheels required for onnxruntime CUDA provider on Windows.
+# Without these, the DLL search path on Windows won't find the CUDA libraries.
 nvidia-cublas-cu12
 nvidia-cuda-runtime-cu12
+nvidia-cuda-nvrtc-cu12
 nvidia-cufft-cu12
+nvidia-curand-cu12
 nvidia-cudnn-cu12
 kokoro-onnx[gpu]>=0.5.0
 soundfile>=0.13.0
@@ -19,6 +27,7 @@ rank-bm25>=0.2.2
 # fastembed is installed separately AFTER onnxruntime-gpu to avoid the CPU
 # onnxruntime package overwriting the GPU one. Do not reorder these lines.
 # Install order: pip install onnxruntime-gpu  →  then pip install fastembed
+# After full env rebuild: pip install --force-reinstall --no-deps onnxruntime-gpu
 fastembed>=0.3.0
 
 # News briefing (Tool 4)

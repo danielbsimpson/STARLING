@@ -24,7 +24,10 @@
     <header class="hdr">
       <div class="hdr-title">
         <div class="hdr-system">LOCAL AI SYSTEM v1.0</div>
-        <div class="hdr-name">S.T.A.R.L.I.N.G.</div>
+        <div class="hdr-name-row">
+          <div class="hdr-name">S.T.A.R.L.I.N.G.</div>
+          <button class="power-btn" id="power-btn" title="Shut down S.T.A.R.L.I.N.G.">SHUTDOWN</button>
+        </div>
         <div class="hdr-fullname">Speech&#8209;Triggered Autonomous Reasoning &amp; Local Intelligence Node Generator</div>
       </div>
       <div class="hdr-stats">
@@ -42,6 +45,11 @@
         </div>
       </div>
     </header>
+
+    <!-- Full-screen offline overlay (shown after shutdown) -->
+    <div class="offline-overlay" id="offline-overlay">
+      <div class="offline-label">OFFLINE</div>
+    </div>
 
     <!-- Two-column body -->
     <div class="body-cols">
