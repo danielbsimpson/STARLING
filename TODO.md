@@ -8,6 +8,7 @@ All implementation plans live in [`plan/`](./plan/). Completed feature guides ha
 
 | Feature | Plan | Description |
 |---|---|---|
+| RAG Memory Manager | [`plan/feature-rag-memory-manager-1.md`](./plan/feature-rag-memory-manager-1.md) | Voice-triggered panel to upload `.txt`/`.md` files into ChromaDB, view all ingested sources, preview chunks per document, and delete sources by name |
 | Wake Word & Interrupt | [`plan/WAKE_WORD.md`](./plan/WAKE_WORD.md) | "Hey Starling" always-on listener triggers the mic without a button press; speaking while Starling is talking immediately stops playback and starts listening |
 | Google Calendar | [`plan/CALENDAR.md`](./plan/CALENDAR.md) | Voice-triggered calendar panel; reads Google Calendar via OAuth2; daily and weekly event views; LLM spoken briefing ("what's on my schedule today?") |
 | Gmail | [`plan/GMAIL.md`](./plan/GMAIL.md) | Voice-triggered inbox panel; fetches unread messages via Gmail API; spoken summary ("you have 5 unread emails from…"); open any message for a full-text LLM summary |
