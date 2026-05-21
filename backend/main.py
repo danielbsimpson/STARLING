@@ -111,6 +111,20 @@ def health():
 
 
 _LOCALHOST_HOSTS = {"127.0.0.1", "::1", "localhost"}
+_PID_FILE = Path(__file__).parent / "memory" / ".starling.pid"
+
+
+def _kill_pid(pid: int) -> None:
+    """Kill a process by PID, platform-appropriately."""
+    try:
+        if os.name == "nt":
+            import subprocess as _sp
+            _sp.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True)
+        else:
+            os.kill(pid, signal.SIGTERM)
+    except Exception:
+        pass
+
 
 @app.post("/system/shutdown")
 async def system_shutdown(request: Request):
@@ -119,8 +133,34 @@ async def system_shutdown(request: Request):
         raise HTTPException(status_code=403, detail="Forbidden")
     session_log.log_session_end()
     # TODO: trigger dream state here (feature-dream-state-shutdown-pipeline-1)
+
+    # Read the PID file to find the reload manager and llama-server PIDs.
+    # Killing only os.getpid() (the uvicorn worker) is not enough — the reload
+    # manager parent process will immediately restart the worker.
+    pids_to_kill: list[int] = []
+    try:
+        data = json.loads(_PID_FILE.read_text(encoding="utf-8"))
+        for key in ("backend", "llama"):
+            if data.get(key):
+                pids_to_kill.append(int(data[key]))
+    except Exception:
+        pass
+
+    # Fallback: at minimum kill the current process if PID file was unavailable
+    if not pids_to_kill:
+        pids_to_kill = [os.getpid()]
+
+    def _do_kill() -> None:
+        for pid in pids_to_kill:
+            _kill_pid(pid)
+        # Also clean up the PID file
+        try:
+            _PID_FILE.unlink(missing_ok=True)
+        except Exception:
+            pass
+
     loop = asyncio.get_event_loop()
-    loop.call_later(0.5, lambda: os.kill(os.getpid(), signal.SIGTERM))
+    loop.call_later(0.5, _do_kill)
     return {"ok": True, "message": "Shutting down"}
 
 
