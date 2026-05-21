@@ -17,10 +17,17 @@ Download the dump first (see markdown/WIKIPEDIA.md — Step 1):
 import bz2
 import hashlib
 import logging
+import os
 import re
 import sys
 from pathlib import Path
 
+# Must be set before PyTorch is imported (sentence_transformers pulls it in).
+# Allows the CUDA allocator to use non-contiguous memory segments, which
+# prevents fragmentation-based OOM on long-running ingestion jobs.
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
+import torch
 import chromadb
 import mwparserfromhell
 import mwxml
@@ -38,7 +45,7 @@ WIKI_COLLECTION = "wikipedia_articles"
 EMBEDDING_MODEL  = "nomic-ai/nomic-embed-text-v1"
 EMBEDDING_DEVICE = "cuda"   # set to "cpu" if GPU is reserved for the LLM
 
-BATCH_SIZE       = 64       # sentence-transformers encode batch size
+BATCH_SIZE       = 32       # sentence-transformers encode batch size (lower = less peak VRAM)
 INGEST_CHUNK     = 640      # number of text chunks to upsert per ChromaDB batch
 MAX_CHUNK_CHARS  = 800
 OVERLAP_CHARS    = 80
@@ -135,12 +142,21 @@ def main():
         metadata={"hnsw:space": "cosine"},
     )
     existing = col.count()
+    resume = False
     if existing > 0:
         logger.info(f"Collection '{WIKI_COLLECTION}' already has {existing:,} chunks.")
-        ans = input("Re-ingest? This will upsert (overwrite) existing chunks. [y/N] ").strip().lower()
-        if ans != "y":
+        ans = input(
+            "[r] Resume from existing chunks  "
+            "[f] Full re-ingest from scratch  "
+            "[a] Abort  (r/f/a): "
+        ).strip().lower()
+        if ans == "a" or ans == "":
             logger.info("Aborted.")
             sys.exit(0)
+        elif ans == "r":
+            resume = True
+            logger.info(f"Will resume — skipping first {existing:,} chunks already in collection.")
+        # 'f' falls through and re-ingests everything
 
     logger.info(f"Parsing dump: {DUMP_PATH}")
     dump = mwxml.Dump.from_file(bz2.open(str(DUMP_PATH), "rb"))
@@ -174,9 +190,15 @@ def main():
         logger.info(f"Removed {removed:,} duplicate chunks — {len(deduped):,} unique remain")
     all_chunks = deduped
 
+    # Skip already-ingested chunks when resuming after a crash.
+    if resume and existing > 0:
+        skip = min(existing, len(all_chunks))
+        all_chunks = all_chunks[skip:]
+        logger.info(f"Resuming from chunk {skip:,} — {len(all_chunks):,} chunks remaining")
+
     # Embed and upsert in rolling batches to keep memory usage bounded
     total_ingested = 0
-    for start in tqdm(range(0, len(all_chunks), INGEST_CHUNK), desc="Ingesting batches"):
+    for batch_idx, start in enumerate(tqdm(range(0, len(all_chunks), INGEST_CHUNK), desc="Ingesting batches")):
         batch_meta = all_chunks[start : start + INGEST_CHUNK]
         batch_text = [DOCUMENT_PREFIX + c["text"] for c in batch_meta]
 
@@ -203,6 +225,10 @@ def main():
 
         col.upsert(ids=ids, embeddings=embeds, documents=docs, metadatas=metas)
         total_ingested += len(ids)
+
+        # Release fragmented reserved VRAM back to the pool every 50 batches.
+        if EMBEDDING_DEVICE == "cuda" and batch_idx % 50 == 49:
+            torch.cuda.empty_cache()
 
     logger.info(f"Ingestion complete — {total_ingested:,} chunks upserted.")
     logger.info(f"Collection '{WIKI_COLLECTION}' total: {col.count():,} chunks.")
