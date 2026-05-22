@@ -15,27 +15,142 @@ const CATEGORIES = [
   { key: 'entertainment', label: 'Entmt.'  },
 ];
 
+// ── Region config ─────────────────────────────────────────────────────────────
+const REGIONS = [
+  { key: 'all',           label: 'All Regions'  },
+  { key: 'north-america', label: 'N. America'   },
+  { key: 'europe',        label: 'Europe'       },
+  { key: 'middle-east',   label: 'Mid. East'    },
+  { key: 'africa',        label: 'Africa'       },
+  { key: 'asia',          label: 'Asia'         },
+  { key: 'south-america', label: 'S. America'   },
+  { key: 'oceania',       label: 'Oceania'      },
+];
+
+// Maps resolved source labels (from backend) to a region key
+const SOURCE_REGION = {
+  // North America
+  'New York Times':    'north-america',
+  'NPR':               'north-america',
+  'ABC News':          'north-america',
+  'CBS News':          'north-america',
+  'Wall Street Journal': 'north-america',
+  'AP News':           'north-america',
+  'Vox':               'north-america',
+  'Newsweek':          'north-america',
+  'Fox News':          'north-america',
+  'Business Insider':  'north-america',
+  'LA Times':          'north-america',
+  'Chicago Tribune':   'north-america',
+  'Seattle Times':     'north-america',
+  'Mercury News':      'north-america',
+  'Newsday':           'north-america',
+  'Yahoo News':        'north-america',
+  'Hacker News':       'north-america',
+  'Ars Technica':      'north-america',
+  'TechCrunch':        'north-america',
+  'WIRED':             'north-america',
+  'POLITICO':          'north-america',
+  'Science Daily':     'north-america',
+  'ESPN':              'north-america',
+  // Europe
+  'BBC News':          'europe',
+  'The Guardian':      'europe',
+  'The Independent':   'europe',
+  'Daily Mail':        'europe',
+  'TheJournal.ie':     'europe',
+  'BreakingNews.ie':   'europe',
+  'Irish Examiner':    'europe',
+  'The Local':         'europe',
+  'Agencia EFE':       'europe',
+  'Euro Weekly News':  'europe',
+  'UNIAN (Ukraine)':   'europe',
+  'The Moscow Times':  'europe',
+  'TASS':              'europe',
+  // Middle East
+  'Al Jazeera English': 'middle-east',
+  // Africa
+  'Premium Times Nigeria': 'africa',
+  'Guardian Nigeria':      'africa',
+  // Asia
+  'Times of India':         'asia',
+  'NDTV':                   'asia',
+  'The Hindu':              'asia',
+  'INQUIRER.net':           'asia',
+  'GMA News':               'asia',
+  'Hong Kong Free Press':   'asia',
+  'The Standard HK':        'asia',
+  'bdnews24':               'asia',
+  'The Daily Star BD':      'asia',
+  'The News International': 'asia',
+  'Express Tribune':        'asia',
+  // South America
+  'The Rio Times': 'south-america',
+  'Brasil Wire':   'south-america',
+};
+
 // ── DOM refs ──────────────────────────────────────────────────────────────────
-const newsPanel      = document.getElementById('news-panel');
-const newsMeta       = document.getElementById('news-meta');
-const newsTitle      = document.getElementById('news-title');
-const newsTabs       = document.getElementById('news-tabs');
-const newsList       = document.getElementById('news-list');
-const newsFetched    = document.getElementById('news-fetched');
-const newsRefreshBtn = document.getElementById('news-refresh-btn');
-const newsCategories = document.getElementById('news-categories');
+const newsPanel        = document.getElementById('news-panel');
+const newsMeta         = document.getElementById('news-meta');
+const newsTitle        = document.getElementById('news-title');
+const newsList         = document.getElementById('news-list');
+const newsFetched      = document.getElementById('news-fetched');
+const newsRefreshBtn   = document.getElementById('news-refresh-btn');
+const newsCatSelect    = document.getElementById('news-cat-select');
+const newsRegionSelect = document.getElementById('news-region-select');
+const newsSourceSelect = document.getElementById('news-source-select');
 const newsSynthIndicator = document.getElementById('news-synth-indicator');
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let _newsData        = null;   // last fetched payload
 let _activeTab       = 'all'; // currently selected source tab
 let _activeCategory  = 'world'; // currently selected category
+let _activeRegion    = 'all'; // currently selected region filter
 
 // Synthesis polling state (Approach A)
 let _synthPollTimer  = null;
 let _synthPollCount  = 0;
 const SYNTH_POLL_INTERVAL_MS = 3000;  // check every 3 s
 const SYNTH_POLL_MAX         = 40;    // give up after 120 s
+
+// ── Filter select initialisation ──────────────────────────────────────────────
+// Category and region options are static; source options are rebuilt per-fetch.
+(function _initFilterSelects() {
+  if (newsCatSelect) {
+    CATEGORIES.forEach(({ key, label }) => {
+      const opt = document.createElement('option');
+      opt.value = key;
+      opt.textContent = label;
+      newsCatSelect.appendChild(opt);
+    });
+    newsCatSelect.addEventListener('change', async () => {
+      _activeRegion = 'all';
+      if (newsRegionSelect) newsRegionSelect.value = 'all';
+      await openNewsPanel(newsCatSelect.value, true);
+    });
+  }
+
+  if (newsRegionSelect) {
+    REGIONS.forEach(({ key, label }) => {
+      const opt = document.createElement('option');
+      opt.value = key;
+      opt.textContent = label;
+      newsRegionSelect.appendChild(opt);
+    });
+    newsRegionSelect.addEventListener('change', () => {
+      _activeRegion = newsRegionSelect.value;
+      _reApplyFilters();
+    });
+  }
+
+  if (newsSourceSelect) {
+    newsSourceSelect.addEventListener('change', () => {
+      if (!_newsData) return;
+      _activeTab = newsSourceSelect.value;
+      _reApplyFilters();
+    });
+  }
+}());
 
 // ── Refresh button ────────────────────────────────────────────────────────────
 newsRefreshBtn?.addEventListener('click', async () => {
@@ -249,31 +364,26 @@ function _renderPanel(data) {
   const fetchedDate = new Date(fetched_at);
   newsFetched.textContent = `UPDATED ${fetchedDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
 
-  // ── Category chips ──────────────────────────────────────────────────────────
-  if (newsCategories) {
-    newsCategories.innerHTML = '';
-    CATEGORIES.forEach(({ key, label }) => {
-      const chip       = document.createElement('button');
-      chip.className   = 'news-category-chip';
-      chip.textContent = label;
-      chip.dataset.key = key;
-      if (key === (category ?? 'world')) chip.classList.add('active');
-      chip.addEventListener('click', async () => {
-        if (chip.classList.contains('active')) return;
-        newsCategories.querySelectorAll('.news-category-chip').forEach(c => c.classList.remove('active'));
-        chip.classList.add('active');
-        await openNewsPanel(key, true);
-      });
-      newsCategories.appendChild(chip);
-    });
-  }
+  // ── Sync filter selects ───────────────────────────────────────────────────
+  if (newsCatSelect) newsCatSelect.value = category ?? 'world';
+  if (newsRegionSelect) newsRegionSelect.value = _activeRegion;
 
-  // ── Source tabs — "ALL" first, then one per source ──────────────────────────
-  newsTabs.innerHTML = '';
-  const allTab = _makeTab('ALL', 'all');
-  allTab.classList.add('active');
-  newsTabs.appendChild(allTab);
-  sources.forEach(src => newsTabs.appendChild(_makeTab(src, src)));
+  // ── Populate source select ────────────────────────────────────────────────
+  if (newsSourceSelect) {
+    newsSourceSelect.innerHTML = '';
+    const allOpt = document.createElement('option');
+    allOpt.value = 'all';
+    allOpt.textContent = 'All Sources';
+    newsSourceSelect.appendChild(allOpt);
+    sources.forEach(src => {
+      const opt = document.createElement('option');
+      opt.value = src;
+      opt.textContent = src.length > 22 ? src.slice(0, 20) + '\u2026' : src;
+      newsSourceSelect.appendChild(opt);
+    });
+    newsSourceSelect.value = 'all';
+    _activeTab = 'all';
+  }
 
   // ── Headline / story list ──────────────────────────────────────────────────
   if (synthesised && synthesised.length > 0) {
@@ -284,38 +394,33 @@ function _renderPanel(data) {
   }
 }
 
-function _makeTab(label, key) {
-  const btn       = document.createElement('button');
-  btn.className   = 'news-tab';
-  btn.textContent = label.length > 14 ? label.slice(0, 12) + '…' : label;
-  btn.dataset.key = key;
-  btn.addEventListener('click', () => {
-    if (!_newsData) return;
-    _activeTab = key;
-    newsTabs.querySelectorAll('.news-tab').forEach(t => t.classList.remove('active'));
-    btn.classList.add('active');
-
-    // If we have synthesis results AND showing "all" sources, show synthesis cards
-    if (key === 'all' && _newsData.synthesised?.length > 0) {
-      _renderSynthesisedList(_newsData.synthesised, false);
-    } else {
-      const items = key === 'all'
-        ? _newsData.headlines
-        : (_newsData.by_source[key] ?? []);
-      _renderList(items);
-    }
-  });
-  return btn;
+function _reApplyFilters() {
+  if (_activeTab === 'all' && _newsData?.synthesised?.length > 0) {
+    _renderSynthesisedList(_newsData.synthesised, false);
+  } else {
+    const items = _activeTab === 'all'
+      ? (_newsData?.headlines ?? [])
+      : (_newsData?.by_source?.[_activeTab] ?? []);
+    _renderList(items);
+  }
 }
 
 function _renderList(items) {
+  const filtered = _activeRegion === 'all'
+    ? items
+    : items.filter(item => SOURCE_REGION[item.source] === _activeRegion);
   newsList.innerHTML = '';
-  if (!items.length) {
-    newsList.innerHTML = '<div style="font-size:0.7rem;color:#444;padding:4px 0;">No headlines available.</div>';
+  if (!filtered.length) {
+    newsList.innerHTML = '<div style="font-size:0.7rem;color:#444;padding:4px 0;">No headlines for this region.</div>';
     return;
   }
-  // Approach B: stagger each card in with a cascade delay
-  items.forEach((item, i) => {
+  // US / North America sources float to the top; within each group, pub_ts order is preserved.
+  const sorted = [...filtered].sort((a, b) => {
+    const ra = SOURCE_REGION[a.source] === 'north-america' ? 0 : 1;
+    const rb = SOURCE_REGION[b.source] === 'north-america' ? 0 : 1;
+    return ra - rb;
+  });
+  sorted.forEach((item, i) => {
     const card = _makeHeadlineCard(item);
     card.style.setProperty('--card-delay', `${i * 40}ms`);
     newsList.appendChild(card);
@@ -323,15 +428,20 @@ function _renderList(items) {
 }
 
 function _renderSynthesisedList(stories, incoming = false) {
+  const filtered = _activeRegion === 'all'
+    ? stories
+    : stories.filter(story =>
+        story.sources?.some(s => SOURCE_REGION[s.source ?? s.name] === _activeRegion)
+      );
   newsList.innerHTML = '';
-  if (!stories.length) {
-    newsList.innerHTML = '<div style="font-size:0.7rem;color:#444;padding:4px 0;">No stories available.</div>';
+  if (!filtered.length) {
+    newsList.innerHTML = '<div style="font-size:0.7rem;color:#444;padding:4px 0;">No stories for this region.</div>';
     return;
   }
   // Stagger cards; use a longer base delay when patching in synthesis results
   // so the transition feels deliberate rather than a jarring instant swap.
   const baseDelay = incoming ? 80 : 40;
-  stories.forEach((story, i) => {
+  filtered.forEach((story, i) => {
     const card = _makeStoryCard(story);
     card.style.setProperty('--card-delay', `${i * baseDelay}ms`);
     if (incoming) card.classList.add('incoming');
@@ -342,10 +452,16 @@ function _renderSynthesisedList(stories, incoming = false) {
 function _makeHeadlineCard(item) {
   const card     = document.createElement('div');
   card.className = 'news-item';
+  const _region    = SOURCE_REGION[item.source];
+  const _regionLbl = (_region ? REGIONS.find(r => r.key === _region)?.label : null) ?? '—';
+  const _pub       = item.pub || '—';
   card.innerHTML = `
     <div class="news-item-meta">
       <span class="news-item-source">${_esc(item.source)}</span>
-      ${item.pub ? `<span class="news-item-pub">${_esc(item.pub)}</span>` : ''}
+      <span class="news-item-meta-sep">|</span>
+      <span class="news-item-region">${_esc(_regionLbl)}</span>
+      <span class="news-item-meta-sep">|</span>
+      <span class="news-item-pub">${_esc(_pub)}</span>
     </div>
     <div class="news-item-title">${_esc(item.title)}</div>
     ${item.summary ? `<div class="news-item-summary">${_esc(item.summary)}</div>` : ''}

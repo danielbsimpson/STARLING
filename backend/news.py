@@ -33,7 +33,9 @@ _PER_FEED        = int(os.getenv("NEWS_PER_FEED", "5"))
 _LLM_LIMIT       = int(os.getenv("NEWS_LLM_LIMIT", "10"))
 _CACHE_SECONDS   = int(os.getenv("NEWS_CACHE_SECONDS", "900"))
 _SYNTHESIS_ON    = os.getenv("NEWS_SYNTHESIS_ENABLED", "true").lower() in ("1", "true", "yes")
-_SYNTHESIS_MAX   = int(os.getenv("NEWS_SYNTHESIS_MAX_HEADLINES", "40"))
+_SYNTHESIS_MAX   = int(os.getenv("NEWS_SYNTHESIS_MAX_HEADLINES", "15"))
+# Delay (seconds) before synthesis starts so the main LLM chat call can finish first.
+_SYNTHESIS_DELAY = int(os.getenv("NEWS_SYNTHESIS_DELAY", "12"))
 
 # ── Category config ───────────────────────────────────────────────────────────
 _CATEGORY_LABELS: dict[str, str] = {
@@ -50,10 +52,46 @@ _CATEGORY_LABELS: dict[str, str] = {
 # Default feeds per category — used when the env var is not set
 _CATEGORY_DEFAULT_FEEDS: dict[str, str] = {
     "world": (
+        # Core international wires
         "https://feeds.bbci.co.uk/news/rss.xml,"
         "https://rss.nytimes.com/services/xml/rss/nyt/World.xml,"
-        "https://apnews.com/index.rss,"
-        "https://feeds.reuters.com/reuters/topNews"
+        "https://www.theguardian.com/world/rss,"
+        "https://www.aljazeera.com/xml/rss/all.xml,"
+        # United Kingdom (supplemental)
+        "http://www.independent.co.uk/news/uk/rss,"
+        "https://www.dailymail.co.uk/home/index.rss,"
+        # Ukraine
+        "https://rss.unian.net/site/news_eng.rss,"
+        # Russia (independent English outlet)
+        "https://www.themoscowtimes.com/rss/news,"
+        "http://tass.com/rss/v2.xml,"
+        # Spain
+        "https://feeds.thelocal.com/rss/es,"
+        "https://www.efe.com/efe/english/4/rss,"
+        # Nigeria
+        "https://www.premiumtimesng.com/feed,"
+        "https://guardian.ng/feed/,"
+        # Pakistan
+        "https://tribune.com.pk/feed/home,"
+        "https://www.thenews.com.pk/rss/1/1,"
+        # Philippines
+        "https://www.inquirer.net/fullfeed,"
+        "https://data.gmanews.tv/gno/rss/news/feed.xml,"
+        # Ireland
+        "https://www.thejournal.ie/feed/,"
+        "https://feeds.breakingnews.ie/bntopstories,"
+        # India
+        "https://timesofindia.indiatimes.com/rssfeedstopstories.cms,"
+        "https://feeds.feedburner.com/ndtvnews-top-stories,"
+        # Hong Kong
+        "https://www.hongkongfp.com/feed/,"
+        "https://www.thestandard.com.hk/newsfeed/latest/news.xml,"
+        # Brazil
+        "https://riotimesonline.com/feed/,"
+        "http://www.brasilwire.com/feed/,"
+        # Bangladesh
+        "https://www.thedailystar.net/frontpage/rss.xml,"
+        "https://bdnews24.com/?widgetName=rssfeed&widgetId=1150&getXmlFeed=true"
     ),
     "us": (
         "https://feeds.npr.org/1001/rss.xml,"
@@ -123,6 +161,7 @@ def _source_name_from_url(url: str) -> str:
         "arstechnica.com":     "Ars Technica",
         "hnrss.org":           "Hacker News",
         "theguardian.com":     "The Guardian",
+        "aljazeera.com":       "Al Jazeera English",
         "nytimes.com":         "New York Times",
         "dowjones.io":         "Wall Street Journal",
         "wsj.com":             "Wall Street Journal",
@@ -144,6 +183,33 @@ def _source_name_from_url(url: str) -> str:
         "foxnews.com":         "Fox News",
         "businessinsider.com": "Business Insider",
         "yahoo.com":           "Yahoo News",
+        # International / regional
+        "bdnews24.com":               "bdnews24",
+        "brasilwire.com":             "Brasil Wire",
+        "breakingnews.ie":            "BreakingNews.ie",
+        "dailymail.co.uk":            "Daily Mail",
+        "efe.com":                    "Agencia EFE",
+        "euroweeklynews.com":         "Euro Weekly News",
+        "gmanews.tv":                 "GMA News",
+        "guardian.ng":                "Guardian Nigeria",
+        "hongkongfp.com":             "Hong Kong Free Press",
+        "ietopstories":               "Irish Examiner",
+        "independent.co.uk":          "The Independent",
+        "inquirer.net":               "INQUIRER.net",
+        "ndtvnews":                   "NDTV",
+        "premiumtimesng.com":         "Premium Times Nigeria",
+        "riotimesonline.com":         "The Rio Times",
+        "tass.com":                   "TASS",
+        "thedailystar.net":           "The Daily Star BD",
+        "thehindu.com":               "The Hindu",
+        "thejournal.ie":              "TheJournal.ie",
+        "thelocal.com":               "The Local",
+        "themoscowtimes.com":         "The Moscow Times",
+        "thestandard.com.hk":         "The Standard HK",
+        "thenews.com.pk":             "The News International",
+        "timesofindia.indiatimes.com": "Times of India",
+        "tribune.com.pk":             "Express Tribune",
+        "unian.net":                  "UNIAN (Ukraine)",
     }
     for key, label in labels.items():
         if key in url:
@@ -217,11 +283,35 @@ def _parse_feed(url: str) -> list[dict]:
     return items
 
 
+# US-based source labels — these are surfaced first in the LLM context so the
+# briefing leads with familiar outlets even when world feeds dominate the raw list.
+_US_SOURCES: frozenset[str] = frozenset({
+    "New York Times", "NPR", "ABC News", "CBS News", "Wall Street Journal",
+    "AP News", "Vox", "Newsweek", "Fox News", "Business Insider", "LA Times",
+    "Chicago Tribune", "Seattle Times", "Mercury News", "Newsday", "Yahoo News",
+    "Hacker News", "Ars Technica", "TechCrunch", "WIRED", "POLITICO",
+    "Science Daily", "ESPN",
+})
+
+
 def _build_llm_context(headlines: list[dict]) -> str:
-    """Build a compact plain-prose summary of the top headlines for LLM injection."""
+    """Build a compact plain-prose summary of the top headlines for LLM injection.
+    US sources are surfaced first; at most 2 headlines per source for variety.
+    """
     now   = datetime.now(timezone.utc).strftime("%A, %B %d at %I:%M %p UTC")
     lines = [f"[NEWS BRIEFING \u2014 {now}]"]
-    for i, h in enumerate(headlines[:_LLM_LIMIT], 1):
+    us    = [h for h in headlines if h["source"] in _US_SOURCES]
+    intl  = [h for h in headlines if h["source"] not in _US_SOURCES]
+    seen: dict[str, int] = {}
+    selected: list[dict] = []
+    for h in us + intl:
+        cnt = seen.get(h["source"], 0)
+        if cnt < 2:
+            seen[h["source"]] = cnt + 1
+            selected.append(h)
+        if len(selected) >= _LLM_LIMIT:
+            break
+    for i, h in enumerate(selected, 1):
         line = f"{i}. {h['title']} ({h['source']})"
         if h["summary"] and h["summary"].lower() != h["title"].lower():
             line += f" \u2014 {h['summary']}"
@@ -330,7 +420,10 @@ async def _run_synthesis_bg(headlines: list[dict], category: str) -> None:
     """
     Background task: synthesise headlines and write to _synth_cache.
     Runs after GET /news has already returned raw data to the client.
+    A short delay lets the main news-briefing LLM call finish before synthesis
+    saturates the local model server.
     """
+    await asyncio.sleep(_SYNTHESIS_DELAY)
     cache_key = f"news_{category}"
     _synth_busy.add(cache_key)
     try:

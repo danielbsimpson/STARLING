@@ -1313,35 +1313,38 @@ html, body {
   letter-spacing: 0.08em;
 }
 
-.news-tabs {
+.news-filters {
   display: flex;
   gap: 6px;
-  flex-wrap: wrap;
+  align-items: center;
 }
 
-.news-tab {
+.news-filter-select {
   background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 5px;
-  color: #888;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: #999;
   cursor: pointer;
+  flex: 1;
   font-family: 'Share Tech Mono', monospace;
-  font-size: 0.6rem;
-  letter-spacing: 0.1em;
-  padding: 3px 9px;
+  font-size: 0.55rem;
+  letter-spacing: 0.07em;
+  min-width: 0;
+  outline: none;
+  padding: 4px 6px;
   text-transform: uppercase;
-  transition: background 0.15s, color 0.15s;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
-.news-tab:hover {
-  background: rgba(255, 255, 255, 0.08);
+.news-filter-select:focus {
+  border-color: rgba(255, 255, 255, 0.25);
   color: #ccc;
 }
 
-.news-tab.active {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.2);
-  color: #e0e0e0;
+.news-filter-select option {
+  background: #1c1c1c;
+  color: #ccc;
 }
 
 .news-list {
@@ -1391,6 +1394,23 @@ html, body {
   text-transform: uppercase;
 }
 
+.news-item-region {
+  font-size: 0.52rem;
+  color: #3a3a4a;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+
+.news-item-meta-sep {
+  font-size: 0.5rem;
+  color: #333;
+  user-select: none;
+}
+
 .news-item-pub {
   font-size: 0.58rem;
   color: #444;
@@ -1438,39 +1458,6 @@ html, body {
   font-size: 0.58rem;
   color: #444;
   letter-spacing: 0.08em;
-}
-
-/* ── Category chips ──────────────────────────────────────────────────────────── */
-
-.news-categories {
-  display: flex;
-  gap: 5px;
-  flex-wrap: wrap;
-}
-
-.news-category-chip {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 4px;
-  color: #666;
-  cursor: pointer;
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 0.57rem;
-  letter-spacing: 0.09em;
-  padding: 2px 8px;
-  text-transform: uppercase;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-
-.news-category-chip:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #aaa;
-}
-
-.news-category-chip.active {
-  background: rgba(255, 255, 255, 0.09);
-  border-color: rgba(255, 255, 255, 0.22);
-  color: #ddd;
 }
 
 /* ── Synthesised story cards ──────────────────────────────────────────────────── */
