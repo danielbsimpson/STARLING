@@ -290,6 +290,9 @@ function exitRedditMode() {
   closeRedditPanel();
 }
 
+function enterYouTubeMode() { starlingEl.classList.add('yt-mode'); }
+function exitYouTubeMode() { starlingEl.classList.remove('yt-mode'); closeYouTubePanel(); }
+
 /** Returns a fresh local date/time string for injecting into LLM context at request time. */
 function _currentTimeContext() {
   const now  = new Date();
@@ -1873,9 +1876,9 @@ async function _routeInput(text) {
     closeBrowserPanel();
     setState('thinking');
     appendMessage('user', text);
+    enterYouTubeMode();
     const ytContext = await openYouTubePanel({});
     if (ytContext) {
-      enterYouTubeMode();
       await sendToOllama(
         "Give me a brief spoken summary of what's new on my YouTube feed. " +
         'For each channel, mention the one or two most interesting recent videos. ' +
@@ -1889,6 +1892,7 @@ async function _routeInput(text) {
         }
       );
     } else {
+      exitYouTubeMode();
       await sendToOllama('Inform the user that the YouTube feed could not be reached right now. One sentence.');
     }
     fetchSystemStatus();
