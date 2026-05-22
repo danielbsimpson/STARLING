@@ -4,6 +4,17 @@ All implementation plans live in [`plan/`](./plan/). Completed feature guides ha
 
 ---
 
+## Social & Content Feeds
+
+| Feature | Plan | Status | Description |
+|---|---|---|---|
+| Reddit Feed | [`plan/feature-reddit-social-1.md`](./plan/feature-reddit-social-1.md) | ✅ Core complete | Voice-triggered panel fetching top posts from configurable subreddits via the Reddit JSON API; LLM synthesis; filter by subreddit and sort; expandable panel layout |
+| Reddit Auth (personalised) | [`plan/feature-reddit-social-1.md`](./plan/feature-reddit-social-1.md) | 🔲 Pending | OAuth2 login to Reddit so Starling can read your personal frontpage, saved posts, and upvoted content rather than fixed public subreddits |
+| YouTube Feed | [`plan/feature-youtube-feed-1.md`](./plan/feature-youtube-feed-1.md) | ✅ Core complete | Voice-triggered panel fetching latest videos from subscribed/default channels via YouTube RSS; LLM synthesis; filter by channel and sort; expandable tile panel |
+| YouTube Auth (personalised) | [`plan/feature-youtube-feed-1.md`](./plan/feature-youtube-feed-1.md) | 🔲 Pending | OAuth2 / YouTube Data API v3 login so Starling can pull your actual subscriptions feed instead of hardcoded default channels |
+
+---
+
 ## Voice Tools
 
 | Feature | Plan | Description |
