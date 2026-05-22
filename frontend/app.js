@@ -4,6 +4,7 @@ import { detectTimerTrigger, handleTimerTrigger, initTimerPanel, dismissTimerPan
 import { detectWeatherTrigger, openWeatherPanel, closeWeatherPanel, initWeatherPanel, startWeatherAutoDismiss } from './weather-panel.js';
 import { detectNewsTrigger, openNewsPanel, closeNewsPanel } from './news-panel.js';
 import { detectRedditTrigger, openRedditPanel, closeRedditPanel, initRedditPanel } from './reddit-panel.js';
+import { detectYouTubeTrigger, openYouTubePanel, closeYouTubePanel, initYouTubePanel } from './youtube-panel.js';
 import { detectMarketTrigger, openMarketPanel, closeMarketPanel, setSendToOllama as _setMktSendToOllama, setOnClose as _setMktOnClose } from './stocks-panel.js';
 import { detectBrowserTrigger, detectBrowserClose, detectWikiSectionTrigger, isBrowserPanelOpen, openBrowserPanel, closeBrowserPanel, getBrowserPageText, ensureBrowserPageText, getBrowserPageUrl, getBrowserJsRendered } from './browser-panel.js';
 import {
@@ -654,6 +655,7 @@ function dismissAllToolPanels() {
   closeWeatherPanel();
   exitNewsMode();
   exitRedditMode();
+  exitYouTubeMode();
   exitMarketMode();
   exitIdeasMode();
   exitJournalMode();
@@ -1632,6 +1634,17 @@ async function _routeInput(text) {
     return;
   }
 
+  // ── YouTube close phrase ─────────────────────────────────────────────────────
+  if (/\bclose\s+(?:youtube|feed)\b/i.test(text)) {
+    exitYouTubeMode();
+    appendMessage('user', text);
+    const ack = 'YouTube feed closed.';
+    const { txt: ytTxt } = appendMessage('assistant', ack);
+    enqueueSpeak(ack, () => { ytTxt.textContent = ack; });
+    setState('idle');
+    return;
+  }
+
   // ── Reddit social close phrase ───────────────────────────────────────────────
   if (/\bclose\s+(?:reddit|social)\b/i.test(text)) {
     exitRedditMode();
@@ -1848,6 +1861,35 @@ async function _routeInput(text) {
       );
     } else {
       await sendToOllama('Inform the user that market data could not be retrieved right now. One sentence.');
+    }
+    fetchSystemStatus();
+    return;
+  }
+
+  // ── YouTube feed trigger ───────────────────────────────────────────────────
+  const ytMatch = detectYouTubeTrigger(text);
+  if (ytMatch) {
+    logEvent('tool_dispatch', { tool: 'youtube', trigger_phrase: text });
+    closeBrowserPanel();
+    setState('thinking');
+    appendMessage('user', text);
+    const ytContext = await openYouTubePanel({});
+    if (ytContext) {
+      enterYouTubeMode();
+      await sendToOllama(
+        "Give me a brief spoken summary of what's new on my YouTube feed. " +
+        'For each channel, mention the one or two most interesting recent videos. ' +
+        'Keep the whole summary under forty-five seconds when spoken aloud. ' +
+        'Mention view counts only if they are noteworthy.',
+        {
+          ephemeralMessages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'system', content: `${_currentTimeContext()}\n${ytContext}` },
+          ],
+        }
+      );
+    } else {
+      await sendToOllama('Inform the user that the YouTube feed could not be reached right now. One sentence.');
     }
     fetchSystemStatus();
     return;
@@ -2166,6 +2208,7 @@ async function warmupModels(greetingEl) {
 initTimerPanel({ appendMessage, setState, enqueueSpeak });
 initWeatherPanel({ enqueueSpeak });
 initRedditPanel({ enqueueSpeak });
+initYouTubePanel({ enqueueSpeak, sendToOllama, openBrowserPanel });
 initSphere();
 statModel.textContent = MODEL;
 _applyTtsMode();
@@ -2174,6 +2217,18 @@ fetchContextLimit();
 _loadManifest();  // Phase 4: load subject→image manifest for dynamic dossier images
 _setMktSendToOllama(sendToOllama);  // provide LLM callback to stocks panel briefing
 _setMktOnClose(exitMarketMode);     // close button returns to conversation mode
+
+// ── YouTube close button ────────────────────────────────────────────────────
+document.getElementById('yt-close-btn')?.addEventListener('click', () => {
+  exitYouTubeMode();
+  setState('idle');
+});
+
+// ── YouTube close button ─────────────────────────────────────────────────────
+document.getElementById('yt-close-btn')?.addEventListener('click', () => {
+  exitYouTubeMode();
+  setState('idle');
+});
 
 // ── Reddit close button ──────────────────────────────────────────────────────
 document.getElementById('reddit-close-btn')?.addEventListener('click', () => {

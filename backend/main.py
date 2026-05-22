@@ -54,6 +54,7 @@ from ideas_routes import router as ideas_router
 from journal_routes import router as journal_router
 from log_routes import router as log_router
 from reddit import router as reddit_router
+from youtube import router as youtube_router
 import session_log
 from rag import ingest as _rag_ingest, get_status as _rag_get_status, INPUT_FOLDER as _RAG_INPUT_FOLDER
 from wikipedia_rag import (
@@ -78,6 +79,7 @@ app.include_router(ideas_router)
 app.include_router(journal_router)
 app.include_router(log_router)
 app.include_router(reddit_router)
+app.include_router(youtube_router)
 
 
 # ── Startup warm-up ───────────────────────────────────────────────────────────

@@ -1,16 +1,16 @@
 ---
 goal: YouTube Feed Panel — voice-triggered RSS-based YouTube channel feed with thumbnail tiles, Shorts/Long-form filtering, sort controls, and LLM synthesis
-version: 1.0
+version: 1.1
 date_created: 2026-05-22
 last_updated: 2026-05-22
 owner: simps
-status: 'Planned'
+status: 'Complete'
 tags: [feature, social-media, youtube, rss, llm-synthesis, voice-trigger, thumbnail-grid]
 ---
 
 # Introduction
 
-![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
+![Status: Complete](https://img.shields.io/badge/status-Complete-brightgreen)
 
 Adds a YouTube feed panel to S.T.A.R.L.I.N.G. triggered exclusively by **"Open YouTube Feed"** or **"View YouTube Feed"**. The panel fetches the 15 most recent videos from each configured channel via YouTube's public Atom/RSS feed (no API key required for Phase 1), displays them as thumbnail tiles in a CSS grid, and lets the user filter by channel, toggle between Long Form and Shorts, and sort by date or view count. The local LLM synthesises the feed in the background and Starling speaks a channel-by-channel briefing once synthesis completes. Phase 2 adds a YouTube Data API v3 key for video duration fetching (enabling reliable Shorts vs Long Form classification) and YouTube handle-to-channel-ID resolution. Phase 3 adds Google OAuth2 so the user's actual YouTube subscription list is auto-discovered from their account.
 
