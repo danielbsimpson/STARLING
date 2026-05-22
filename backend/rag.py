@@ -17,6 +17,7 @@ BM25:            rank-bm25 (pure Python/NumPy, zero GPU cost).
 
 import hashlib
 import os
+import re
 import time
 from pathlib import Path
 from typing import Optional
@@ -65,7 +66,6 @@ def semantic_chunk(
     Splits on sentence boundaries and groups sentences into chunks of
     approximately `chunk_size` words, with a word-level overlap for continuity.
     """
-    import re
     sentences = re.split(r"(?<=[.!?])\s+", text.strip())
     chunks: list[str] = []
     current: list[str] = []

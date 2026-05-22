@@ -18,7 +18,6 @@ import feedparser
 import httpx
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 import session_log
-import session_log
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

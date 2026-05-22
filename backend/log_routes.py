@@ -9,9 +9,8 @@ Endpoints:
 
 import json
 import re
-from pathlib import Path
-
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
@@ -24,9 +23,9 @@ router = APIRouter(prefix="/log", tags=["log"])
 # Session ID must match this pattern to prevent path traversal attacks.
 _SESSION_ID_RE = re.compile(r"^session_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}$")
 
-_ALLOWED_FRONTEND_EVENTS = {"tool_dispatch", "user_text", "user_speech_frontend", "error"}
+_ALLOWED_FRONTEND_EVENTS: frozenset[str] = frozenset({"tool_dispatch", "user_text", "user_speech_frontend", "error"})
 
-_LOCALHOST_HOSTS = {"127.0.0.1", "::1", "localhost"}
+from session_log import LOCALHOST_HOSTS as _LOCALHOST_HOSTS
 
 
 def _is_localhost(request: Request) -> bool:

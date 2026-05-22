@@ -250,17 +250,15 @@ async function enterPresMode(subject) {
   }
 }
 
-const _DOSSIER_PLACEHOLDER_META =
-  '<span class="key">STATUS</span><span class="val">UNCLASSIFIED</span>' +
-  '<span class="key">SOURCE</span><span class="val">LOCAL KB</span>' +
-  '<span class="key">UPDATED</span><span class="val">—</span>';
-
 function exitPresMode() {
   _presSubject = null;
   starlingEl.classList.remove('pres-mode');
   presTitle.textContent  = 'SUBJECT UNKNOWN';
   presBody.textContent   = 'Awaiting intelligence data. No records on file for this subject.';
-  presMeta.innerHTML     = _DOSSIER_PLACEHOLDER_META;
+  presMeta.innerHTML     =
+    '<span class="key">STATUS</span><span class="val">UNCLASSIFIED</span>' +
+    '<span class="key">SOURCE</span><span class="val">LOCAL KB</span>' +
+    '<span class="key">UPDATED</span><span class="val">—</span>';
 }
 
 function enterNewsMode() {
@@ -302,9 +300,9 @@ function _currentTimeContext() {
   return `[CURRENT LOCAL TIME: ${date} at ${time} (${tz})]`;
 }
 
-// Build a context block injected at the top of the system prompt on every boot.
-// Add any additional runtime facts here — they are re-evaluated each page load.
-function _buildBootContext() {
+// Build a context block injected once at the top of the system prompt at page load.
+// Add any additional runtime facts here — they are evaluated once at module initialisation.
+function _buildInitialContext() {
   const now   = new Date();
   const date  = now.toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const time  = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
@@ -313,7 +311,7 @@ function _buildBootContext() {
 }
 
 const SYSTEM_PROMPT =
-  _buildBootContext() + ' ' +
+  _buildInitialContext() + ' ' +
 
   'Your primary user and creator is Daniel Simpson, a Data Science Manager at TJX Companies based in Framingham, Massachusetts. ' +
   'Daniel holds a BSc in Mathematics from West Virginia University and an MSc in Data Science from Birkbeck, University of London, ' +
@@ -417,11 +415,11 @@ const waveformEl  = document.getElementById('waveform');
 const ttsToggle   = document.getElementById('tts-toggle');
 const voiceSelect = document.getElementById('voice-select');
 const ttsEngineEl = document.getElementById('tts-engine');
-const ftrTts      = document.getElementById('ftr-tts');
-const ftrWhisperDev = document.getElementById('ftr-whisper-dev');
-const ftrKokoroDev  = document.getElementById('ftr-kokoro-dev');
-const ftrLlmDev     = document.getElementById('ftr-llm-dev');
-const ftrLlmAddr    = document.getElementById('ftr-llm-addr');
+const footerTts = document.getElementById('ftr-tts');
+const footerWhisperDevice = document.getElementById('ftr-whisper-dev');
+const footerKokoroDevice = document.getElementById('ftr-kokoro-dev');
+const footerLlmDevice = document.getElementById('ftr-llm-dev');
+const footerLlmAddr = document.getElementById('ftr-llm-addr');
 
 const lmPrompt  = document.getElementById('lm-prompt');
 const lmGen     = document.getElementById('lm-gen');
@@ -440,8 +438,8 @@ const clockPanel = document.getElementById('clock-panel');
 const clockTime  = document.getElementById('clock-time');
 const clockDate  = document.getElementById('clock-date');
 const clockTz    = document.getElementById('clock-tz');
-let   _clockDismissTimer = null;
-let   _clockTickInterval  = null;
+let _clockDismissTimer = null;
+let _clockTickInterval = null;
 
 // ── Sphere shared state ─────────────────────────────────────────────────────────────
 const sphereStateRef    = { current: 'idle' };
@@ -492,7 +490,7 @@ async function fetchContextLimit() {
   } catch { /* endpoint absent (Ollama) or server not ready — ignore */ }
   // If the endpoint didn't help, fall back to the known-sizes table.
   if (!_ctxLimit) {
-    const modelKey = (localStorage.getItem('starling_model') || MODEL || '').toLowerCase();
+    const modelKey = MODEL.toLowerCase();
     _ctxLimit = _KNOWN_CTX[modelKey] ?? null;
   }
 }
@@ -536,10 +534,10 @@ async function fetchSystemStatus() {
       el.textContent = val;
       el.dataset.dev  = val;
     }
-    setDev(ftrWhisperDev, whisper);
-    setDev(ftrKokoroDev,  kokoro);
-    setDev(ftrLlmDev,     llm);
-    if (ftrLlmAddr && llm_url) ftrLlmAddr.textContent = llm_url;
+    setDev(footerWhisperDevice, whisper);
+    setDev(footerKokoroDevice,  kokoro);
+    setDev(footerLlmDevice,     llm);
+    if (footerLlmAddr && llm_url) footerLlmAddr.textContent = llm_url;
   } catch { /* backend offline — ignore */ }
 }
 
@@ -1086,6 +1084,23 @@ async function _callLLMSilently(prompt, systemMessages) {
   } catch { return ''; }
 }
 
+// ── Stream sentence buffer drain ─────────────────────────────────────────────
+/**
+ * Drain complete sentences from `buf` using `re`, calling `flushFn` for each.
+ * Returns the unconsumed remainder of the buffer.
+ * Used by both sendToOllama and sendWikiChat to avoid duplicating the loop.
+ */
+function _drainSentenceBuffer(buf, re, flushFn) {
+  re.lastIndex = 0;
+  let lastEnd = 0;
+  let match;
+  while ((match = re.exec(buf)) !== null) {
+    flushFn(buf.slice(lastEnd, re.lastIndex).trim());
+    lastEnd = re.lastIndex;
+  }
+  return buf.slice(lastEnd);
+}
+
 // ── Ollama streaming chat ─────────────────────────────────────────────────────
 async function sendToOllama(userText, options = {}) {
   const { ephemeralMessages = null, extraContext = null } = options;
@@ -1190,18 +1205,7 @@ async function sendToOllama(userText, options = {}) {
           }
           if (colonEnd) sentBuf = sentBuf.slice(colonEnd);
 
-          sentenceRe.lastIndex = 0;
-          let match;
-          let lastEnd = 0;
-          while ((match = sentenceRe.exec(sentBuf)) !== null) {
-            // Slice from lastEnd → sentenceRe.lastIndex so any text that appeared
-            // before the regex match (e.g. "Daniel chose a llama3." before the "2:3b"
-            // match when the digit lookbehind causes the engine to skip the first ".")
-            // is included with the matched sentence rather than silently dropped.
-            flushSentence(sentBuf.slice(lastEnd, sentenceRe.lastIndex).trim());
-            lastEnd = sentenceRe.lastIndex;
-          }
-          sentBuf = sentBuf.slice(lastEnd);
+          sentBuf = _drainSentenceBuffer(sentBuf, sentenceRe, flushSentence);
         } catch { /* partial JSON chunk — skip */ }
       }
     }
@@ -1306,14 +1310,7 @@ async function sendWikiChat(userText, isFirstTurn = false) {
             anySentenceEnqueued = true;
           };
 
-          sentenceRe.lastIndex = 0;
-          let lastEnd = 0;
-          let match;
-          while ((match = sentenceRe.exec(sentBuf)) !== null) {
-            flushSentence(sentBuf.slice(lastEnd, sentenceRe.lastIndex).trim());
-            lastEnd = sentenceRe.lastIndex;
-          }
-          sentBuf = sentBuf.slice(lastEnd);
+          sentBuf = _drainSentenceBuffer(sentBuf, sentenceRe, flushSentence);
         } catch { /* partial JSON — skip */ }
       }
     }
@@ -1364,19 +1361,19 @@ function _applyTtsMode() {
     ttsToggle.classList.add('tts-off');
     voiceSelect.disabled     = true;
     ttsEngineEl.textContent  = 'OFF';
-    if (ftrTts) ftrTts.textContent = 'Off';
+    if (footerTts) footerTts.textContent = 'Off';
   } else if (ttsMode === 'browser') {
     ttsToggle.textContent    = 'TTS: BROWSER';
     ttsToggle.classList.remove('tts-off');
     voiceSelect.disabled     = true;
     ttsEngineEl.textContent  = 'BROWSER';
-    if (ftrTts) ftrTts.textContent = 'Web Speech';
+    if (footerTts) footerTts.textContent = 'Web Speech';
   } else {
     ttsToggle.textContent    = 'TTS: KOKORO';
     ttsToggle.classList.remove('tts-off');
     voiceSelect.disabled     = false;
     ttsEngineEl.textContent  = 'KOKORO';
-    if (ftrTts) ftrTts.textContent = 'Kokoro (local)';
+    if (footerTts) footerTts.textContent = 'Kokoro (local)';
   }
 }
 
@@ -2228,12 +2225,6 @@ document.getElementById('yt-close-btn')?.addEventListener('click', () => {
   setState('idle');
 });
 
-// ── YouTube close button ─────────────────────────────────────────────────────
-document.getElementById('yt-close-btn')?.addEventListener('click', () => {
-  exitYouTubeMode();
-  setState('idle');
-});
-
 // ── Reddit close button ──────────────────────────────────────────────────────
 document.getElementById('reddit-close-btn')?.addEventListener('click', () => {
   exitRedditMode();
@@ -2260,11 +2251,11 @@ wireJournalButtons({
     if (_pendingJournalStatusTxt) {
       _pendingJournalStatusTxt.textContent = spoken;
       _pendingJournalStatusTxt = null;
+      enqueueSpeak(spoken, () => {});
     } else {
       const { txt } = appendMessage('assistant', spoken);
       enqueueSpeak(spoken, () => { txt.textContent = spoken; });
     }
-    enqueueSpeak(spoken, () => {});
     setState('idle');
   },
   onRerecord: () => {
@@ -2277,11 +2268,11 @@ wireJournalButtons({
     if (_pendingJournalStatusTxt) {
       _pendingJournalStatusTxt.textContent = spoken;
       _pendingJournalStatusTxt = null;
+      enqueueSpeak(spoken, () => {});
     } else {
       const { txt } = appendMessage('assistant', spoken);
       enqueueSpeak(spoken, () => { txt.textContent = spoken; });
     }
-    enqueueSpeak(spoken, () => {});
     setState('idle');
   },
   onEntriesClose: () => {

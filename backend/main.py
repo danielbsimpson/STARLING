@@ -10,14 +10,14 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from dotenv import load_dotenv
 
 load_dotenv()
 
 # ── Path constants ────────────────────────────────────────────────────────────
 _FRONTEND = Path(__file__).parent.parent / "frontend"
-_ASSETS   = Path(__file__).parent.parent / "assets"
+_ASSETS = Path(__file__).parent.parent / "assets"
 
 # ── LLM backend selection ─────────────────────────────────────────────────────
 # Set LLM_BACKEND=llama in .env to route /chat/ to llama-server instead of Ollama.
@@ -42,9 +42,15 @@ from tts import router as tts_router
 if LLM_BACKEND == "llama":
     from llama_server import router as llm_router
     from llama_server import LLAMA_BASE as _LLM_BASE
+    from llama_server import DEFAULT_MODEL as _WIKI_DEFAULT_MODEL
+    from llama_server import _stream_as_ndjson as _wiki_stream
+    _WIKI_TEMPERATURE: float = float(os.getenv("LLAMA_TEMPERATURE", "0.7"))
 else:
     from ollama import router as llm_router
     from ollama import OLLAMA_BASE as _LLM_BASE
+    from ollama import DEFAULT_MODEL as _WIKI_DEFAULT_MODEL
+    from ollama import _stream_ollama as _wiki_stream
+    _WIKI_TEMPERATURE: float = float(os.getenv("OLLAMA_TEMPERATURE", "0.7"))
 
 from weather import router as weather_router
 from news import router as news_router
@@ -87,13 +93,12 @@ app.include_router(youtube_router)
 @app.on_event("startup")
 async def startup_event():
     """Pre-load the Wikipedia index and embedding model so the first request is fast."""
-    import asyncio
     import logging
     _log = logging.getLogger(__name__)
     session_log.log_session_start(llm_backend=LLM_BACKEND, pid=os.getpid())
     try:
         # Run blocking model load in a thread so it doesn't block the event loop
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, _wiki_load_index)
         _log.info("Wikipedia: startup warm-up complete")
     except Exception as exc:
@@ -114,7 +119,7 @@ def health():
     }
 
 
-_LOCALHOST_HOSTS = {"127.0.0.1", "::1", "localhost"}
+from session_log import LOCALHOST_HOSTS as _LOCALHOST_HOSTS
 _PID_FILE = Path(__file__).parent / "memory" / ".starling.pid"
 
 
@@ -163,7 +168,7 @@ async def system_shutdown(request: Request):
         except Exception:
             pass
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     loop.call_later(0.5, _do_kill)
     return {"ok": True, "message": "Shutting down"}
 
@@ -205,7 +210,7 @@ class WikiSearchRequest(BaseModel):
 
 class WikiChatRequest(BaseModel):
     message: str
-    history: list   # list of {"role": str, "content": str}
+    history: list[dict]   # list of {"role": str, "content": str}
 
 @app.post("/wiki/start")
 async def wiki_start(req: WikiSearchRequest):
@@ -239,8 +244,6 @@ async def wiki_chat(req: WikiChatRequest):
     Retrieves relevant article chunks, injects them into the system prompt,
     and forwards to the configured LLM backend (llama-server or Ollama).
     """
-    from fastapi.responses import StreamingResponse
-
     session = _wiki_get_session()
     if session is None:
         raise HTTPException(
@@ -262,28 +265,30 @@ async def wiki_chat(req: WikiChatRequest):
     messages.append({"role": "user", "content": req.message})
 
     if LLM_BACKEND == "llama":
-        from llama_server import _stream_as_ndjson, DEFAULT_MODEL as _WIKI_MODEL
         payload = {
-            "model":       _WIKI_MODEL,
+            "model":       _WIKI_DEFAULT_MODEL,
             "messages":    messages,
-            "temperature": float(os.getenv("LLAMA_TEMPERATURE", "0.7")),
+            "temperature": _WIKI_TEMPERATURE,
             "stream":      True,
         }
-        return StreamingResponse(
-            _stream_as_ndjson(payload), media_type="application/x-ndjson"
-        )
     else:
-        from ollama import _stream_ollama, DEFAULT_MODEL as _WIKI_MODEL
         payload = {
-            "model":    _WIKI_MODEL,
+            "model":    _WIKI_DEFAULT_MODEL,
             "messages": messages,
-            "options":  {"temperature": float(os.getenv("OLLAMA_TEMPERATURE", "0.7"))},
+            "options":  {"temperature": _WIKI_TEMPERATURE},
             "stream":   True,
         }
-        return StreamingResponse(
-            _stream_ollama(payload), media_type="application/x-ndjson"
-        )
+    return StreamingResponse(_wiki_stream(payload), media_type="application/x-ndjson")
 
+
+
+
+def _provider_is_gpu(providers: list) -> bool:
+    """Return True if any of the active ONNX providers is GPU-accelerated."""
+    return any(
+        kw in p for p in providers
+        for kw in ("CUDA", "TensorRT", "Dml", "ROCm")
+    )
 
 
 @app.get("/system-status")
@@ -298,18 +303,12 @@ async def system_status():
     else:
         active_providers = _tts._available
 
-    def _provider_is_gpu(providers: list) -> bool:
-        return any(
-            kw in p for p in providers
-            for kw in ("CUDA", "TensorRT", "Dml", "ROCm")
-        )
-
     kokoro_device = "GPU" if _provider_is_gpu(active_providers) else "CPU"
 
     # LLM backend status — behaviour differs by LLM_BACKEND selection
     llm_device = "UNKNOWN"
+    llm_url = _LLM_BASE.removeprefix("http://").removeprefix("https://")
     if LLM_BACKEND == "llama":
-        llm_url = _LLM_BASE.removeprefix("http://").removeprefix("https://")
         try:
             async with httpx.AsyncClient(timeout=3.0) as client:
                 resp = await client.get(f"{_LLM_BASE}/health")
@@ -320,7 +319,6 @@ async def system_status():
         except Exception:
             llm_device = "OFFLINE"
     else:
-        llm_url = _LLM_BASE.removeprefix("http://").removeprefix("https://")
         # Ollama — /api/ps returns running models; size_vram > 0 means GPU
         try:
             async with httpx.AsyncClient(timeout=3.0) as client:

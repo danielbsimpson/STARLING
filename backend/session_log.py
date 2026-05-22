@@ -17,6 +17,9 @@ from pathlib import Path
 LOG_DIR = Path(os.getenv("SESSION_LOG_DIR", "memory/logs"))
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
+# Shared constant — imported by main.py and log_routes.py to avoid duplication.
+LOCALHOST_HOSTS: frozenset[str] = frozenset({"127.0.0.1", "::1", "localhost"})
+
 # ── Session identity (set once at module import time) ─────────────────────────
 _session_id: str = "session_" + datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
 _log_path: Path = LOG_DIR / f"{_session_id}.jsonl"
