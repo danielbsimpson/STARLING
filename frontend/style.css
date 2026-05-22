@@ -1692,6 +1692,322 @@ a.news-story-source-title:hover {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════ */
+/* ── Reddit Social Panel ──────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+.reddit-panel {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 16px 20px 14px;
+  margin-top: 12px;
+  animation: weatherFadeIn 0.35s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.reddit-panel.hidden {
+  display: none;
+}
+
+.reddit-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 8px;
+  gap: 8px;
+}
+
+.reddit-title {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: clamp(0.75rem, 1.4vw, 0.95rem);
+  color: #e0e0e0;
+  letter-spacing: 0.14em;
+  flex: 1;
+}
+
+.reddit-meta {
+  font-size: 0.6rem;
+  color: #555;
+  letter-spacing: 0.08em;
+}
+
+.reddit-refresh-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 5px;
+  color: #777;
+  cursor: pointer;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  padding: 4px 10px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.reddit-refresh-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #bbb;
+}
+
+.reddit-close-btn {
+  background: none;
+  border: none;
+  color: #555;
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 2px 4px;
+  line-height: 1;
+  transition: color 0.15s;
+  flex-shrink: 0;
+}
+
+.reddit-close-btn:hover {
+  color: #ccc;
+}
+
+/* ── Synthesis indicator ──────────────────────────────────────────────────── */
+
+.reddit-synth-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 20px;
+  padding: 4px 12px 4px 9px;
+  align-self: center;
+  opacity: 1;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+
+.reddit-synth-indicator.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.reddit-synth-spinner {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  border-top-color: rgba(255, 255, 255, 0.6);
+  border-radius: 50%;
+  animation: synthSpin 0.75s linear infinite;
+  flex-shrink: 0;
+}
+
+.reddit-synth-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.55rem;
+  color: #888;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+}
+
+/* ── Filter bar ───────────────────────────────────────────────────────────── */
+
+.reddit-filter-bar {
+  display: flex;
+  gap: 5px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.08) transparent;
+}
+
+.reddit-filter-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 5px;
+  color: #888;
+  cursor: pointer;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  padding: 3px 9px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.reddit-filter-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ccc;
+}
+
+.reddit-filter-btn.active {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #e0e0e0;
+}
+
+/* ── Post list ────────────────────────────────────────────────────────────── */
+
+.reddit-post-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 340px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.1) transparent;
+}
+
+@keyframes redditCardIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+
+.reddit-post-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 6px;
+  border-left: 2px solid rgba(255, 255, 255, 0.07);
+  cursor: default;
+  transition: background 0.12s;
+  animation: redditCardIn 0.28s ease both;
+  animation-delay: var(--card-delay, 0ms);
+  position: relative;
+}
+
+.reddit-post-card:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.reddit-sub-badge {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.56rem;
+  color: #666;
+  letter-spacing: 0.08em;
+  text-transform: lowercase;
+}
+
+.reddit-post-title {
+  font-size: 0.8rem;
+  color: #ddd;
+  line-height: 1.35;
+}
+
+.reddit-post-stats {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.reddit-post-stats span {
+  font-size: 0.58rem;
+  color: #555;
+  letter-spacing: 0.06em;
+}
+
+.reddit-post-thumb {
+  position: absolute;
+  right: 10px;
+  top: 8px;
+  width: 60px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 4px;
+  opacity: 0.7;
+}
+
+/* ── Fetched timestamp ────────────────────────────────────────────────────── */
+
+.reddit-fetched {
+  font-size: 0.58rem;
+  color: #444;
+  letter-spacing: 0.08em;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* ── Reddit-mode layout (mirrors news-mode) ───────────────────────────────── */
+
+/* Reset inline-panel defaults — reddit panel lives at body-cols level */
+.body-cols > .reddit-panel {
+  flex-shrink: 0;
+  width: 0;
+  overflow: hidden;
+  opacity: 0;
+  margin-top: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  animation: none;
+  box-sizing: border-box;
+  transition: width 0.5s ease, opacity 0.4s ease 0.3s, padding 0.5s ease;
+}
+
+/* Keep display:flex so width transition works (overrides .hidden display:none) */
+.body-cols > .reddit-panel.hidden {
+  display: flex;
+}
+
+/* Expand panel and restore visual styles in reddit-mode */
+.starling.reddit-mode .body-cols > .reddit-panel {
+  width: 60%;
+  opacity: 1;
+  padding: 20px 20px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  margin-left: 1%;
+  overflow: hidden;
+}
+
+/* Allow the post list to fill available height */
+.starling.reddit-mode .body-cols > .reddit-panel .reddit-post-list {
+  max-height: none;
+  flex: 1;
+}
+
+/* col-left shrinks to a narrow column */
+.starling.reddit-mode .col-left {
+  width: 37%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: 16px;
+  transform: none;
+  overflow: hidden;
+}
+
+.starling.reddit-mode .col-left .ring-section {
+  width: auto;
+}
+
+.starling.reddit-mode .ring-section {
+  transform: translateY(-10px);
+  transition: transform 0.5s ease;
+}
+
+.starling.reddit-mode .col-left .chat-panel {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  max-height: none;
+  opacity: 0.85;
+}
+
+.starling.reddit-mode .col-left .msg {
+  font-size: 10px;
+  line-height: 1.45;
+  padding: 4px 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
 /* ── Market Panel (Tool 5 — Stocks & Crypto) ──────────────────────────────── */
 /* ═══════════════════════════════════════════════════════════════════════════ */
 

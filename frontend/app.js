@@ -3,6 +3,7 @@ import { BACKEND_BASE } from './config.js';
 import { detectTimerTrigger, handleTimerTrigger, initTimerPanel, dismissTimerPanel } from './timer-panel.js';
 import { detectWeatherTrigger, openWeatherPanel, closeWeatherPanel, initWeatherPanel, startWeatherAutoDismiss } from './weather-panel.js';
 import { detectNewsTrigger, openNewsPanel, closeNewsPanel } from './news-panel.js';
+import { detectRedditTrigger, openRedditPanel, closeRedditPanel, initRedditPanel } from './reddit-panel.js';
 import { detectMarketTrigger, openMarketPanel, closeMarketPanel, setSendToOllama as _setMktSendToOllama, setOnClose as _setMktOnClose } from './stocks-panel.js';
 import { detectBrowserTrigger, detectBrowserClose, detectWikiSectionTrigger, isBrowserPanelOpen, openBrowserPanel, closeBrowserPanel, getBrowserPageText, ensureBrowserPageText, getBrowserPageUrl, getBrowserJsRendered } from './browser-panel.js';
 import {
@@ -277,6 +278,15 @@ function enterMarketMode() {
 function exitMarketMode() {
   starlingEl.classList.remove('mkt-mode');
   closeMarketPanel();
+}
+
+function enterRedditMode() {
+  starlingEl.classList.add('reddit-mode');
+}
+
+function exitRedditMode() {
+  starlingEl.classList.remove('reddit-mode');
+  closeRedditPanel();
 }
 
 /** Returns a fresh local date/time string for injecting into LLM context at request time. */
@@ -643,6 +653,7 @@ function dismissAllToolPanels() {
   dismissTimerPanel();
   closeWeatherPanel();
   exitNewsMode();
+  exitRedditMode();
   exitMarketMode();
   exitIdeasMode();
   exitJournalMode();
@@ -1621,6 +1632,17 @@ async function _routeInput(text) {
     return;
   }
 
+  // ── Reddit social close phrase ───────────────────────────────────────────────
+  if (/\bclose\s+(?:reddit|social)\b/i.test(text)) {
+    exitRedditMode();
+    appendMessage('user', text);
+    const ack = 'Reddit feed closed.';
+    const { txt: redditTxt } = appendMessage('assistant', ack);
+    enqueueSpeak(ack, () => { redditTxt.textContent = ack; });
+    setState('idle');
+    return;
+  }
+
   if (_matchesExitPhrase(text)) {
     exitPresMode();
     setState('idle');
@@ -1826,6 +1848,35 @@ async function _routeInput(text) {
       );
     } else {
       await sendToOllama('Inform the user that market data could not be retrieved right now. One sentence.');
+    }
+    fetchSystemStatus();
+    return;
+  }
+
+  // ── Reddit social feed trigger ─────────────────────────────────────────────
+  const redditMatch = detectRedditTrigger(text);
+  if (redditMatch) {
+    logEvent('tool_dispatch', { tool: 'reddit', trigger_phrase: text });
+    closeBrowserPanel();
+    setState('thinking');
+    appendMessage('user', text);
+    const redditContext = await openRedditPanel({});
+    if (redditContext) {
+      enterRedditMode();
+      await sendToOllama(
+        "Deliver a concise spoken summary of what's trending on Reddit right now. " +
+        'For each subreddit, pick the one or two most interesting posts and describe them in one sentence. ' +
+        'Keep the whole briefing under forty-five seconds when spoken aloud. ' +
+        'Do not read subreddit names as hashtags — say them naturally, like \'in the technology feed\' or \'on the worldnews subreddit\'.',
+        {
+          ephemeralMessages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'system', content: `${_currentTimeContext()}\n${redditContext}` },
+          ],
+        }
+      );
+    } else {
+      await sendToOllama('Inform the user that the Reddit feed could not be reached right now. One sentence.');
     }
     fetchSystemStatus();
     return;
@@ -2114,6 +2165,7 @@ async function warmupModels(greetingEl) {
 // ── Init ──────────────────────────────────────────────────────────────────────
 initTimerPanel({ appendMessage, setState, enqueueSpeak });
 initWeatherPanel({ enqueueSpeak });
+initRedditPanel({ enqueueSpeak });
 initSphere();
 statModel.textContent = MODEL;
 _applyTtsMode();
@@ -2122,6 +2174,12 @@ fetchContextLimit();
 _loadManifest();  // Phase 4: load subject→image manifest for dynamic dossier images
 _setMktSendToOllama(sendToOllama);  // provide LLM callback to stocks panel briefing
 _setMktOnClose(exitMarketMode);     // close button returns to conversation mode
+
+// ── Reddit close button ──────────────────────────────────────────────────────
+document.getElementById('reddit-close-btn')?.addEventListener('click', () => {
+  exitRedditMode();
+  setState('idle');
+});
 
 // ── Wikipedia close button ────────────────────────────────────────────────────
 document.getElementById('wiki-close-btn')?.addEventListener('click', () => {
