@@ -1041,6 +1041,7 @@ html, body {
   margin-bottom: 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   padding-bottom: 8px;
+  position: relative;
 }
 
 .weather-header-row {
@@ -1327,6 +1328,23 @@ html, body {
   margin-left: 6px;
 }
 .news-close-btn:hover { border-color: rgba(255,255,255,0.35); color: #ccc; }
+
+.weather-close-btn {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 4px;
+  color: #666;
+  cursor: pointer;
+  font-size: 0.7rem;
+  line-height: 1;
+  padding: 2px 7px;
+  transition: border-color 0.15s, color 0.15s;
+  flex-shrink: 0;
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+.weather-close-btn:hover { border-color: rgba(255,255,255,0.35); color: #ccc; }
 
 .news-filters {
   display: flex;

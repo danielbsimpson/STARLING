@@ -318,16 +318,31 @@ function _createVideoTile(video) {
 
   tile.appendChild(info);
 
-  // Click → open in browser panel or new tab
+  // Click → open in browser panel using embed URL (avoids X-Frame-Options block),
+  // or fall back to new tab if the browser panel is unavailable.
   tile.addEventListener('click', () => {
     if (_openBrowserPanel) {
-      _openBrowserPanel(video.link);
+      const embedUrl = _toYouTubeEmbedUrl(video.link);
+      _openBrowserPanel(embedUrl || video.link);
     } else {
       window.open(video.link, '_blank', 'noopener,noreferrer');
     }
   });
 
   return tile;
+}
+
+/**
+ * Convert a standard YouTube watch URL or youtu.be short URL to the embeddable
+ * /embed/ form, which is not restricted by X-Frame-Options.
+ * Returns null if the video ID cannot be extracted.
+ */
+function _toYouTubeEmbedUrl(link) {
+  const match = link.match(
+    /(?:youtube\.com\/(?:watch\?(?:[^#]*&)?v=|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/,
+  );
+  if (!match) return null;
+  return `https://www.youtube.com/embed/${match[1]}?autoplay=1`;
 }
 
 // ── Synthesis polling ─────────────────────────────────────────────────────────

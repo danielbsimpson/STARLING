@@ -20,6 +20,7 @@ const wxLocation     = document.getElementById('weather-location');
 const wxLocationLabel = document.getElementById('weather-location-label');
 const wxCacheAge     = document.getElementById('weather-cache-age');
 const wxRefreshBtn   = document.getElementById('weather-refresh-btn');
+const wxCloseBtn     = document.getElementById('weather-close-btn');
 const wxFetched      = document.getElementById('weather-fetched');
 const wxTemp         = document.getElementById('weather-temp');
 const wxCondition    = document.getElementById('weather-condition');
@@ -37,7 +38,8 @@ let _enqueueSpeak = null;
 
 // ── Last-opened location (for Refresh button) ─────────────────────────────────
 let _lastLocationOverride = null;
-
+// ── Last weather context string (for LLM follow-up injection) ──────────────
+let _currentWeatherContext = null;
 // ── WMO code → emoji icon mapping ────────────────────────────────────────────
 const WMO_ICON = {
   0: '☀️',  1: '🌤', 2: '⛅', 3: '☁️',
@@ -68,11 +70,14 @@ export function initWeatherPanel({ enqueueSpeak }) {
       wxRefreshBtn.disabled = true;
       wxRefreshBtn.textContent = '⏳';
       const result = await openWeatherPanel(_lastLocationOverride, /* force */ true);
-      // No LLM briefing on manual refresh — start the countdown immediately after render
-      if (result && typeof result === 'string') startWeatherAutoDismiss();
+      // No LLM briefing on manual refresh — panel stays open
       wxRefreshBtn.disabled = false;
       wxRefreshBtn.textContent = '🔄';
     });
+  }
+
+  if (wxCloseBtn) {
+    wxCloseBtn.addEventListener('click', () => closeWeatherPanel());
   }
 }
 
@@ -161,16 +166,14 @@ export async function openWeatherPanel(locationOverride = null, force = false) {
   // Update footer badge
   if (ftrWxBadge) ftrWxBadge.textContent = data.display_name.split(',')[0].toUpperCase();
 
-  // Auto-dismiss is started externally (by app.js, after TTS finishes) via
-  // startWeatherAutoDismiss() — do NOT start it here.
-
   // Append retrieval timestamp to LLM context
   const fetchedDate = new Date(data.fetched_at);
   const timeStr = fetchedDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   const sourceNote = data.source === 'cache'
     ? `[Weather data from cache, last fetched at ${timeStr} local time.]`
     : `[Weather data retrieved at ${timeStr} local time.]`;
-  return `${data.llm_context} ${sourceNote}`;
+  _currentWeatherContext = `${data.llm_context} ${sourceNote}`;
+  return _currentWeatherContext;
 }
 
 /**
@@ -186,8 +189,22 @@ export function startWeatherAutoDismiss(delay = 15_000) {
 export function closeWeatherPanel() {
   clearTimeout(_autoDismissTimer);
   _autoDismissTimer = null;
+  _currentWeatherContext = null;
   _starlingEl.classList.remove('weather-mode');
   wxPanel.classList.add('hidden');
+}
+
+/** True when the weather panel is visible on screen. */
+export function isWeatherPanelOpen() {
+  return wxPanel ? !wxPanel.classList.contains('hidden') : false;
+}
+
+/**
+ * Returns the full weather context string (current + forecast) for LLM injection
+ * during follow-up conversations, or null if the panel is closed.
+ */
+export function getWeatherContext() {
+  return _currentWeatherContext;
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 // ── Imports ───────────────────────────────────────────────────────────────────
 import { BACKEND_BASE } from './config.js';
 import { detectTimerTrigger, handleTimerTrigger, initTimerPanel, dismissTimerPanel } from './timer-panel.js';
-import { detectWeatherTrigger, openWeatherPanel, closeWeatherPanel, initWeatherPanel, startWeatherAutoDismiss } from './weather-panel.js';
+import { detectWeatherTrigger, openWeatherPanel, closeWeatherPanel, initWeatherPanel, isWeatherPanelOpen, getWeatherContext } from './weather-panel.js';
 import { detectNewsTrigger, openNewsPanel, closeNewsPanel, initNewsPanel, isNewsPanelOpen, getActiveArticleContext } from './news-panel.js';
 import { detectRedditTrigger, openRedditPanel, closeRedditPanel, initRedditPanel } from './reddit-panel.js';
 import { detectYouTubeTrigger, openYouTubePanel, closeYouTubePanel, initYouTubePanel } from './youtube-panel.js';
@@ -664,14 +664,14 @@ function dismissAllToolPanels() {
 }
 
 /**
- * Like dismissAllToolPanels but keeps the news panel open.
- * Used when the user speaks while the news panel is visible so they can
- * discuss articles without losing their place in the briefing.
+ * Like dismissAllToolPanels but keeps the news and weather panels open.
+ * Used when the user speaks while either panel is visible so they can
+ * continue discussing without losing their place.
  */
 function dismissNonNewsPanels() {
   _dismissClockPanel();
   dismissTimerPanel();
-  closeWeatherPanel();
+  // closeWeatherPanel() — intentionally skipped; weather stays for discussion
   exitRedditMode();
   exitYouTubeMode();
   exitMarketMode();
@@ -1649,9 +1649,9 @@ async function _routeInput(text) {
     return;
   }
 
-  // Keep news panel open when the user wants to discuss articles;
+  // Keep news / weather panel open when the user wants to discuss;
   // dismiss all other overlapping tool panels.
-  if (isNewsPanelOpen()) {
+  if (isNewsPanelOpen() || isWeatherPanelOpen()) {
     dismissNonNewsPanels();
   } else {
     dismissAllToolPanels();
@@ -1664,6 +1664,18 @@ async function _routeInput(text) {
     const ack = 'News briefing closed.';
     const { txt: newsTxt } = appendMessage('assistant', ack);
     enqueueSpeak(ack, () => { newsTxt.textContent = ack; });
+    setState('idle');
+    fetchSystemStatus();
+    return;
+  }
+
+  // ── Weather: explicit close phrase while panel is open ────────────────────
+  if (isWeatherPanelOpen() && /\bclose\s+(?:the\s+)?weather\b/i.test(text)) {
+    closeWeatherPanel();
+    appendMessage('user', text);
+    const ack = 'Weather panel closed.';
+    const { txt: wxTxt } = appendMessage('assistant', ack);
+    enqueueSpeak(ack, () => { wxTxt.textContent = ack; });
     setState('idle');
     fetchSystemStatus();
     return;
@@ -1870,7 +1882,7 @@ async function _routeInput(text) {
           ],
         }
       );
-      _playbackChain.then(() => startWeatherAutoDismiss());
+      _playbackChain.then(() => { /* panel stays open — user can ask follow-up questions */ });
     } else {
       await sendToOllama('Inform the user that weather data could not be retrieved right now. One sentence.');
     }
@@ -2093,9 +2105,10 @@ async function _routeInput(text) {
   }
   logEvent('tool_dispatch', { tool: 'llm_fallback', trigger_phrase: text });
 
-  // Inject currently-selected news article as context so Starling can discuss it
-  const _newsArticleCtx = isNewsPanelOpen() ? getActiveArticleContext() : null;
-  const _combinedCtx = [_extraContext, _newsArticleCtx].filter(Boolean).join('\n\n') || null;
+  // Inject currently-selected news article or open weather data as context
+  const _newsArticleCtx  = isNewsPanelOpen()    ? getActiveArticleContext() : null;
+  const _weatherCtx      = isWeatherPanelOpen() ? getWeatherContext()       : null;
+  const _combinedCtx = [_extraContext, _newsArticleCtx, _weatherCtx].filter(Boolean).join('\n\n') || null;
 
   await sendToOllama(text, _combinedCtx ? { extraContext: _combinedCtx } : {});
   fetchSystemStatus();

@@ -26,7 +26,7 @@ def _kill(pid: int, name: str) -> None:
     try:
         if IS_WINDOWS:
             result = subprocess.run(
-                ["taskkill", "/F", "/PID", str(pid)],
+                ["taskkill", "/F", "/T", "/PID", str(pid)],  # /T kills the full process tree
                 capture_output=True,
                 text=True,
             )

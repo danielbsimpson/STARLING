@@ -180,12 +180,16 @@ function _resolveUrl(raw) {
 }
 
 function _isKnownBlocked(url) {
+  // YouTube embed URLs (/embed/<id>) are iframeable — only watch pages are blocked
+  if (/^https:\/\/www\.youtube\.com\/embed\//.test(url)) return false;
   // DuckDuckGo's plain-HTML search endpoint is embeddable; only block the main site
   if (/^https:\/\/html\.duckduckgo\.com\/html\//.test(url)) return false;
   return KNOWN_BLOCKED_DOMAINS.some(domain => url.includes(domain));
 }
 
 function _showPanel() {
+  // Clear any active content-mode so the browser panel has full layout space
+  starlingEl.classList.remove('yt-mode', 'news-mode', 'reddit-mode', 'mkt-mode', 'weather-mode', 'pres-mode');
   starlingEl.classList.add('browser-mode');
 }
 

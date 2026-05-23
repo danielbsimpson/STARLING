@@ -5,6 +5,7 @@ Exposes GET /news and DELETE /news/cache.
 """
 
 import asyncio
+import difflib
 import hashlib
 import json as _json
 import logging
@@ -32,7 +33,7 @@ _FEEDS_ENV       = os.getenv(
 _PER_FEED        = int(os.getenv("NEWS_PER_FEED", "5"))
 _LLM_LIMIT       = int(os.getenv("NEWS_LLM_LIMIT", "10"))
 _CACHE_SECONDS   = int(os.getenv("NEWS_CACHE_SECONDS", "900"))
-_SYNTHESIS_ON    = False  # DISABLED — synthesis was collapsing too many distinct headlines into too few stories; see ISSUES.md
+_SYNTHESIS_ON    = True   # Hybrid: string-similarity dedup (Stage 1) → strict LLM grouping (Stage 2)
 _SYNTHESIS_MAX   = int(os.getenv("NEWS_SYNTHESIS_MAX_HEADLINES", "15"))
 # Delay (seconds) before synthesis starts so the main LLM chat call can finish first.
 _SYNTHESIS_DELAY = int(os.getenv("NEWS_SYNTHESIS_DELAY", "12"))
@@ -127,12 +128,18 @@ _CATEGORY_DEFAULT_FEEDS: dict[str, str] = {
 
 # ── Synthesis prompt ──────────────────────────────────────────────────────────
 NEWS_SYNTHESIS_PROMPT = """
-You are a news editor. Below is a JSON array of raw headlines from multiple news sources.
-Group headlines that refer to the same real-world story.
-For each group, produce:
-- "headline": a single neutral synthesised headline (plain prose, no markdown)
-- "summary": one concise sentence summarising the story (plain prose, no markdown)
-- "sources": the original objects for every headline in the group, unchanged
+You are a news editor. The headlines below have already been string-deduplicated, so each
+entry is meaningfully distinct. Your task is narrow: find groups that report the EXACT SAME
+real-world event — the same incident, announcement, or development on the same date.
+
+STRICT rules:
+- Only group headlines if they describe the IDENTICAL event (same actors, same outcome, same day).
+- Do NOT group headlines that merely share a topic, country, region, or person.
+- Do NOT group different events within an ongoing story (e.g. two separate battles in a war).
+- A headline with no match belongs in its own single-item group.
+- "headline": copy the clearest, most informative title from the group as-is (do not rewrite it).
+- "summary": one sentence describing the specific event (plain prose, no markdown).
+- "sources": the original objects for every headline in the group, unchanged.
 
 Return ONLY a valid JSON array. No commentary, no markdown fences.
 
@@ -397,9 +404,34 @@ def _build_llm_context(headlines: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _fuzzy_dedup_headlines(headlines: list[dict], threshold: float = 0.72) -> list[dict]:
+    """
+    Stage 1 — string-similarity deduplication (no LLM).
+
+    Iterates the headline list and drops any item whose title is more than
+    `threshold` similar (SequenceMatcher ratio) to an already-kept title.
+    Near-identical headlines from different outlets covering the same event
+    are collapsed to their first (earliest-published) occurrence.
+
+    Returns the deduplicated list in the original publication order.
+    """
+    kept: list[dict] = []
+    kept_titles: list[str] = []
+    for h in headlines:
+        norm = h["title"].lower()
+        is_dup = any(
+            difflib.SequenceMatcher(None, norm, t).ratio() >= threshold
+            for t in kept_titles
+        )
+        if not is_dup:
+            kept.append(h)
+            kept_titles.append(norm)
+    return kept
+
+
 async def _synthesise_headlines(headlines: list[dict]) -> list[dict] | None:
     """
-    Call the local LLM to cluster raw headlines into deduplicated story groups.
+    Stage 2 — LLM semantic grouping on a pre-deduplicated headline list.
     Returns None on any failure; caller falls back to the raw headline list.
     """
     if not headlines:
@@ -497,8 +529,13 @@ async def _fetch_all_parallel(category: str) -> list[dict]:
 
 async def _run_synthesis_bg(headlines: list[dict], category: str) -> None:
     """
-    Background task: synthesise headlines and write to _synth_cache.
-    Runs after GET /news has already returned raw data to the client.
+    Background task: two-stage dedup + synthesis, then write to _synth_cache.
+
+    Stage 1 — string-similarity dedup (_fuzzy_dedup_headlines): collapses
+      near-identical headlines from different outlets with no LLM involved.
+    Stage 2 — strict LLM grouping (_synthesise_headlines): runs on the smaller
+      deduplicated set and only merges headlines that are the EXACT SAME event.
+
     A short delay lets the main news-briefing LLM call finish before synthesis
     saturates the local model server.
     """
@@ -506,7 +543,15 @@ async def _run_synthesis_bg(headlines: list[dict], category: str) -> None:
     cache_key = f"news_{category}"
     _synth_busy.add(cache_key)
     try:
-        stories = await _synthesise_headlines(headlines)
+        # Stage 1: deterministic string-similarity deduplication
+        deduped = _fuzzy_dedup_headlines(headlines)
+        logger.info(
+            "News dedup stage 1 for %r: %d → %d headlines",
+            category, len(headlines), len(deduped),
+        )
+
+        # Stage 2: LLM semantic grouping on the reduced set
+        stories = await _synthesise_headlines(deduped)
         if stories:
             _synth_cache[cache_key] = {"ts": time.time(), "stories": stories}
             logger.info("News synthesis complete for %r: %d stories", category, len(stories))
