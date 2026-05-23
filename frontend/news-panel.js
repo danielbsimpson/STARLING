@@ -96,22 +96,32 @@ const newsTitle        = document.getElementById('news-title');
 const newsList         = document.getElementById('news-list');
 const newsFetched      = document.getElementById('news-fetched');
 const newsRefreshBtn   = document.getElementById('news-refresh-btn');
+const newsCloseBtn     = document.getElementById('news-close-btn');
 const newsCatSelect    = document.getElementById('news-cat-select');
 const newsRegionSelect = document.getElementById('news-region-select');
 const newsSourceSelect = document.getElementById('news-source-select');
 const newsSynthIndicator = document.getElementById('news-synth-indicator');
 
-// ── State ─────────────────────────────────────────────────────────────────────
-let _newsData        = null;   // last fetched payload
-let _activeTab       = 'all'; // currently selected source tab
-let _activeCategory  = 'world'; // currently selected category
-let _activeRegion    = 'all'; // currently selected region filter
+// ── Service refs (injected by initNewsPanel) ─────────────────────────────────
+let _enqueueSpeak    = null;
+let _sendToOllama    = null;
+let _interruptSpeech = null;
+let _onNewsClose     = null;  // called when the X button closes the panel
 
-// Synthesis polling state (Approach A)
-let _synthPollTimer  = null;
-let _synthPollCount  = 0;
-const SYNTH_POLL_INTERVAL_MS = 3000;  // check every 3 s
-const SYNTH_POLL_MAX         = 40;    // give up after 120 s
+export function initNewsPanel({ enqueueSpeak, sendToOllama, interruptSpeech, onClose } = {}) {
+  _enqueueSpeak    = enqueueSpeak    || null;
+  _sendToOllama    = sendToOllama    || null;
+  _interruptSpeech = interruptSpeech || null;
+  _onNewsClose     = onClose         || null;
+}
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let _newsData           = null;   // last fetched payload
+let _activeTab          = 'all'; // currently selected source tab
+let _activeCategory     = 'world'; // currently selected category
+let _activeRegion       = 'all'; // currently selected region filter
+let _activeCard         = null;  // currently tapped headline card
+let _activeArticleData  = null;  // {title, summary} of the tapped card — for LLM context
 
 // ── Filter select initialisation ──────────────────────────────────────────────
 // Category and region options are static; source options are rebuilt per-fetch.
@@ -160,6 +170,13 @@ newsRefreshBtn?.addEventListener('click', async () => {
   await openNewsPanel(_activeCategory, true);
   newsRefreshBtn.textContent = '↻ REFRESH';
   newsRefreshBtn.disabled    = false;
+});
+
+// ── Close button ──────────────────────────────────────────────────────────────
+// The X button fires the panel-level close; app.js also listens to exit CSS state.
+newsCloseBtn?.addEventListener('click', () => {
+  closeNewsPanel();
+  if (typeof _onNewsClose === 'function') _onNewsClose();
 });
 
 // ── Trigger detection ─────────────────────────────────────────────────────────
@@ -247,7 +264,6 @@ export function detectNewsTrigger(transcript) {
  */
 export async function openNewsPanel(category = 'world', silent = false) {
   _activeCategory = category;
-  _stopSynthesisPolling();
 
   if (newsMeta) newsMeta.textContent = 'LOADING…';
 
@@ -273,79 +289,37 @@ export async function openNewsPanel(category = 'world', silent = false) {
   _newsData  = data;
   _activeTab = 'all';
 
-  // Ensure indicator is hidden until polling confirms synthesis is in flight
-  newsSynthIndicator?.classList.add('hidden');
-
-  // Render raw cards immediately — panel opens without waiting for synthesis
+  // Render raw cards immediately
   _renderPanel(data);
   newsPanel.classList.remove('hidden');
-
-  // Start background synthesis polling if synthesis is expected (Approach A)
-  if (data.synthesis_enabled && data.synthesis_status !== 'disabled') {
-    _startSynthesisPolling(category, data.total);
-  }
 
   return data.llm_context;
 }
 
 export function closeNewsPanel() {
   newsPanel?.classList.add('hidden');
-  _newsData = null;
-  _stopSynthesisPolling();
+  _newsData          = null;
+  _activeArticleData = null;
+  _activeCard        = null;
 }
 
-// ── Synthesis polling (Approach A) ────────────────────────────────────────────
-
-function _startSynthesisPolling(category, rawCount) {
-  _synthPollCount = 0;
-  _updateSynthMeta(rawCount, true);
-  newsSynthIndicator?.classList.remove('hidden');
-
-  _synthPollTimer = setInterval(async () => {
-    _synthPollCount++;
-    if (_synthPollCount > SYNTH_POLL_MAX) {
-      _stopSynthesisPolling();
-      _updateSynthMeta(_newsData?.total ?? rawCount, false);
-      return;
-    }
-
-    try {
-      const res  = await fetch(`${BACKEND_BASE_NEWS}/news/synthesised?category=${encodeURIComponent(category)}`);
-      const body = await res.json();
-
-      if (body.status === 'ready' && body.stories?.length > 0) {
-        _stopSynthesisPolling();
-        if (_newsData) _newsData.synthesised = body.stories;
-
-        // Only patch the list when the user hasn't drilled into a specific source
-        if (_activeTab === 'all') {
-          _renderSynthesisedList(body.stories, /* incoming */ true);
-          if (newsMeta) newsMeta.textContent = `${body.stories.length} STORIES`;
-        } else {
-          // Update meta quietly so the "ALL" tab will show synthesis if selected
-          if (newsMeta) newsMeta.textContent = `${body.stories.length} STORIES`;
-        }
-      } else if (body.status === 'none') {
-        _stopSynthesisPolling();
-        _updateSynthMeta(_newsData?.total ?? rawCount, false);
-      }
-    } catch (_) { /* network hiccup — keep polling */ }
-  }, SYNTH_POLL_INTERVAL_MS);
+/** True when the news panel is visible on screen. */
+export function isNewsPanelOpen() {
+  return newsPanel ? !newsPanel.classList.contains('hidden') : false;
 }
 
-function _stopSynthesisPolling() {
-  if (_synthPollTimer !== null) {
-    clearInterval(_synthPollTimer);
-    _synthPollTimer = null;
-  }
-  newsSynthIndicator?.classList.add('hidden');
-}
-
-function _updateSynthMeta(count, synthesising) {
-  if (!newsMeta) return;
-  newsMeta.textContent = synthesising
-    ? `${count} HEADLINES · SYNTHESISING…`
-    : `${count} HEADLINES`;
+/**
+ * Returns a formatted context string for the currently tapped article,
+ * or null if no card is selected. Used by app.js to inject article context
+ * into the LLM so the user can discuss the article with Starling.
+ */
+export function getActiveArticleContext() {
+  if (!_activeArticleData) return null;
+  const { title, summary } = _activeArticleData;
+  let ctx = `The user currently has a news article tile selected in the news panel.\nArticle headline: "${title}"\n`;
+  if (summary) ctx += `Subheadline / summary: "${summary}"\n`;
+  ctx += 'The user may want to discuss this article. Answer in the context of this article when relevant.';
+  return ctx;
 }
 
 // ── Render ─────────────────────────────────────────────────────────────────────
@@ -385,30 +359,22 @@ function _renderPanel(data) {
     _activeTab = 'all';
   }
 
-  // ── Headline / story list ──────────────────────────────────────────────────
-  if (synthesised && synthesised.length > 0) {
-    _renderSynthesisedList(synthesised, false);
-    newsMeta.textContent = `${synthesised.length} STORIES`;
-  } else {
-    _renderList(headlines);
-  }
+  // ── Headline list ──────────────────────────────────────────────────────────
+  _renderList(headlines);
 }
 
 function _reApplyFilters() {
-  if (_activeTab === 'all' && _newsData?.synthesised?.length > 0) {
-    _renderSynthesisedList(_newsData.synthesised, false);
-  } else {
-    const items = _activeTab === 'all'
-      ? (_newsData?.headlines ?? [])
-      : (_newsData?.by_source?.[_activeTab] ?? []);
-    _renderList(items);
-  }
+  const items = _activeTab === 'all'
+    ? (_newsData?.headlines ?? [])
+    : (_newsData?.by_source?.[_activeTab] ?? []);
+  _renderList(items);
 }
 
 function _renderList(items) {
+  _activeCard = null;
   const filtered = _activeRegion === 'all'
     ? items
-    : items.filter(item => SOURCE_REGION[item.source] === _activeRegion);
+    : items.filter(item => (item.region || SOURCE_REGION[item.source]) === _activeRegion);
   newsList.innerHTML = '';
   if (!filtered.length) {
     newsList.innerHTML = '<div style="font-size:0.7rem;color:#444;padding:4px 0;">No headlines for this region.</div>';
@@ -416,8 +382,8 @@ function _renderList(items) {
   }
   // US / North America sources float to the top; within each group, pub_ts order is preserved.
   const sorted = [...filtered].sort((a, b) => {
-    const ra = SOURCE_REGION[a.source] === 'north-america' ? 0 : 1;
-    const rb = SOURCE_REGION[b.source] === 'north-america' ? 0 : 1;
+    const ra = (a.region || SOURCE_REGION[a.source]) === 'north-america' ? 0 : 1;
+    const rb = (b.region || SOURCE_REGION[b.source]) === 'north-america' ? 0 : 1;
     return ra - rb;
   });
   sorted.forEach((item, i) => {
@@ -428,10 +394,11 @@ function _renderList(items) {
 }
 
 function _renderSynthesisedList(stories, incoming = false) {
+  _activeCard = null;
   const filtered = _activeRegion === 'all'
     ? stories
     : stories.filter(story =>
-        story.sources?.some(s => SOURCE_REGION[s.source ?? s.name] === _activeRegion)
+        story.sources?.some(s => (s.region || SOURCE_REGION[s.source ?? s.name]) === _activeRegion)
       );
   newsList.innerHTML = '';
   if (!filtered.length) {
@@ -452,7 +419,7 @@ function _renderSynthesisedList(stories, incoming = false) {
 function _makeHeadlineCard(item) {
   const card     = document.createElement('div');
   card.className = 'news-item';
-  const _region    = SOURCE_REGION[item.source];
+  const _region    = item.region || SOURCE_REGION[item.source];
   const _regionLbl = (_region ? REGIONS.find(r => r.key === _region)?.label : null) ?? '—';
   const _pub       = item.pub || '—';
   card.innerHTML = `
@@ -465,11 +432,35 @@ function _makeHeadlineCard(item) {
     </div>
     <div class="news-item-title">${_esc(item.title)}</div>
     ${item.summary ? `<div class="news-item-summary">${_esc(item.summary)}</div>` : ''}
+    ${item.link ? `<div class="news-item-actions"><button class="news-item-view-btn">VIEW ARTICLE</button></div>` : ''}
   `;
-  if (item.link) {
-    card.style.cursor = 'pointer';
-    card.addEventListener('click', () => window.open(item.link, '_blank', 'noopener,noreferrer'));
-  }
+
+  // VIEW ARTICLE opens the link without bubbling up to the card click
+  const viewBtn = card.querySelector('.news-item-view-btn');
+  viewBtn?.addEventListener('click', e => {
+    e.stopPropagation();
+    window.open(item.link, '_blank', 'noopener,noreferrer');
+  });
+
+  card.style.cursor = 'pointer';
+  card.addEventListener('click', () => {
+    const wasActive = card.classList.contains('active');
+    // Deactivate any other open card first
+    if (_activeCard && _activeCard !== card) {
+      _activeCard.classList.remove('active');
+    }
+    if (wasActive) {
+      card.classList.remove('active');
+      _activeCard        = null;
+      _activeArticleData = null;
+    } else {
+      card.classList.add('active');
+      _activeCard        = card;
+      _activeArticleData = { title: item.title, summary: item.summary || '' };
+      _speakHeadline(item);
+    }
+  });
+
   return card;
 }
 
@@ -479,6 +470,7 @@ function _makeStoryCard(story) {
   // Pick most-recent published label from sources
   const pubLabel = sources.length > 0 ? sources[0].published ?? '' : '';
   const multiSrc = sources.length > 1;
+  const firstLink = sources.find(s => s.link)?.link ?? null;
 
   const card     = document.createElement('div');
   card.className = 'news-story-card';
@@ -516,15 +508,91 @@ function _makeStoryCard(story) {
     <div class="news-story-expanded">
       <div class="news-story-expanded-sources">${expandedHtml}</div>
     </div>
+    ${firstLink ? `<div class="news-item-actions"><button class="news-item-view-btn">VIEW ARTICLE</button></div>` : ''}
   `;
 
-  // Toggle expand/collapse on card click (but don't interfere with pill/link clicks)
+  // VIEW ARTICLE opens the first source link without propagating
+  const viewBtn = card.querySelector('.news-item-view-btn');
+  viewBtn?.addEventListener('click', e => {
+    e.stopPropagation();
+    window.open(firstLink, '_blank', 'noopener,noreferrer');
+  });
+
+  // Card click: deactivate others, activate this one (triggering Starling), expand sources
   card.addEventListener('click', e => {
     if (e.target.tagName === 'A') return;
-    card.classList.toggle('expanded');
+    const wasActive = card.classList.contains('active');
+    if (_activeCard && _activeCard !== card) {
+      _activeCard.classList.remove('active');
+      _activeCard.classList.remove('expanded');
+    }
+    if (wasActive) {
+      card.classList.remove('active');
+      card.classList.remove('expanded');
+      _activeCard        = null;
+      _activeArticleData = null;
+    } else {
+      card.classList.add('active');
+      card.classList.add('expanded');
+      _activeCard        = card;
+      _activeArticleData = { title: story.headline, summary: story.summary || '' };
+      _speakStory(story);
+    }
   });
 
   return card;
+}
+
+// ── Starling speech helpers ───────────────────────────────────────────────────
+
+// Debounce timer — prevents rapid card taps from queuing multiple LLM calls.
+let _speakDebounceTimer = null;
+
+function _scheduleSpeak(fn) {
+  if (_speakDebounceTimer !== null) clearTimeout(_speakDebounceTimer);
+  _speakDebounceTimer = setTimeout(() => {
+    _speakDebounceTimer = null;
+    fn();
+  }, 80);
+}
+
+function _speakHeadline(item) {
+  const wasInterrupted = _interruptSpeech ? _interruptSpeech() : false;
+  _scheduleSpeak(() => {
+    if (!_sendToOllama) {
+      if (_enqueueSpeak) _enqueueSpeak(item.title);
+      return;
+    }
+    const interruptCue = wasInterrupted
+      ? 'Important: you were just cut off mid-sentence. Open with a single short dry remark acknowledging the interruption (e.g. "Well, alright then —" or "Yes, yes, interrupting as usual."), then move on naturally. Do not dwell on it.'
+      : '';
+    const sysPrompt = `You are Starling. ${interruptCue} The user has tapped a news headline. Read the headline naturally, share a brief 1-2 sentence reaction or context, then ask if they would like to open the full article. Keep your total response under 5 sentences.`.trim();
+    _sendToOllama(
+      `Headline: "${item.title}"${item.summary ? `\nSummary: "${item.summary}"` : ''}`,
+      { ephemeralMessages: [{ role: 'system', content: sysPrompt }] },
+    );
+  });
+}
+
+function _speakStory(story) {
+  const wasInterrupted = _interruptSpeech ? _interruptSpeech() : false;
+  _scheduleSpeak(() => {
+    if (!_sendToOllama) {
+      if (_enqueueSpeak) _enqueueSpeak(story.headline);
+      return;
+    }
+    const srcList = story.sources?.length > 1
+      ? `\nCovered by ${story.sources.length} outlets including: ${story.sources.slice(0, 3).map(s => s.name).join(', ')}.`
+      : '';
+    const interruptCue = wasInterrupted
+      ? 'Important: you were just cut off mid-sentence. Open with a single short dry remark acknowledging the interruption (e.g. "Well, alright then —" or "Yes, yes, interrupting as usual."), then move on naturally. Do not dwell on it.'
+      : '';
+    const sysPrompt = `You are Starling. ${interruptCue} The user has tapped a news story. Read the headline naturally, share a brief 1-2 sentence reaction, mention the number of sources covering it, then ask if they would like to open the full article. Keep your total response under 5 sentences.`.trim();
+    _sendToOllama(
+      `Headline: "${story.headline}"${story.summary ? `\nSummary: "${story.summary}"` : ''}${srcList}`,
+      { ephemeralMessages: [{ role: 'system', content: sysPrompt }] },
+    );
+  });
 }
 
 function _esc(str) {

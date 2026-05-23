@@ -2,7 +2,7 @@
 import { BACKEND_BASE } from './config.js';
 import { detectTimerTrigger, handleTimerTrigger, initTimerPanel, dismissTimerPanel } from './timer-panel.js';
 import { detectWeatherTrigger, openWeatherPanel, closeWeatherPanel, initWeatherPanel, startWeatherAutoDismiss } from './weather-panel.js';
-import { detectNewsTrigger, openNewsPanel, closeNewsPanel } from './news-panel.js';
+import { detectNewsTrigger, openNewsPanel, closeNewsPanel, initNewsPanel, isNewsPanelOpen, getActiveArticleContext } from './news-panel.js';
 import { detectRedditTrigger, openRedditPanel, closeRedditPanel, initRedditPanel } from './reddit-panel.js';
 import { detectYouTubeTrigger, openYouTubePanel, closeYouTubePanel, initYouTubePanel } from './youtube-panel.js';
 import { detectMarketTrigger, openMarketPanel, closeMarketPanel, setSendToOllama as _setMktSendToOllama, setOnClose as _setMktOnClose } from './stocks-panel.js';
@@ -664,6 +664,23 @@ function dismissAllToolPanels() {
 }
 
 /**
+ * Like dismissAllToolPanels but keeps the news panel open.
+ * Used when the user speaks while the news panel is visible so they can
+ * discuss articles without losing their place in the briefing.
+ */
+function dismissNonNewsPanels() {
+  _dismissClockPanel();
+  dismissTimerPanel();
+  closeWeatherPanel();
+  exitRedditMode();
+  exitYouTubeMode();
+  exitMarketMode();
+  exitIdeasMode();
+  exitJournalMode();
+  exitWikiMode();
+}
+
+/**
  * Handle a time query — reads Date() directly, speaks immediately, no LLM call.
  */
 function handleTimeQuery(transcript) {
@@ -1123,6 +1140,7 @@ async function sendToOllama(userText, options = {}) {
   wrap.classList.add('streaming');
   const abortCtrl = new AbortController();
   _currentAbortCtrl = abortCtrl;
+  const _callGen = _audioGeneration;   // snapshot — lets AbortError handler avoid racing setState
 
   setState('thinking');
 
@@ -1234,7 +1252,8 @@ async function sendToOllama(userText, options = {}) {
     wrap.classList.remove('streaming');
     if (err.name === 'AbortError') {
       // Request deliberately cancelled (new mic press, clear, pres-mode exit) — return silently.
-      setState('idle');
+      // Guard against racing a concurrent sendToOllama that already called setState('thinking').
+      if (_audioGeneration === _callGen) setState('idle');
       return null;
     }
     txt.textContent = `[Error: ${err.message}]`;
@@ -1258,6 +1277,7 @@ async function sendWikiChat(userText, isFirstTurn = false) {
 
   const abortCtrl = new AbortController();
   _currentAbortCtrl = abortCtrl;
+  const _callGen = _audioGeneration;
 
   try {
     const res = await fetch(`${BACKEND_BASE}/wiki/chat`, {
@@ -1342,7 +1362,7 @@ async function sendWikiChat(userText, isFirstTurn = false) {
     return full;
   } catch (err) {
     wrap.classList.remove('wiki-streaming');
-    if (err.name === 'AbortError') { setState('idle'); return null; }
+    if (err.name === 'AbortError') { if (_audioGeneration === _callGen) setState('idle'); return null; }
     txt.textContent = `[Error: ${err.message}]`;
     setState('error');
     setTimeout(() => setState('idle'), 4000);
@@ -1546,6 +1566,14 @@ function clearAudioQueue() {
   if (_currentAbortCtrl) { _currentAbortCtrl.abort(); _currentAbortCtrl = null; }
 }
 
+// Interrupt Starling mid-speech or mid-thought. Returns true if something was
+// actually cut off (caller can use this to inject an annoyance cue).
+function interruptSpeech() {
+  const wasActive = _currentAbortCtrl !== null || _activeAudio !== null;
+  if (wasActive) clearAudioQueue();
+  return wasActive;
+}
+
 function _speakBrowser(text) {
   if (!window.speechSynthesis) { setState('idle'); return; }
   window.speechSynthesis.cancel();
@@ -1621,9 +1649,27 @@ async function _routeInput(text) {
     return;
   }
 
-  dismissAllToolPanels();
+  // Keep news panel open when the user wants to discuss articles;
+  // dismiss all other overlapping tool panels.
+  if (isNewsPanelOpen()) {
+    dismissNonNewsPanels();
+  } else {
+    dismissAllToolPanels();
+  }
 
-  // ── Browser close phrase ────────────────────────────────────────────────────
+  // ── News: explicit close phrase while panel is open ────────────────────────
+  if (isNewsPanelOpen() && /\bclose\s+news\b|\bclose\s+(?:the\s+)?(?:news\s+)?briefing\b/i.test(text)) {
+    exitNewsMode();
+    appendMessage('user', text);
+    const ack = 'News briefing closed.';
+    const { txt: newsTxt } = appendMessage('assistant', ack);
+    enqueueSpeak(ack, () => { newsTxt.textContent = ack; });
+    setState('idle');
+    fetchSystemStatus();
+    return;
+  }
+
+  // ── Browser close phrase ──────────────────────────────────────────────────
   if (isBrowserPanelOpen() && detectBrowserClose(text)) {
     closeBrowserPanel();
     appendMessage('user', text);
@@ -2046,7 +2092,12 @@ async function _routeInput(text) {
     }
   }
   logEvent('tool_dispatch', { tool: 'llm_fallback', trigger_phrase: text });
-  await sendToOllama(text, _extraContext ? { extraContext: _extraContext } : {});
+
+  // Inject currently-selected news article as context so Starling can discuss it
+  const _newsArticleCtx = isNewsPanelOpen() ? getActiveArticleContext() : null;
+  const _combinedCtx = [_extraContext, _newsArticleCtx].filter(Boolean).join('\n\n') || null;
+
+  await sendToOllama(text, _combinedCtx ? { extraContext: _combinedCtx } : {});
   fetchSystemStatus();
 }
 
@@ -2210,6 +2261,7 @@ initTimerPanel({ appendMessage, setState, enqueueSpeak });
 initWeatherPanel({ enqueueSpeak });
 initRedditPanel({ enqueueSpeak });
 initYouTubePanel({ enqueueSpeak, sendToOllama, openBrowserPanel });
+initNewsPanel({ enqueueSpeak, sendToOllama, interruptSpeech, onClose: exitNewsMode });
 initSphere();
 statModel.textContent = MODEL;
 _applyTtsMode();

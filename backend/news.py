@@ -32,7 +32,7 @@ _FEEDS_ENV       = os.getenv(
 _PER_FEED        = int(os.getenv("NEWS_PER_FEED", "5"))
 _LLM_LIMIT       = int(os.getenv("NEWS_LLM_LIMIT", "10"))
 _CACHE_SECONDS   = int(os.getenv("NEWS_CACHE_SECONDS", "900"))
-_SYNTHESIS_ON    = os.getenv("NEWS_SYNTHESIS_ENABLED", "true").lower() in ("1", "true", "yes")
+_SYNTHESIS_ON    = False  # DISABLED — synthesis was collapsing too many distinct headlines into too few stories; see ISSUES.md
 _SYNTHESIS_MAX   = int(os.getenv("NEWS_SYNTHESIS_MAX_HEADLINES", "15"))
 # Delay (seconds) before synthesis starts so the main LLM chat call can finish first.
 _SYNTHESIS_DELAY = int(os.getenv("NEWS_SYNTHESIS_DELAY", "12"))
@@ -221,6 +221,83 @@ def _source_name_from_url(url: str) -> str:
         return "Unknown"
 
 
+# Ordered list of (url-substring, region-key) pairs used by _region_from_url.
+# More-specific substrings must appear before broader ones where overlap is
+# possible (e.g. "feedburner.com/ndtvnews" before a generic feedburner rule).
+_REGION_URL_MAP: list[tuple[str, str]] = [
+    # ── Europe ────────────────────────────────────────────────────────────────
+    ("bbci.co.uk",                  "europe"),   # BBC News
+    ("theguardian.com",             "europe"),   # The Guardian
+    ("independent.co.uk",           "europe"),   # The Independent
+    ("dailymail.co.uk",             "europe"),   # Daily Mail
+    ("themoscowtimes.com",          "europe"),   # The Moscow Times
+    ("tass.com",                    "europe"),   # TASS
+    ("thelocal.com",                "europe"),   # The Local (Spain/Europe)
+    ("efe.com",                     "europe"),   # Agencia EFE
+    ("unian.net",                   "europe"),   # UNIAN (Ukraine)
+    ("thejournal.ie",               "europe"),   # TheJournal.ie
+    ("breakingnews.ie",             "europe"),   # BreakingNews.ie
+    ("ietopstories",                "europe"),   # Irish Examiner
+    ("reuters.com",                 "europe"),   # Reuters (London-based)
+    ("euroweeklynews.com",          "europe"),   # Euro Weekly News
+    # ── Middle East ───────────────────────────────────────────────────────────
+    ("aljazeera.com",               "middle-east"),  # Al Jazeera English
+    # ── Africa ────────────────────────────────────────────────────────────────
+    ("premiumtimesng.com",          "africa"),   # Premium Times Nigeria
+    ("guardian.ng",                 "africa"),   # Guardian Nigeria
+    # ── Asia ──────────────────────────────────────────────────────────────────
+    ("tribune.com.pk",              "asia"),     # Express Tribune (Pakistan)
+    ("thenews.com.pk",              "asia"),     # The News International (Pakistan)
+    ("inquirer.net",                "asia"),     # INQUIRER.net (Philippines)
+    ("gmanews.tv",                  "asia"),     # GMA News (Philippines)
+    ("hongkongfp.com",              "asia"),     # Hong Kong Free Press
+    ("thestandard.com.hk",          "asia"),     # The Standard HK
+    ("timesofindia.indiatimes.com", "asia"),     # Times of India
+    ("ndtvnews",                    "asia"),     # NDTV (India, via feedburner)
+    ("thehindu.com",                "asia"),     # The Hindu (India)
+    ("thedailystar.net",            "asia"),     # The Daily Star (Bangladesh)
+    ("bdnews24.com",                "asia"),     # bdnews24 (Bangladesh)
+    # ── South America ─────────────────────────────────────────────────────────
+    ("riotimesonline.com",          "south-america"),  # The Rio Times
+    ("brasilwire.com",              "south-america"),  # Brasil Wire
+    # ── North America ─────────────────────────────────────────────────────────
+    ("nytimes.com",                 "north-america"),  # New York Times
+    ("npr.org",                     "north-america"),  # NPR
+    ("abcnews.go.com",              "north-america"),  # ABC News
+    ("cbsnews.com",                 "north-america"),  # CBS News
+    ("nbcnews.com",                 "north-america"),  # NBC News
+    ("arstechnica.com",             "north-america"),  # Ars Technica
+    ("dowjones.io",                 "north-america"),  # Wall Street Journal
+    ("wsj.com",                     "north-america"),  # Wall Street Journal
+    ("sciencedaily.com",            "north-america"),  # Science Daily
+    ("espn.com",                    "north-america"),  # ESPN
+    ("apnews",                      "north-america"),  # AP News
+    ("politico.com",                "north-america"),  # POLITICO
+    ("latimes.com",                 "north-america"),  # LA Times
+    ("chicagotribune.com",          "north-america"),  # Chicago Tribune
+    ("seattletimes.com",            "north-america"),  # Seattle Times
+    ("mercurynews.com",             "north-america"),  # Mercury News
+    ("newsday.com",                 "north-america"),  # Newsday
+    ("vox.com",                     "north-america"),  # Vox
+    ("newsweek.com",                "north-america"),  # Newsweek
+    ("foxnews.com",                 "north-america"),  # Fox News
+    ("feeds.foxnews.com",           "north-america"),  # Fox News (alt)
+    ("businessinsider.com",         "north-america"),  # Business Insider
+    ("yahoo.com",                   "north-america"),  # Yahoo News
+    ("techcrunch.com",              "north-america"),  # TechCrunch
+    ("wired.com",                   "north-america"),  # WIRED
+    ("hnrss.org",                   "north-america"),  # Hacker News
+]
+
+
+def _region_from_url(url: str) -> str:
+    """Return the region key for a feed URL, or empty string if unknown."""
+    for key, region in _REGION_URL_MAP:
+        if key in url:
+            return region
+    return ""
+
+
 def _get_feeds_for_category(category: str) -> list[str]:
     """Return the feed URL list for a given category, checking env vars first."""
     env_key = f"NEWS_FEEDS_{category.upper()}"
@@ -275,6 +352,7 @@ def _parse_feed(url: str) -> list[dict]:
             "title":   title,
             "summary": summary,
             "source":  source,
+            "region":  _region_from_url(url),
             "link":    link,
             "pub":     pub,
             "pub_ts":  pub_ts,
@@ -330,6 +408,7 @@ async def _synthesise_headlines(headlines: list[dict]) -> list[dict] | None:
     capped = [
         {
             "name":      h["source"],
+            "region":    h.get("region", ""),
             "title":     h["title"],
             "link":      h["link"],
             "published": h["pub"],

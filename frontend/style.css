@@ -1313,6 +1313,21 @@ html, body {
   letter-spacing: 0.08em;
 }
 
+.news-close-btn {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 4px;
+  color: #666;
+  cursor: pointer;
+  font-size: 0.7rem;
+  line-height: 1;
+  padding: 2px 7px;
+  transition: border-color 0.15s, color 0.15s;
+  flex-shrink: 0;
+  margin-left: 6px;
+}
+.news-close-btn:hover { border-color: rgba(255,255,255,0.35); color: #ccc; }
+
 .news-filters {
   display: flex;
   gap: 6px;
@@ -1426,6 +1441,50 @@ html, body {
   font-size: 0.68rem;
   color: #666;
   line-height: 1.4;
+  transition: color 0.18s, background 0.18s;
+}
+
+/* ── Active headline card (tapped) ───────────────────────────────────────────── */
+
+.news-item.active {
+  background: rgba(255, 255, 255, 0.06);
+  border-left-color: rgba(100, 210, 130, 0.35);
+}
+
+.news-item.active .news-item-summary {
+  color: #9dc;
+  background: rgba(100, 210, 130, 0.07);
+  border-radius: 3px;
+  padding: 2px 5px;
+  margin: 0 -5px;
+}
+
+/* VIEW ARTICLE action row — hidden until card is active */
+.news-item-actions {
+  display: none;
+  margin-top: 5px;
+}
+
+.news-item.active .news-item-actions,
+.news-story-card.active .news-item-actions {
+  display: flex;
+}
+
+.news-item-view-btn {
+  background: none;
+  border: none;
+  color: #7dda8a;
+  cursor: pointer;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  padding: 2px 0;
+  text-transform: uppercase;
+  transition: color 0.15s;
+}
+
+.news-item-view-btn:hover {
+  color: #aff0b8;
 }
 
 .news-footer {
