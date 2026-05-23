@@ -35,6 +35,7 @@ from pathlib import Path
 import feedparser
 import httpx
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from pydantic import BaseModel
 
 import session_log
 
@@ -48,6 +49,9 @@ _SYNTHESIS_ON     = os.getenv("YOUTUBE_SYNTHESIS_ENABLED", "true").lower() in ("
 
 # Validate channel IDs: must be UCxxxxxxxxxxxxxxxxxxxxxxxxx (24 chars)
 _CHANNEL_ID_RE = re.compile(r"^UC[A-Za-z0-9_\-]{22}$")
+
+# Persistent channel list — takes precedence over env var when the file exists
+_CHANNELS_FILE = Path(__file__).parent / "memory" / "youtube_channels.json"
 
 # Default example channels — user should set YOUTUBE_CHANNELS in .env
 _EXAMPLE_CHANNELS = [
@@ -72,6 +76,28 @@ _DEFAULT_CHANNELS: list[str] = (
     _parse_channel_list(_CHANNELS_ENV) if _CHANNELS_ENV.strip()
     else _EXAMPLE_CHANNELS
 )
+
+
+def _load_channels() -> list[str]:
+    """Load channel IDs from the JSON file, falling back to _DEFAULT_CHANNELS."""
+    try:
+        if _CHANNELS_FILE.exists():
+            raw = json.loads(_CHANNELS_FILE.read_text(encoding="utf-8"))
+            valid = [ch for ch in raw if isinstance(ch, str) and _CHANNEL_ID_RE.match(ch)]
+            if valid:
+                return valid
+    except Exception as exc:
+        logger.warning("Failed to load youtube_channels.json: %s", exc)
+    return list(_DEFAULT_CHANNELS)
+
+
+def _save_channels(channels: list[str]) -> None:
+    """Persist channel IDs to the JSON file. Never raises — a failed save must not break a request."""
+    try:
+        _CHANNELS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _CHANNELS_FILE.write_text(json.dumps(channels, indent=2), encoding="utf-8")
+    except Exception as exc:
+        logger.error("Failed to save youtube_channels.json: %s", exc)
 
 # ── Config — Phase 2 (YouTube Data API v3, optional) ─────────────────────────
 YOUTUBE_API_KEY   = os.getenv("YOUTUBE_API_KEY", "")
@@ -419,7 +445,7 @@ async def _fetch_subscribed_channels() -> tuple[list[str], str]:
     Currently always returns env channels until OAuth is implemented.
     """
     if not _OAUTH_CONFIGURED:
-        return _DEFAULT_CHANNELS, "env"
+        return _load_channels(), "file"
 
     # Phase 3: Check token cache TTL
     cached = _subs_cache.get("subs")
@@ -428,7 +454,7 @@ async def _fetch_subscribed_channels() -> tuple[list[str], str]:
 
     # Phase 3 implementation goes here — load credentials, call subscriptions.list
     logger.info("OAuth configured but Phase 3 not yet implemented; falling back to env")
-    return _DEFAULT_CHANNELS, "env"
+    return _load_channels(), "file"
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -569,6 +595,52 @@ async def delete_youtube_cache():
     _subs_cache.clear()
     session_log.log("tool_call", {"endpoint": "DELETE /youtube/cache"})
     return {"status": "cleared"}
+
+
+# ── Channel management endpoints ────────────────────────────────────────────
+
+class ChannelAddRequest(BaseModel):
+    channel_id: str
+
+
+@router.get("/youtube/channels")
+async def get_youtube_channels():
+    """Return the current list of followed channels with their resolved display names."""
+    channels = _load_channels()
+    return [{"id": ch, "name": _channel_name_map.get(ch)} for ch in channels]
+
+
+@router.post("/youtube/channels")
+async def post_youtube_channel(body: ChannelAddRequest):
+    """Add a channel to the followed list."""
+    if not _CHANNEL_ID_RE.match(body.channel_id):
+        raise HTTPException(status_code=400, detail="Invalid channel ID format.")
+    channels = _load_channels()
+    if body.channel_id in channels:
+        raise HTTPException(status_code=400, detail="Channel already in list.")
+    channels.append(body.channel_id)
+    _save_channels(channels)
+    _raw_cache.clear()
+    _synth_cache.clear()
+    return {"status": "added", "channel_id": body.channel_id}
+
+
+@router.delete("/youtube/channels/{channel_id}")
+async def delete_youtube_channel(channel_id: str):
+    """Remove a channel from the followed list."""
+    if not _CHANNEL_ID_RE.match(channel_id):
+        raise HTTPException(status_code=400, detail="Invalid channel ID format.")
+    channels = _load_channels()
+    if channel_id not in channels:
+        raise HTTPException(status_code=404, detail="Channel not in list.")
+    if len(channels) <= 1:
+        raise HTTPException(status_code=400, detail="Cannot remove the last channel.")
+    channels.remove(channel_id)
+    _save_channels(channels)
+    _raw_cache.clear()
+    _synth_cache.clear()
+    _channel_name_map.pop(channel_id, None)
+    return {"status": "removed", "channel_id": channel_id}
 
 
 # ── Phase 3 endpoints (auth-gated) ───────────────────────────────────────────

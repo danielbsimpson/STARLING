@@ -15,6 +15,13 @@ const ytSynthIndicator  = document.getElementById('yt-synth-indicator');
 const ytTypeFilterBar   = document.getElementById('yt-type-filter-bar');
 const ytChannelFilterBar = document.getElementById('yt-channel-filter-bar');
 const ytSortBar         = document.getElementById('yt-sort-bar');
+const ytSettingsBtn     = document.getElementById('yt-settings-btn');
+const ytSettingsView    = document.getElementById('yt-settings-view');
+const ytSettingsBackBtn = document.getElementById('yt-settings-back-btn');
+const ytSettingsChannelList = document.getElementById('yt-settings-channel-list');
+const ytSettingsInput   = document.getElementById('yt-settings-input');
+const ytSettingsAddBtn  = document.getElementById('yt-settings-add-btn');
+const ytSettingsError   = document.getElementById('yt-settings-error');
 
 // ── Module state ──────────────────────────────────────────────────────────────
 let _ytData          = null;
@@ -88,6 +95,7 @@ export async function openYouTubePanel(options = {}) {
  * Hide the YouTube panel and stop synthesis polling.
  */
 export function closeYouTubePanel() {
+  _hideSettingsView();
   ytPanel?.classList.add('hidden');
   _ytData = null;
   _stopSynthesisPolling();
@@ -105,14 +113,153 @@ export function initYouTubePanel({ enqueueSpeak, sendToOllama, openBrowserPanel 
   ytRefreshBtn?.addEventListener('click', async () => {
     ytRefreshBtn.textContent = '↻ FETCHING…';
     ytRefreshBtn.disabled    = true;
-    await fetch(`${BACKEND_BASE_YT}/youtube/cache`, { method: 'DELETE' }).catch(() => {});
-    await openYouTubePanel({ sort: _activeSort, silent: true });
-    ytRefreshBtn.textContent = '↻ REFRESH';
+    await _hardRefresh();
+    ytRefreshBtn.textContent = '\u21bb REFRESH';
     ytRefreshBtn.disabled    = false;
   });
+
+  ytSettingsBtn?.addEventListener('click', _showSettingsView);
+  ytSettingsBackBtn?.addEventListener('click', _hideSettingsView);
+  ytSettingsAddBtn?.addEventListener('click', () => _addChannel(ytSettingsInput.value));
+  ytSettingsInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') _addChannel(ytSettingsInput.value);
+  });
+  ytSettingsInput?.addEventListener('input', _hideSettingsError);
 }
 
 // ── Internal rendering ────────────────────────────────────────────────────────
+
+async function _hardRefresh() {
+  await fetch(`${BACKEND_BASE_YT}/youtube/cache`, { method: 'DELETE' }).catch(() => {});
+  await openYouTubePanel({ sort: _activeSort, silent: true });
+}
+
+function _showSettingsView() {
+  ytTypeFilterBar?.classList.add('hidden');
+  ytChannelFilterBar?.classList.add('hidden');
+  ytSortBar?.classList.add('hidden');
+  ytTileGrid?.classList.add('hidden');
+  ytFetched?.classList.add('hidden');
+  ytRefreshBtn?.classList.add('hidden');
+  ytSettingsBtn?.classList.add('hidden');
+  ytSettingsView?.classList.remove('hidden');
+  _fetchAndRenderChannelList();
+}
+
+function _hideSettingsView() {
+  ytSettingsView?.classList.add('hidden');
+  ytTypeFilterBar?.classList.remove('hidden');
+  ytChannelFilterBar?.classList.remove('hidden');
+  ytSortBar?.classList.remove('hidden');
+  ytTileGrid?.classList.remove('hidden');
+  ytFetched?.classList.remove('hidden');
+  ytRefreshBtn?.classList.remove('hidden');
+  ytSettingsBtn?.classList.remove('hidden');
+  _hideSettingsError();
+  if (ytSettingsInput) ytSettingsInput.value = '';
+}
+
+async function _fetchAndRenderChannelList() {
+  if (ytSettingsChannelList) ytSettingsChannelList.innerHTML = '<div class="yt-settings-loading">LOADING\u2026</div>';
+  try {
+    const res = await fetch(`${BACKEND_BASE_YT}/youtube/channels`);
+    if (!res.ok) {
+      if (ytSettingsChannelList) ytSettingsChannelList.innerHTML = '<div class="yt-settings-error-inline">Failed to load channels.</div>';
+      return;
+    }
+    const channels = await res.json();
+    if (ytSettingsChannelList) {
+      ytSettingsChannelList.innerHTML = '';
+      for (const { id, name } of channels) {
+        ytSettingsChannelList.appendChild(_createChannelRow(id, name));
+      }
+    }
+  } catch (_) {
+    if (ytSettingsChannelList) ytSettingsChannelList.innerHTML = '<div class="yt-settings-error-inline">Failed to load channels.</div>';
+  }
+}
+
+function _createChannelRow(channelId, displayName) {
+  const row = document.createElement('div');
+  row.className = 'yt-settings-channel-row';
+
+  const nameEl = document.createElement('div');
+  nameEl.className = 'yt-settings-channel-name';
+  nameEl.textContent = displayName || channelId;
+  row.appendChild(nameEl);
+
+  const removeBtn = document.createElement('button');
+  removeBtn.className = 'yt-settings-remove-btn';
+  removeBtn.title = 'Remove channel';
+  removeBtn.textContent = '\u2715';
+  removeBtn.addEventListener('click', async () => {
+    removeBtn.disabled = true;
+    const ok = await _removeChannel(channelId);
+    if (!ok) removeBtn.disabled = false;
+  });
+  row.appendChild(removeBtn);
+
+  return row;
+}
+
+async function _removeChannel(channelId) {
+  try {
+    const res = await fetch(`${BACKEND_BASE_YT}/youtube/channels/${encodeURIComponent(channelId)}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      _showSettingsError(body.detail || 'Failed to remove channel.');
+      return false;
+    }
+    await _fetchAndRenderChannelList();
+    _hardRefresh(); // background refresh — do not await
+    return true;
+  } catch (_) {
+    _showSettingsError('Failed to remove channel.');
+    return false;
+  }
+}
+
+async function _addChannel(rawValue) {
+  const channelId = (rawValue || '').trim();
+  if (!/^UC[A-Za-z0-9_\-]{22}$/.test(channelId)) {
+    _showSettingsError('Invalid format. Must be a YouTube channel ID starting with UC (26 chars total).');
+    return;
+  }
+  if (ytSettingsAddBtn) ytSettingsAddBtn.disabled = true;
+  try {
+    const res = await fetch(`${BACKEND_BASE_YT}/youtube/channels`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channel_id: channelId }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      _showSettingsError(body.detail || 'Failed to add channel.');
+      if (ytSettingsAddBtn) ytSettingsAddBtn.disabled = false;
+      return;
+    }
+    if (ytSettingsInput) ytSettingsInput.value = '';
+    _hideSettingsError();
+    if (ytSettingsAddBtn) ytSettingsAddBtn.disabled = false;
+    await _fetchAndRenderChannelList();
+    _hardRefresh(); // background refresh — do not await
+  } catch (_) {
+    _showSettingsError('Failed to add channel.');
+    if (ytSettingsAddBtn) ytSettingsAddBtn.disabled = false;
+  }
+}
+
+function _showSettingsError(msg) {
+  if (!ytSettingsError) return;
+  ytSettingsError.textContent = msg;
+  ytSettingsError.classList.remove('hidden');
+}
+
+function _hideSettingsError() {
+  if (!ytSettingsError) return;
+  ytSettingsError.textContent = '';
+  ytSettingsError.classList.add('hidden');
+}
 
 function _renderPanel(data) {
   if (ytTitle)   ytTitle.textContent  = 'YOUTUBE FEED';

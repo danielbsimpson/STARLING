@@ -397,6 +397,7 @@
           <div class="yt-title" id="yt-title">YOUTUBE FEED</div>
           <div class="yt-meta" id="yt-meta">—</div>
           <button class="yt-refresh-btn" id="yt-refresh-btn">↻ REFRESH</button>
+          <button class="yt-settings-btn" id="yt-settings-btn" title="Manage channels">⚙ CHANNELS</button>
           <button class="yt-close-btn" id="yt-close-btn" title="Close YouTube feed">&#x2715;</button>
           <div class="yt-synth-indicator hidden" id="yt-synth-indicator">
             <span class="yt-synth-spinner"></span>
@@ -408,6 +409,18 @@
         <div class="yt-sort-bar" id="yt-sort-bar"></div>
         <div class="yt-tile-grid" id="yt-tile-grid"></div>
         <div class="yt-fetched" id="yt-fetched">—</div>
+        <div class="yt-settings-view hidden" id="yt-settings-view">
+          <div class="yt-settings-header">
+            <div class="yt-settings-title">MANAGE CHANNELS</div>
+            <button class="yt-settings-back-btn" id="yt-settings-back-btn">← BACK</button>
+          </div>
+          <div class="yt-settings-channel-list" id="yt-settings-channel-list"></div>
+          <div class="yt-settings-add-row">
+            <input class="yt-settings-input" id="yt-settings-input" type="text" placeholder="UCxxxxxxxxxxxxxxxxxxxxxxxxx" maxlength="26" spellcheck="false" autocomplete="off" />
+            <button class="yt-settings-add-btn" id="yt-settings-add-btn">+ ADD</button>
+          </div>
+          <div class="yt-settings-error hidden" id="yt-settings-error"></div>
+        </div>
       </div><!-- /yt-panel -->
 
       <!-- Journal Panel — zero-width in normal mode, expands in journal-mode -->
