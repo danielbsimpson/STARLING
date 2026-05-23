@@ -30,7 +30,7 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-CHROMA_PATH      = os.getenv("WIKI_CHROMA_PATH", "memory/chroma_db")
+CHROMA_PATH      = os.getenv("WIKI_CHROMA_PATH", str(Path(__file__).parent / "memory" / "chroma_db"))
 WIKI_COLLECTION  = "wikipedia_articles"
 EMBEDDING_MODEL  = "nomic-ai/nomic-embed-text-v1"
 EMBEDDING_DEVICE = os.getenv("WIKI_EMBED_DEVICE", "cuda")

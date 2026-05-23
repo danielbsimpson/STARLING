@@ -42,10 +42,11 @@ except ImportError:
 router = APIRouter()
 
 # ── Config ────────────────────────────────────────────────────────────────────
+_MEMORY_DIR    = Path(__file__).parent / "memory"
 _LOCATION_ENV  = os.getenv("WEATHER_LOCATION", "Framingham,Massachusetts")
 _DEFAULT_LABEL = os.getenv("WEATHER_DEFAULT_LABEL", "Framingham")
 _UNITS         = os.getenv("WEATHER_UNITS", "fahrenheit").lower()
-_CACHE_FILE    = Path(os.getenv("WEATHER_CACHE_FILE", "memory/weather_cache.json"))
+_CACHE_FILE    = Path(os.getenv("WEATHER_CACHE_FILE", str(_MEMORY_DIR / "weather_cache.json")))
 _HISTORY_MAX   = int(os.getenv("WEATHER_HISTORY_MAX", "168"))
 _CACHE_TTL_S   = 3600  # 1 hour — file-cache TTL per location
 

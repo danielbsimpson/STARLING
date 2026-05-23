@@ -21,7 +21,7 @@ import session_log
 router = APIRouter()
 
 # ── Config ─────────────────────────────────────────────────────────────────────
-_JOURNAL_DIR  = Path(os.getenv("JOURNAL_DIR", "memory/journal"))
+_JOURNAL_DIR  = Path(os.getenv("JOURNAL_DIR", str(Path(__file__).parent / "memory" / "journal")))
 _MAX_ENTRIES  = int(os.getenv("JOURNAL_MAX_ENTRIES", "500"))
 
 

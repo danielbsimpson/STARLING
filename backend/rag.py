@@ -23,8 +23,9 @@ from pathlib import Path
 from typing import Optional
 
 # ── Environment config ────────────────────────────────────────────────────────
-CHROMA_PATH    = os.getenv("RAG_CHROMA_PATH",    "memory/chroma_db")
-INPUT_FOLDER   = os.getenv("RAG_INPUT_FOLDER",   "memory/input")
+_MEMORY_DIR    = Path(__file__).parent / "memory"
+CHROMA_PATH    = os.getenv("RAG_CHROMA_PATH",    str(_MEMORY_DIR / "chroma_db"))
+INPUT_FOLDER   = os.getenv("RAG_INPUT_FOLDER",   str(_MEMORY_DIR / "input"))
 COLLECTION     = "starling_docs"
 EMBED_MODEL    = os.getenv("RAG_EMBED_MODEL",    "BAAI/bge-small-en-v1.5")
 CHUNK_SIZE     = int(os.getenv("RAG_CHUNK_SIZE",     "200"))

@@ -14,7 +14,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 # ── Config ────────────────────────────────────────────────────────────────────
-LOG_DIR = Path(os.getenv("SESSION_LOG_DIR", "memory/logs"))
+_DEFAULT_LOG_DIR = Path(__file__).parent / "memory" / "logs"
+LOG_DIR = Path(os.getenv("SESSION_LOG_DIR", str(_DEFAULT_LOG_DIR)))
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 # Shared constant — imported by main.py and log_routes.py to avoid duplication.

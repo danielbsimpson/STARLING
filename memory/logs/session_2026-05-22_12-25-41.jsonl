@@ -1,2 +1,0 @@
-{"ts": "2026-05-22T12:25:41.343+00:00", "session": "session_2026-05-22_12-25-41", "source": "backend", "event": "tool_call", "data": {"endpoint": "/youtube", "channels": 3, "sort": "date"}}
-{"ts": "2026-05-22T12:25:41.344+00:00", "session": "session_2026-05-22_12-25-41", "source": "backend", "event": "tool_result", "data": {"endpoint": "/youtube", "total": 45}}

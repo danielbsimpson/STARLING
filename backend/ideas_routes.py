@@ -20,7 +20,7 @@ import session_log
 router = APIRouter()
 
 # ── Config ─────────────────────────────────────────────────────────────────────
-_IDEAS_FILE = Path(os.getenv("IDEAS_FILE", "memory/ideas.json"))
+_IDEAS_FILE = Path(os.getenv("IDEAS_FILE", str(Path(__file__).parent / "memory" / "ideas.json")))
 _MAX_RETURN = int(os.getenv("IDEAS_MAX_RETURN", "100"))
 
 # ── File I/O helpers ──────────────────────────────────────────────────────────
