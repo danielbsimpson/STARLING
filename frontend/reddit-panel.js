@@ -31,7 +31,12 @@ const SYNTH_POLL_INTERVAL_MS = 3000;
 const SYNTH_POLL_MAX         = 40;
 
 // ── Module-level callbacks (set via initRedditPanel) ──────────────────────────
-let _enqueueSpeak = null;
+let _enqueueSpeak    = null;
+let _interruptSpeech = null;
+let _sendToOllama    = null;
+
+// ── Active card state ─────────────────────────────────────────────────────────
+let _activeCard = null;
 
 // ── Trigger detection ──────────────────────────────────────────────────────────
 /**
@@ -96,8 +101,10 @@ export function closeRedditPanel() {
  * Wire up enqueueSpeak and the refresh button click handler.
  * Must be called once during app init before any panel interactions.
  */
-export function initRedditPanel({ enqueueSpeak }) {
-  _enqueueSpeak = enqueueSpeak;
+export function initRedditPanel({ enqueueSpeak, sendToOllama, interruptSpeech } = {}) {
+  _enqueueSpeak    = enqueueSpeak    || null;
+  _sendToOllama    = sendToOllama    || null;
+  _interruptSpeech = interruptSpeech || null;
 
   redditRefreshBtn?.addEventListener('click', () => _hardRefresh());
 
@@ -190,6 +197,21 @@ function _renderPostList() {
 
     card.append(badge, titleEl, stats);
 
+    // Click to speak post headline + stats
+    card.style.cursor = 'pointer';
+    card.addEventListener('click', () => {
+      const wasActive = card.classList.contains('active');
+      if (_activeCard && _activeCard !== card) _activeCard.classList.remove('active');
+      if (wasActive) {
+        card.classList.remove('active');
+        _activeCard = null;
+      } else {
+        card.classList.add('active');
+        _activeCard = card;
+        _speakPost(post);
+      }
+    });
+
     // Optional thumbnail (right-aligned via CSS)
     if (post.thumbnail) {
       const thumb = document.createElement('img');
@@ -202,6 +224,24 @@ function _renderPostList() {
 
     redditPostList.appendChild(card);
   }
+}
+
+// ── Post speech ──────────────────────────────────────────────────────────────────
+
+function _speakPost(post) {
+  const wasInterrupted = _interruptSpeech ? _interruptSpeech() : false;
+  if (!_sendToOllama) {
+    if (_enqueueSpeak) _enqueueSpeak(post.title);
+    return;
+  }
+  const interruptCue = wasInterrupted
+    ? 'Important: you were just cut off mid-sentence. Open with a single short dry remark acknowledging the interruption (e.g. "Well, alright then —" or "Right, moving on."), then continue naturally. Do not dwell on it.'
+    : '';
+  const sysPrompt = `You are Starling. ${interruptCue} The user has tapped a Reddit post. Read the post title naturally, briefly mention it has ${post.score} upvotes and ${post.num_comments} comments, and share a one-sentence reaction. Keep your total response under 4 sentences.`.trim();
+  _sendToOllama(
+    `Post title: "${post.title}"\nSubreddit: r/${post.subreddit}`,
+    { ephemeralMessages: [{ role: 'system', content: sysPrompt }] },
+  );
 }
 
 // ── Synthesis polling ──────────────────────────────────────────────────────────

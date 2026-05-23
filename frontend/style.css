@@ -1947,6 +1947,11 @@ a.news-story-source-title:hover {
   background: rgba(255, 255, 255, 0.05);
 }
 
+.reddit-post-card.active {
+  background: rgba(255, 255, 255, 0.06);
+  border-left-color: rgba(200, 200, 200, 0.35);
+}
+
 .reddit-sub-badge {
   font-family: 'Share Tech Mono', monospace;
   font-size: 0.56rem;
@@ -1973,6 +1978,10 @@ a.news-story-source-title:hover {
   font-size: 0.58rem;
   color: #555;
   letter-spacing: 0.06em;
+}
+
+.reddit-post-card:has(.reddit-post-thumb) {
+  padding-right: 76px;
 }
 
 .reddit-post-thumb {
@@ -2098,6 +2107,19 @@ a.news-story-source-title:hover {
   padding: 12px 0;
   height: 100%;
   overflow: hidden;
+}
+
+.reddit-settings-view.hidden {
+  display: none;
+}
+
+/* Inner-panel elements toggled when settings view is opened/closed */
+.reddit-filter-bar.hidden,
+.reddit-post-list.hidden,
+.reddit-fetched.hidden,
+.reddit-refresh-btn.hidden,
+.reddit-settings-btn.hidden {
+  display: none;
 }
 
 .reddit-settings-header {
