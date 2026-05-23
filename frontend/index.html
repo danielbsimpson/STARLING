@@ -379,7 +379,8 @@
         <div class="reddit-header">
           <div class="reddit-title" id="reddit-title">REDDIT SOCIAL FEED</div>
           <div class="reddit-meta" id="reddit-meta">—</div>
-          <button class="reddit-refresh-btn" id="reddit-refresh-btn">↻ REFRESH</button>
+          <button class="reddit-refresh-btn" id="reddit-refresh-btn">&#8635; REFRESH</button>
+          <button class="reddit-settings-btn" id="reddit-settings-btn" title="Manage subreddits">&#9881; SUBREDDITS</button>
           <button class="reddit-close-btn" id="reddit-close-btn" title="Close Reddit feed">&#x2715;</button>
         </div>
         <div class="reddit-synth-indicator hidden" id="reddit-synth-indicator">
@@ -389,6 +390,18 @@
         <div class="reddit-filter-bar" id="reddit-filter-bar"></div>
         <div class="reddit-post-list" id="reddit-post-list"></div>
         <div class="reddit-fetched" id="reddit-fetched">—</div>
+        <div class="reddit-settings-view hidden" id="reddit-settings-view">
+          <div class="reddit-settings-header">
+            <div class="reddit-settings-title">MANAGE SUBREDDITS</div>
+            <button class="reddit-settings-back-btn" id="reddit-settings-back-btn">&#8592; BACK</button>
+          </div>
+          <div class="reddit-settings-sub-list" id="reddit-settings-sub-list"></div>
+          <div class="reddit-settings-add-row">
+            <input class="reddit-settings-input" id="reddit-settings-input" type="text" placeholder="subreddit or r/subreddit" maxlength="53" spellcheck="false" autocomplete="off" />
+            <button class="reddit-settings-add-btn" id="reddit-settings-add-btn">+ ADD</button>
+          </div>
+          <div class="reddit-settings-error hidden" id="reddit-settings-error"></div>
+        </div>
       </div><!-- /reddit-panel -->
 
       <!-- YouTube Feed Panel — zero-width in normal mode, expands in yt-mode -->
@@ -404,9 +417,20 @@
             <span class="yt-synth-label">ANALYSING</span>
           </div>
         </div>
-        <div class="yt-type-filter-bar" id="yt-type-filter-bar"></div>
-        <div class="yt-channel-filter-bar" id="yt-channel-filter-bar"></div>
-        <div class="yt-sort-bar" id="yt-sort-bar"></div>
+        <div class="yt-filter-row">
+          <div class="yt-filter-col">
+            <label class="yt-filter-label">TYPE</label>
+            <div class="yt-type-filter-bar" id="yt-type-filter-bar"></div>
+          </div>
+          <div class="yt-filter-col">
+            <label class="yt-filter-label">CHANNEL</label>
+            <div class="yt-channel-filter-bar" id="yt-channel-filter-bar"></div>
+          </div>
+          <div class="yt-filter-col">
+            <label class="yt-filter-label">SORT</label>
+            <div class="yt-sort-bar" id="yt-sort-bar"></div>
+          </div>
+        </div>
         <div class="yt-tile-grid" id="yt-tile-grid"></div>
         <div class="yt-fetched" id="yt-fetched">—</div>
         <div class="yt-settings-view hidden" id="yt-settings-view">
@@ -521,6 +545,22 @@ Press SUBMIT when finished dictating.</span>
       </div>
 
     </div><!-- /body-cols -->
+
+    <!-- YouTube floating video player — draggable overlay, shown when a tile is clicked -->
+    <div class="yt-video-modal hidden" id="yt-video-modal">
+      <div class="yt-video-modal-header" id="yt-video-modal-header">
+        <span class="yt-video-modal-title" id="yt-video-modal-title">▶ VIDEO</span>
+        <button class="yt-video-modal-close" id="yt-video-modal-close" title="Close player">✕</button>
+      </div>
+      <div class="yt-video-modal-body">
+        <iframe
+          id="yt-video-modal-frame"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"
+          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+          allowfullscreen
+        ></iframe>
+      </div>
+    </div>
 
     <!-- Full-width bottom bar: LLM metrics + TTS settings + controls -->
     <div class="bottom-bar">

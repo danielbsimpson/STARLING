@@ -13,6 +13,13 @@ const redditFilterBar      = document.getElementById('reddit-filter-bar');
 const redditPostList       = document.getElementById('reddit-post-list');
 const redditFetched        = document.getElementById('reddit-fetched');
 const redditRefreshBtn     = document.getElementById('reddit-refresh-btn');
+const redditSettingsBtn    = document.getElementById('reddit-settings-btn');
+const redditSettingsView   = document.getElementById('reddit-settings-view');
+const redditSettingsBackBtn  = document.getElementById('reddit-settings-back-btn');
+const redditSettingsSubList  = document.getElementById('reddit-settings-sub-list');
+const redditSettingsInput    = document.getElementById('reddit-settings-input');
+const redditSettingsAddBtn   = document.getElementById('reddit-settings-add-btn');
+const redditSettingsError    = document.getElementById('reddit-settings-error');
 
 // ── State ──────────────────────────────────────────────────────────────────────
 let _redditData      = null;
@@ -79,6 +86,7 @@ export async function openRedditPanel(options = {}) {
  * Close the Reddit panel and stop any active synthesis polling.
  */
 export function closeRedditPanel() {
+  _hideRedditSettingsView();
   if (redditPanel) redditPanel.classList.add('hidden');
   _redditData = null;
   _stopSynthesisPolling();
@@ -91,12 +99,15 @@ export function closeRedditPanel() {
 export function initRedditPanel({ enqueueSpeak }) {
   _enqueueSpeak = enqueueSpeak;
 
-  redditRefreshBtn?.addEventListener('click', async () => {
-    try {
-      await fetch(`${BACKEND_BASE_REDDIT}/reddit/cache`, { method: 'DELETE' });
-    } catch (_) { /* ignore cache-clear errors */ }
-    await openRedditPanel({ silent: true });
+  redditRefreshBtn?.addEventListener('click', () => _hardRefresh());
+
+  redditSettingsBtn?.addEventListener('click', _showRedditSettingsView);
+  redditSettingsBackBtn?.addEventListener('click', _hideRedditSettingsView);
+  redditSettingsAddBtn?.addEventListener('click', () => _addSubreddit(redditSettingsInput.value));
+  redditSettingsInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') _addSubreddit(redditSettingsInput.value);
   });
+  redditSettingsInput?.addEventListener('input', _hideRedditSettingsError);
 }
 
 // ── Rendering ──────────────────────────────────────────────────────────────────
@@ -241,4 +252,153 @@ function _speakBriefing(briefingText) {
   if (briefingText && typeof briefingText === 'string' && _enqueueSpeak) {
     _enqueueSpeak(briefingText);
   }
+}
+
+// ── Hard refresh helper ────────────────────────────────────────────────────────
+
+async function _hardRefresh() {
+  try {
+    await fetch(`${BACKEND_BASE_REDDIT}/reddit/cache`, { method: 'DELETE' });
+  } catch (_) { /* ignore cache-clear errors */ }
+  await openRedditPanel({ silent: true });
+}
+
+// ── Settings view helpers ──────────────────────────────────────────────────────
+
+function _showRedditSettingsView() {
+  redditFilterBar?.classList.add('hidden');
+  redditPostList?.classList.add('hidden');
+  redditFetched?.classList.add('hidden');
+  redditRefreshBtn?.classList.add('hidden');
+  redditSettingsBtn?.classList.add('hidden');
+  redditSynthIndicator?.classList.add('hidden');
+  redditSettingsView?.classList.remove('hidden');
+  _fetchAndRenderSubList();
+}
+
+function _hideRedditSettingsView() {
+  redditSettingsView?.classList.add('hidden');
+  redditFilterBar?.classList.remove('hidden');
+  redditPostList?.classList.remove('hidden');
+  redditFetched?.classList.remove('hidden');
+  redditRefreshBtn?.classList.remove('hidden');
+  redditSettingsBtn?.classList.remove('hidden');
+  _hideRedditSettingsError();
+  if (redditSettingsInput) redditSettingsInput.value = '';
+}
+
+async function _fetchAndRenderSubList() {
+  if (!redditSettingsSubList) return;
+  redditSettingsSubList.innerHTML = '';
+  const loading = document.createElement('div');
+  loading.className = 'reddit-settings-loading';
+  loading.textContent = 'LOADING\u2026';
+  redditSettingsSubList.appendChild(loading);
+
+  try {
+    const res = await fetch(`${BACKEND_BASE_REDDIT}/reddit/subreddits`);
+    if (!res.ok) {
+      redditSettingsSubList.innerHTML = '';
+      const err = document.createElement('div');
+      err.className = 'reddit-settings-loading';
+      err.textContent = 'Failed to load subreddits.';
+      redditSettingsSubList.appendChild(err);
+      return;
+    }
+    const subs = await res.json();
+    redditSettingsSubList.innerHTML = '';
+    for (const { name } of subs) {
+      redditSettingsSubList.appendChild(_createSubRow(name));
+    }
+  } catch (_) {
+    redditSettingsSubList.innerHTML = '';
+    const err = document.createElement('div');
+    err.className = 'reddit-settings-loading';
+    err.textContent = 'Failed to load subreddits.';
+    redditSettingsSubList.appendChild(err);
+  }
+}
+
+function _createSubRow(name) {
+  const row = document.createElement('div');
+  row.className = 'reddit-settings-sub-row';
+
+  const nameEl = document.createElement('div');
+  nameEl.className = 'reddit-settings-sub-name';
+  nameEl.textContent = name; // textContent — XSS safe
+
+  const removeBtn = document.createElement('button');
+  removeBtn.className = 'reddit-settings-remove-btn';
+  removeBtn.title = 'Remove subreddit';
+  removeBtn.textContent = '\u2715';
+  removeBtn.addEventListener('click', async () => {
+    removeBtn.disabled = true;
+    const ok = await _removeSubreddit(name);
+    if (!ok) removeBtn.disabled = false;
+  });
+
+  row.append(nameEl, removeBtn);
+  return row;
+}
+
+async function _removeSubreddit(name) {
+  const res = await fetch(
+    `${BACKEND_BASE_REDDIT}/reddit/subreddits/${encodeURIComponent(name)}`,
+    { method: 'DELETE' }
+  );
+  if (!res.ok) {
+    try {
+      const body = await res.json();
+      _showRedditSettingsError(body.detail ?? 'Failed to remove subreddit.');
+    } catch (_) {
+      _showRedditSettingsError('Failed to remove subreddit.');
+    }
+    return false;
+  }
+  await _fetchAndRenderSubList();
+  _hardRefresh(); // background refresh — no await
+  return true;
+}
+
+async function _addSubreddit(rawInput) {
+  const name = rawInput.trim().replace(/^r\//i, '');
+  if (!/^[A-Za-z0-9_]{1,50}$/.test(name)) {
+    _showRedditSettingsError('Invalid name. Use letters, numbers, and underscores only (max 50 chars).');
+    return;
+  }
+  if (redditSettingsAddBtn) redditSettingsAddBtn.disabled = true;
+  try {
+    const res = await fetch(`${BACKEND_BASE_REDDIT}/reddit/subreddits`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subreddit: name }),
+    });
+    if (!res.ok) {
+      try {
+        const body = await res.json();
+        _showRedditSettingsError(body.detail ?? 'Failed to add subreddit.');
+      } catch (_) {
+        _showRedditSettingsError('Failed to add subreddit.');
+      }
+      return;
+    }
+    if (redditSettingsInput) redditSettingsInput.value = '';
+    _hideRedditSettingsError();
+    await _fetchAndRenderSubList();
+    _hardRefresh(); // background refresh — no await
+  } finally {
+    if (redditSettingsAddBtn) redditSettingsAddBtn.disabled = false;
+  }
+}
+
+function _showRedditSettingsError(msg) {
+  if (!redditSettingsError) return;
+  redditSettingsError.textContent = msg; // textContent — XSS safe
+  redditSettingsError.classList.remove('hidden');
+}
+
+function _hideRedditSettingsError() {
+  if (!redditSettingsError) return;
+  redditSettingsError.textContent = '';
+  redditSettingsError.classList.add('hidden');
 }

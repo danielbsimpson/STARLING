@@ -219,6 +219,12 @@ def _parse_channel_feed(channel_id: str) -> list[dict]:
         if not thumbnail_url and video_id:
             thumbnail_url = f"https://i.ytimg.com/vi/{video_id}/mqdefault.jpg"
 
+        # Detect Shorts from the RSS link URL — works without API key.
+        # YouTube's RSS feed uses /shorts/<id> links for Shorts content.
+        # Phase 2 (_enrich_with_durations) will override this with the
+        # authoritative duration-based value when an API key is configured.
+        is_short_from_url = bool(re.search(r"/shorts/", link))
+
         videos.append({
             "video_id":         video_id,
             "title":            title,
@@ -235,7 +241,7 @@ def _parse_channel_feed(channel_id: str) -> list[dict]:
             "thumbnail_url":    thumbnail_url,
             # Phase 2 fields — populated by _enrich_with_durations()
             "duration_seconds": None,
-            "is_short":         None,
+            "is_short":         is_short_from_url if is_short_from_url else None,
         })
 
     return videos

@@ -2273,7 +2273,7 @@ async function warmupModels(greetingEl) {
 initTimerPanel({ appendMessage, setState, enqueueSpeak });
 initWeatherPanel({ enqueueSpeak });
 initRedditPanel({ enqueueSpeak });
-initYouTubePanel({ enqueueSpeak, sendToOllama, openBrowserPanel });
+initYouTubePanel({ enqueueSpeak, sendToOllama, interruptSpeech });
 initNewsPanel({ enqueueSpeak, sendToOllama, interruptSpeech, onClose: exitNewsMode });
 initSphere();
 statModel.textContent = MODEL;

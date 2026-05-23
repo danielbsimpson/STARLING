@@ -13,9 +13,11 @@ import os
 import re
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from pydantic import BaseModel
 
 import session_log
 
@@ -31,11 +33,42 @@ _SYNTHESIS_ON    = os.getenv("REDDIT_SYNTHESIS_ENABLED", "true").lower() in ("1"
 
 _SUB_NAME_RE = re.compile(r"^[A-Za-z0-9_]{1,50}$")
 
+_SUBREDDITS_FILE = Path(__file__).parent / "memory" / "reddit_subreddits.json"
+
 _DEFAULT_SUBS: list[str] = [
     s.strip()
     for s in _REDDIT_SUBS_ENV.split(",")
     if s.strip() and _SUB_NAME_RE.match(s.strip())
 ]
+
+# ── Subreddit persistence ────────────────────────────────────────────────────────
+
+def _load_subreddits() -> list[str]:
+    """Load subreddits from JSON file; fall back to _DEFAULT_SUBS on error."""
+    try:
+        if _SUBREDDITS_FILE.exists():
+            raw = json.loads(_SUBREDDITS_FILE.read_text(encoding="utf-8"))
+            valid = [s for s in raw if isinstance(s, str) and _SUB_NAME_RE.match(s)]
+            return valid if valid else _DEFAULT_SUBS
+    except Exception as exc:
+        logger.warning("Failed to load %s: %s", _SUBREDDITS_FILE, exc)
+    return _DEFAULT_SUBS
+
+
+def _save_subreddits(subreddits: list[str]) -> None:
+    """Persist subreddit list to JSON file. Never raises — log errors instead."""
+    try:
+        _SUBREDDITS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _SUBREDDITS_FILE.write_text(json.dumps(subreddits, indent=2), encoding="utf-8")
+    except Exception as exc:
+        logger.error("Failed to save %s: %s", _SUBREDDITS_FILE, exc)
+
+
+# ── Pydantic request models ────────────────────────────────────────────────────
+
+class SubredditAddRequest(BaseModel):
+    subreddit: str
+
 
 # ── Phase 2 — PRAW credentials (optional) ─────────────────────────────────────
 _PRAW_CLIENT_ID     = os.getenv("REDDIT_CLIENT_ID", "")
@@ -278,7 +311,7 @@ async def _fetch_user_subscriptions() -> list[str]:
     Results are cached for 3600 seconds.
     """
     if not _PRAW_CONFIGURED:
-        return _DEFAULT_SUBS
+        return _load_subreddits()
 
     cached = _subs_cache.get("subs")
     if cached and (time.time() - cached["ts"]) < 3600:
@@ -444,3 +477,49 @@ async def delete_reddit_cache():
     _synth_cache.clear()
     _synth_busy.clear()
     return {"status": "cleared"}
+
+
+@router.get("/reddit/subreddits")
+async def get_reddit_subreddits():
+    """Return the active subreddit list as an array of {name} objects."""
+    subs = _load_subreddits()
+    return [{"name": s} for s in subs]
+
+
+@router.post("/reddit/subreddits")
+async def add_reddit_subreddit(request: SubredditAddRequest):
+    """Add a subreddit to the persistent list."""
+    name = request.subreddit.strip().lstrip("/")
+    if not _SUB_NAME_RE.match(name):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid subreddit name. Only alphanumeric and underscore allowed (max 50 chars).",
+        )
+    subs = _load_subreddits()
+    if name.lower() in [s.lower() for s in subs]:
+        raise HTTPException(status_code=400, detail="Subreddit already in list.")
+    if len(subs) >= 20:
+        raise HTTPException(status_code=400, detail="Maximum of 20 subreddits allowed.")
+    subs.append(name)
+    _save_subreddits(subs)
+    _raw_cache.clear()
+    _synth_cache.clear()
+    return {"status": "added", "subreddit": name}
+
+
+@router.delete("/reddit/subreddits/{subreddit}")
+async def remove_reddit_subreddit(subreddit: str):
+    """Remove a subreddit from the persistent list."""
+    if not _SUB_NAME_RE.match(subreddit):
+        raise HTTPException(status_code=400, detail="Invalid subreddit name.")
+    subs = _load_subreddits()
+    match = next((s for s in subs if s.lower() == subreddit.lower()), None)
+    if match is None:
+        raise HTTPException(status_code=404, detail="Subreddit not in list.")
+    if len(subs) <= 1:
+        raise HTTPException(status_code=400, detail="Cannot remove the last subreddit.")
+    subs.remove(match)
+    _save_subreddits(subs)
+    _raw_cache.clear()
+    _synth_cache.clear()
+    return {"status": "removed", "subreddit": match}

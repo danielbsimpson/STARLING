@@ -2071,6 +2071,171 @@ a.news-story-source-title:hover {
   padding: 4px 0;
 }
 
+/* ── Reddit Settings View ─────────────────────────────────────────────────── */
+
+.reddit-settings-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 5px;
+  color: #777;
+  cursor: pointer;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  padding: 4px 10px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.reddit-settings-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #bbb;
+}
+
+.reddit-settings-view {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.reddit-settings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(200, 200, 200, 0.12);
+  padding-bottom: 10px;
+}
+
+.reddit-settings-title {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 3px;
+  color: rgba(200, 200, 200, 0.5);
+  text-transform: uppercase;
+}
+
+.reddit-settings-back-btn {
+  background: none;
+  border: none;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: rgba(200, 200, 200, 0.45);
+  cursor: pointer;
+  padding: 0;
+}
+
+.reddit-settings-back-btn:hover {
+  color: rgba(200, 200, 200, 0.9);
+}
+
+.reddit-settings-sub-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.reddit-settings-sub-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid rgba(200, 200, 200, 0.1);
+  border-radius: 2px;
+}
+
+.reddit-settings-sub-name {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  color: var(--c, #ccc);
+  letter-spacing: 1px;
+}
+
+.reddit-settings-sub-name::before {
+  content: "r/";
+  color: rgba(200, 200, 200, 0.35);
+}
+
+.reddit-settings-remove-btn {
+  background: none;
+  border: none;
+  color: rgba(200, 200, 200, 0.3);
+  font-size: 14px;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.reddit-settings-remove-btn:hover {
+  color: rgba(200, 200, 200, 0.9);
+}
+
+.reddit-settings-add-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.reddit-settings-input {
+  flex: 1;
+  background: rgba(200, 200, 200, 0.05);
+  border: 1px solid rgba(200, 200, 200, 0.18);
+  color: var(--c, #ccc);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  padding: 6px 10px;
+  border-radius: 2px;
+  outline: none;
+}
+
+.reddit-settings-input:focus {
+  border-color: rgba(200, 200, 200, 0.45);
+}
+
+.reddit-settings-input::placeholder {
+  color: rgba(200, 200, 200, 0.25);
+}
+
+.reddit-settings-add-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 5px;
+  color: #777;
+  cursor: pointer;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  padding: 4px 10px;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.reddit-settings-add-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #bbb;
+}
+
+.reddit-settings-error {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  color: rgba(255, 120, 80, 0.8);
+  letter-spacing: 1px;
+  min-height: 16px;
+}
+
+.reddit-settings-loading {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  color: rgba(200, 200, 200, 0.35);
+  letter-spacing: 2px;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════ */
 /* ── YouTube Feed Panel ───────────────────────────────────────────────────── */
 /* ═══════════════════════════════════════════════════════════════════════════ */
@@ -2218,50 +2383,75 @@ a.news-story-source-title:hover {
   white-space: nowrap;
 }
 
-/* Filter / sort bars */
+/* Filter row — three dropdowns side by side */
+.yt-filter-row {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.yt-filter-col {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.yt-filter-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.55rem;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.3);
+  text-transform: uppercase;
+  user-select: none;
+}
+
 .yt-type-filter-bar,
 .yt-channel-filter-bar,
 .yt-sort-bar {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 5px;
-  overflow-x: auto;
-  padding-bottom: 2px;
-  flex-shrink: 0;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255,255,255,0.08) transparent;
+  display: block;
 }
 
-.yt-filter-btn {
+.yt-filter-select {
+  width: 100%;
   background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 5px;
-  color: #888;
+  color: #c0c0c0;
   cursor: pointer;
   font-family: 'Share Tech Mono', monospace;
-  font-size: 0.6rem;
-  letter-spacing: 0.1em;
-  padding: 3px 9px;
-  text-transform: uppercase;
-  white-space: nowrap;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-  flex-shrink: 0;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  padding: 4px 6px;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='rgba(255,255,255,0.25)'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 7px center;
+  padding-right: 20px;
+  transition: border-color 0.15s, background-color 0.15s;
 }
 
-.yt-filter-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08);
-  color: #ccc;
+.yt-filter-select:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background-color: rgba(255, 255, 255, 0.07);
 }
 
-.yt-filter-btn--active {
-  background: rgba(255, 255, 255, 0.1) !important;
-  border-color: rgba(255, 255, 255, 0.2) !important;
-  color: #e0e0e0 !important;
+.yt-filter-select:focus {
+  border-color: rgba(255, 255, 255, 0.3);
+  background-color: rgba(255, 255, 255, 0.08);
 }
 
-.yt-filter-btn--disabled {
+.yt-filter-select:disabled {
   opacity: 0.3;
   cursor: not-allowed;
+}
+
+.yt-filter-select option {
+  background: #1a1a1a;
+  color: #c0c0c0;
 }
 
 /* Tile grid */
@@ -2610,6 +2800,89 @@ a.news-story-source-title:hover {
   color: rgba(200, 200, 200, 0.4);
   letter-spacing: 1px;
   padding: 8px 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/* ── YouTube Video Modal (floating draggable player) ─────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+.yt-video-modal {
+  position: fixed;
+  top: 80px;
+  right: 40px;
+  width: 560px;
+  background: #0e0e0e;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  z-index: 2000;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  user-select: none;
+}
+
+.yt-video-modal.hidden {
+  display: none;
+}
+
+.yt-video-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #1a1a1a;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: grab;
+  flex-shrink: 0;
+}
+
+.yt-video-modal-header:active {
+  cursor: grabbing;
+}
+
+.yt-video-modal-title {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: rgba(255, 255, 255, 0.65);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: calc(100% - 32px);
+}
+
+.yt-video-modal-close {
+  background: rgba(255, 255, 255, 0.06);
+  border: none;
+  border-radius: 5px;
+  color: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 4px 7px;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.yt-video-modal-close:hover {
+  background: rgba(255, 80, 80, 0.25);
+  color: #ff6b6b;
+}
+
+.yt-video-modal-body {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+}
+
+.yt-video-modal-body iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════ */

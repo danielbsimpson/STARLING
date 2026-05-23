@@ -23,6 +23,13 @@ const ytSettingsInput   = document.getElementById('yt-settings-input');
 const ytSettingsAddBtn  = document.getElementById('yt-settings-add-btn');
 const ytSettingsError   = document.getElementById('yt-settings-error');
 
+// ── Video modal DOM refs ──────────────────────────────────────────────────────
+const ytVideoModal       = document.getElementById('yt-video-modal');
+const ytVideoModalHeader = document.getElementById('yt-video-modal-header');
+const ytVideoModalFrame  = document.getElementById('yt-video-modal-frame');
+const ytVideoModalTitle  = document.getElementById('yt-video-modal-title');
+const ytVideoModalClose  = document.getElementById('yt-video-modal-close');
+
 // ── Module state ──────────────────────────────────────────────────────────────
 let _ytData          = null;
 let _activeType      = 'all';    // 'all' | 'long' | 'shorts'
@@ -34,10 +41,15 @@ let _synthPollCount  = 0;
 const SYNTH_POLL_INTERVAL_MS = 3000;
 const SYNTH_POLL_MAX         = 40;
 
+// ── Video modal drag state ────────────────────────────────────────────────────
+let _dragActive  = false;
+let _dragOffsetX = 0;
+let _dragOffsetY = 0;
+
 // ── Service refs (injected by initYouTubePanel) ───────────────────────────────
 let _enqueueSpeak     = null;
 let _sendToOllama     = null;
-let _openBrowserPanel = null;
+let _interruptSpeech  = null;
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
@@ -105,10 +117,18 @@ export function closeYouTubePanel() {
  * Inject service references and wire the refresh button.
  * Call once during app initialisation.
  */
-export function initYouTubePanel({ enqueueSpeak, sendToOllama, openBrowserPanel } = {}) {
-  _enqueueSpeak     = enqueueSpeak     || null;
-  _sendToOllama     = sendToOllama     || null;
-  _openBrowserPanel = openBrowserPanel || null;
+export function initYouTubePanel({ enqueueSpeak, sendToOllama, interruptSpeech } = {}) {
+  _enqueueSpeak    = enqueueSpeak    || null;
+  _sendToOllama    = sendToOllama    || null;
+  _interruptSpeech = interruptSpeech || null;
+
+  // Wire video modal close button
+  ytVideoModalClose?.addEventListener('click', _closeVideoModal);
+
+  // Wire drag on modal header
+  ytVideoModalHeader?.addEventListener('mousedown', _onModalDragStart);
+  document.addEventListener('mousemove', _onModalDragMove);
+  document.addEventListener('mouseup',   _onModalDragEnd);
 
   ytRefreshBtn?.addEventListener('click', async () => {
     ytRefreshBtn.textContent = '↻ FETCHING…';
@@ -266,15 +286,18 @@ function _renderPanel(data) {
   if (ytMeta)    ytMeta.textContent   = `${data.total} VIDEOS`;
   if (ytFetched) ytFetched.textContent = `FETCHED ${new Date(data.fetched_at).toLocaleTimeString()}`;
 
-  _renderTypeFilterBar(data.api_key_configured);
+  _renderTypeFilterBar();
   _renderChannelFilterBar(data.channels, data.channel_names);
   _renderSortBar();
   _renderTileGrid();
 }
 
-function _renderTypeFilterBar(apiKeyConfigured) {
+function _renderTypeFilterBar() {
   if (!ytTypeFilterBar) return;
   ytTypeFilterBar.innerHTML = '';
+
+  const sel = document.createElement('select');
+  sel.className = 'yt-filter-select';
 
   const types = [
     { key: 'all',    label: 'ALL' },
@@ -283,60 +306,56 @@ function _renderTypeFilterBar(apiKeyConfigured) {
   ];
 
   for (const { key, label } of types) {
-    const btn = document.createElement('button');
-    btn.className = 'yt-filter-btn';
-    btn.textContent = label;
-    if (key === _activeType) btn.classList.add('yt-filter-btn--active');
-
-    if (key !== 'all' && !apiKeyConfigured) {
-      btn.disabled                = true;
-      btn.dataset.requiresApi     = 'true';
-      btn.title                   = 'Requires YOUTUBE_API_KEY in .env';
-      btn.classList.add('yt-filter-btn--disabled');
-    } else {
-      btn.addEventListener('click', () => {
-        _activeType = key;
-        _updateActiveBtn(ytTypeFilterBar, btn);
-        _renderTileGrid();
-      });
-    }
-
-    ytTypeFilterBar.appendChild(btn);
+    const opt = document.createElement('option');
+    opt.value       = key;
+    opt.textContent = label;
+    if (key === _activeType) opt.selected = true;
+    sel.appendChild(opt);
   }
+
+  sel.addEventListener('change', () => {
+    _activeType = sel.value;
+    _renderTileGrid();
+  });
+
+  ytTypeFilterBar.appendChild(sel);
 }
 
 function _renderChannelFilterBar(channelIds, channelNames) {
   if (!ytChannelFilterBar) return;
   ytChannelFilterBar.innerHTML = '';
 
-  const allBtn = document.createElement('button');
-  allBtn.className    = 'yt-filter-btn';
-  allBtn.textContent  = 'ALL CHANNELS';
-  if (_activeChannel === 'all') allBtn.classList.add('yt-filter-btn--active');
-  allBtn.addEventListener('click', () => {
-    _activeChannel = 'all';
-    _updateActiveBtn(ytChannelFilterBar, allBtn);
-    _renderTileGrid();
-  });
-  ytChannelFilterBar.appendChild(allBtn);
+  const sel = document.createElement('select');
+  sel.className = 'yt-filter-select';
+
+  const allOpt = document.createElement('option');
+  allOpt.value       = 'all';
+  allOpt.textContent = 'ALL CHANNELS';
+  if (_activeChannel === 'all') allOpt.selected = true;
+  sel.appendChild(allOpt);
 
   for (const id of channelIds) {
-    const btn       = document.createElement('button');
-    btn.className   = 'yt-filter-btn';
-    btn.textContent = channelNames?.[id] || id;
-    if (_activeChannel === id) btn.classList.add('yt-filter-btn--active');
-    btn.addEventListener('click', () => {
-      _activeChannel = id;
-      _updateActiveBtn(ytChannelFilterBar, btn);
-      _renderTileGrid();
-    });
-    ytChannelFilterBar.appendChild(btn);
+    const opt = document.createElement('option');
+    opt.value       = id;
+    opt.textContent = channelNames?.[id] || id;
+    if (_activeChannel === id) opt.selected = true;
+    sel.appendChild(opt);
   }
+
+  sel.addEventListener('change', () => {
+    _activeChannel = sel.value;
+    _renderTileGrid();
+  });
+
+  ytChannelFilterBar.appendChild(sel);
 }
 
 function _renderSortBar() {
   if (!ytSortBar) return;
   ytSortBar.innerHTML = '';
+
+  const sel = document.createElement('select');
+  sel.className = 'yt-filter-select';
 
   const sorts = [
     { key: 'date',    label: 'DATE' },
@@ -345,17 +364,19 @@ function _renderSortBar() {
   ];
 
   for (const { key, label } of sorts) {
-    const btn       = document.createElement('button');
-    btn.className   = 'yt-filter-btn';
-    btn.textContent = label;
-    if (key === _activeSort) btn.classList.add('yt-filter-btn--active');
-    btn.addEventListener('click', () => {
-      _activeSort = key;
-      _updateActiveBtn(ytSortBar, btn);
-      _renderTileGrid();
-    });
-    ytSortBar.appendChild(btn);
+    const opt = document.createElement('option');
+    opt.value       = key;
+    opt.textContent = label;
+    if (key === _activeSort) opt.selected = true;
+    sel.appendChild(opt);
   }
+
+  sel.addEventListener('change', () => {
+    _activeSort = sel.value;
+    _renderTileGrid();
+  });
+
+  ytSortBar.appendChild(sel);
 }
 
 function _renderTileGrid() {
@@ -364,11 +385,15 @@ function _renderTileGrid() {
 
   let videos = [..._ytData.videos];
 
-  // Type filter (requires Phase 2 duration data)
-  if (_activeType === 'long') {
-    videos = videos.filter(v => v.is_short === false);
-  } else if (_activeType === 'shorts') {
-    videos = videos.filter(v => v.is_short === true);
+  // Type filter — use is_short when available (Phase 2), otherwise fall back
+  // to URL-based detection (/shorts/ in the link).
+  if (_activeType !== 'all') {
+    videos = videos.filter(v => {
+      const isShort = v.is_short !== null
+        ? v.is_short
+        : /\/shorts\//.test(v.link || '');
+      return _activeType === 'shorts' ? isShort : !isShort;
+    });
   }
 
   // Channel filter
@@ -465,12 +490,12 @@ function _createVideoTile(video) {
 
   tile.appendChild(info);
 
-  // Click → open in browser panel using embed URL (avoids X-Frame-Options block),
-  // or fall back to new tab if the browser panel is unavailable.
+  // Click → open in floating video modal using embed URL (avoids X-Frame-Options block),
+  // or fall back to new tab if video ID can't be extracted.
   tile.addEventListener('click', () => {
-    if (_openBrowserPanel) {
-      const embedUrl = _toYouTubeEmbedUrl(video.link);
-      _openBrowserPanel(embedUrl || video.link);
+    const embedUrl = _toYouTubeEmbedUrl(video.link);
+    if (embedUrl) {
+      _openVideoModal(embedUrl, video.title);
     } else {
       window.open(video.link, '_blank', 'noopener,noreferrer');
     }
@@ -486,10 +511,72 @@ function _createVideoTile(video) {
  */
 function _toYouTubeEmbedUrl(link) {
   const match = link.match(
-    /(?:youtube\.com\/(?:watch\?(?:[^#]*&)?v=|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/,
+    /(?:youtube\.com\/(?:watch\?(?:[^#]*&)?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/,
   );
   if (!match) return null;
   return `https://www.youtube.com/embed/${match[1]}?autoplay=1`;
+}
+
+// ── Video modal helpers ───────────────────────────────────────────────────────
+
+function _openVideoModal(embedUrl, title) {
+  if (!ytVideoModal || !ytVideoModalFrame) return;
+
+  // Stop Starling speaking — the video has its own audio
+  _interruptSpeech?.();
+
+  // Reset position to default (top-right) each time a new video opens
+  ytVideoModal.style.left = '';
+  ytVideoModal.style.top  = '';
+  ytVideoModal.style.right  = '40px';
+  ytVideoModal.style.bottom = '';
+
+  if (ytVideoModalTitle) {
+    ytVideoModalTitle.textContent = `▶ ${title || 'VIDEO'}`;
+  }
+  ytVideoModalFrame.src = embedUrl;
+  ytVideoModal.classList.remove('hidden');
+}
+
+function _closeVideoModal() {
+  if (!ytVideoModal || !ytVideoModalFrame) return;
+  ytVideoModalFrame.src = '';
+  ytVideoModal.classList.add('hidden');
+  _dragActive = false;
+}
+
+function _onModalDragStart(e) {
+  if (e.button !== 0) return;            // left mouse button only
+  if (e.target === ytVideoModalClose) return; // don't drag when clicking close
+
+  _dragActive = true;
+  const rect  = ytVideoModal.getBoundingClientRect();
+
+  // Convert to absolute positioning so we can freely move the element
+  ytVideoModal.style.right  = '';
+  ytVideoModal.style.bottom = '';
+  ytVideoModal.style.left   = `${rect.left}px`;
+  ytVideoModal.style.top    = `${rect.top}px`;
+
+  _dragOffsetX = e.clientX - rect.left;
+  _dragOffsetY = e.clientY - rect.top;
+  e.preventDefault();
+}
+
+function _onModalDragMove(e) {
+  if (!_dragActive) return;
+
+  const maxX = window.innerWidth  - ytVideoModal.offsetWidth;
+  const maxY = window.innerHeight - ytVideoModal.offsetHeight;
+  const x    = Math.max(0, Math.min(e.clientX - _dragOffsetX, maxX));
+  const y    = Math.max(0, Math.min(e.clientY - _dragOffsetY, maxY));
+
+  ytVideoModal.style.left = `${x}px`;
+  ytVideoModal.style.top  = `${y}px`;
+}
+
+function _onModalDragEnd() {
+  _dragActive = false;
 }
 
 // ── Synthesis polling ─────────────────────────────────────────────────────────
@@ -538,10 +625,4 @@ function _speakBriefing(briefingText) {
   }
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
-function _updateActiveBtn(container, activeBtn) {
-  for (const btn of container.querySelectorAll('.yt-filter-btn')) {
-    btn.classList.toggle('yt-filter-btn--active', btn === activeBtn);
-  }
-}
