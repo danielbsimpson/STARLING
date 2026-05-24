@@ -47,7 +47,12 @@ _onnx_provider = os.getenv("ONNX_PROVIDER", _default_provider)
 if _onnx_provider:
     log.info("Kokoro ONNX provider: %s", _onnx_provider)
 else:
-    log.info("Kokoro ONNX provider (auto): %s — set ONNX_PROVIDER to override", _available[0])
+    log.warning(
+        "\u26a0  No GPU ONNX provider detected — Kokoro will run on CPU (slow). "
+        "Available providers: %s. "
+        "Fix: pip install --force-reinstall --no-deps onnxruntime-gpu",
+        _available,
+    )
 
 # ── Model file paths ───────────────────────────────────────────────────────────
 _MODEL_DIR   = Path(__file__).parent.parent / "models"
@@ -56,7 +61,6 @@ _VOICES_PATH = _MODEL_DIR / "voices-v1.0.bin"
 
 # ── Lazy singleton — loaded on first request ───────────────────────────────────
 _kokoro: Kokoro | None = None
-_gpu_failed: bool = False  # set True after a GPU inference error; forces CPU reload
 
 
 def _build_kokoro(provider: str | None) -> Kokoro:
@@ -71,7 +75,7 @@ def _build_kokoro(provider: str | None) -> Kokoro:
 
 
 def _get_kokoro() -> Kokoro:
-    global _kokoro, _gpu_failed
+    global _kokoro
     if _kokoro is None:
         if not _ONNX_PATH.exists() or not _VOICES_PATH.exists():
             raise RuntimeError(
@@ -79,8 +83,7 @@ def _get_kokoro() -> Kokoro:
                 "Run: python scripts/download_models.py"
             )
         log.info("Loading Kokoro TTS model (first request)\u2026")
-        provider = None if _gpu_failed else _onnx_provider
-        _kokoro = _build_kokoro(provider)
+        _kokoro = _build_kokoro(_onnx_provider)
     return _kokoro
 
 
@@ -201,19 +204,17 @@ async def synthesize(req: TTSRequest):
         try:
             samples, sample_rate = await loop.run_in_executor(None, _run_synthesis)
         except Exception as gpu_exc:
-            global _kokoro, _gpu_failed
-            if _gpu_failed:
-                raise  # already on CPU — nothing left to try
             log.warning(
-                "Kokoro GPU inference failed (%s) — reloading on CPUExecutionProvider.",
+                "Kokoro GPU inference failed (%s) — using CPU for this request; "
+                "GPU will be retried on the next request.",
                 gpu_exc,
             )
-            _gpu_failed = True
-            _kokoro = None  # force reload on next _get_kokoro() call
-            kokoro = _get_kokoro()  # rebuilds with CPUExecutionProvider
+            global _kokoro
+            _kokoro = None  # reset so next request rebuilds with GPU
+            _cpu_kokoro = _build_kokoro("CPUExecutionProvider")
 
             def _run_synthesis_cpu():
-                return _synthesize_chunked(kokoro, req.text, req.voice, req.speed, lang)
+                return _synthesize_chunked(_cpu_kokoro, req.text, req.voice, req.speed, lang)
 
             samples, sample_rate = await loop.run_in_executor(None, _run_synthesis_cpu)
         buf = io.BytesIO()

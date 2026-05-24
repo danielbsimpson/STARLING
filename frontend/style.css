@@ -558,13 +558,12 @@ html, body {
   flex: 1; min-height: 0; overflow-y: auto;
   padding: 20px 14px 14px;
   display: flex; flex-direction: column; gap: 10px;
-  justify-content: flex-end;
   scroll-behavior: smooth;
 }
-.chat-inner::-webkit-scrollbar { width: 3px; }
-.chat-inner::-webkit-scrollbar-track { background: transparent; }
-.chat-inner::-webkit-scrollbar-thumb { background: rgba(200,200,200,0.1); border-radius: 2px; }
-.chat-inner::-webkit-scrollbar-thumb:hover { background: rgba(200,200,200,0.22); }
+.chat-inner::-webkit-scrollbar { width: 4px; }
+.chat-inner::-webkit-scrollbar-track { background: rgba(200,200,200,0.04); border-radius: 2px; }
+.chat-inner::-webkit-scrollbar-thumb { background: rgba(200,200,200,0.28); border-radius: 2px; }
+.chat-inner::-webkit-scrollbar-thumb:hover { background: rgba(200,200,200,0.55); }
 
 .pres-dossier-body::-webkit-scrollbar { width: 3px; }
 .pres-dossier-body::-webkit-scrollbar-track { background: transparent; }

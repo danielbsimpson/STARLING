@@ -7,6 +7,7 @@ import { detectRedditTrigger, openRedditPanel, closeRedditPanel, initRedditPanel
 import { detectYouTubeTrigger, openYouTubePanel, closeYouTubePanel, initYouTubePanel } from './youtube-panel.js';
 import { detectMarketTrigger, openMarketPanel, closeMarketPanel, setSendToOllama as _setMktSendToOllama, setOnClose as _setMktOnClose } from './stocks-panel.js';
 import { detectBrowserTrigger, detectBrowserClose, detectWikiSectionTrigger, isBrowserPanelOpen, openBrowserPanel, closeBrowserPanel, getBrowserPageText, ensureBrowserPageText, getBrowserPageUrl, getBrowserJsRendered } from './browser-panel.js';
+import { getInterruptPhrase } from './interrupt-phrases.js';
 import {
   wikiMode,
   detectWikiTrigger,
@@ -1662,11 +1663,18 @@ function clearAudioQueue() {
   if (_currentAbortCtrl) { _currentAbortCtrl.abort(); _currentAbortCtrl = null; }
 }
 
-// Interrupt Starling mid-speech or mid-thought. Returns true if something was
-// actually cut off (caller can use this to inject an annoyance cue).
+// Interrupt Starling mid-speech or mid-thought.
+// If something was actively playing, picks a random annoyance phrase, speaks it
+// immediately via Kokoro, and shows it in the conversation window.
+// Returns true when something was actually cut off.
 function interruptSpeech() {
   const wasActive = _currentAbortCtrl !== null || _activeAudio !== null;
-  if (wasActive) clearAudioQueue();
+  if (wasActive) {
+    clearAudioQueue();
+    const phrase = getInterruptPhrase();
+    appendMessage('assistant', phrase);
+    enqueueSpeak(phrase);
+  }
   return wasActive;
 }
 

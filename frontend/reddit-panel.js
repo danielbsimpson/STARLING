@@ -229,15 +229,12 @@ function _renderPostList() {
 // ── Post speech ──────────────────────────────────────────────────────────────────
 
 function _speakPost(post) {
-  const wasInterrupted = _interruptSpeech ? _interruptSpeech() : false;
+  if (_interruptSpeech) _interruptSpeech();
   if (!_sendToOllama) {
     if (_enqueueSpeak) _enqueueSpeak(post.title);
     return;
   }
-  const interruptCue = wasInterrupted
-    ? 'Important: you were just cut off mid-sentence. Open with a single short dry remark acknowledging the interruption (e.g. "Well, alright then —" or "Right, moving on."), then continue naturally. Do not dwell on it.'
-    : '';
-  const sysPrompt = `You are Starling. ${interruptCue} The user has tapped a Reddit post. Read the post title naturally, briefly mention it has ${post.score} upvotes and ${post.num_comments} comments, and share a one-sentence reaction. Keep your total response under 4 sentences.`.trim();
+  const sysPrompt = `You are Starling. The user has tapped a Reddit post. Read the post title naturally, briefly mention it has ${post.score} upvotes and ${post.num_comments} comments, and share a one-sentence reaction. Keep your total response under 4 sentences.`;
   _sendToOllama(
     `Post title: "${post.title}"\nSubreddit: r/${post.subreddit}`,
     { ephemeralMessages: [{ role: 'system', content: sysPrompt }] },

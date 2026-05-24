@@ -557,16 +557,13 @@ function _scheduleSpeak(fn) {
 }
 
 function _speakHeadline(item) {
-  const wasInterrupted = _interruptSpeech ? _interruptSpeech() : false;
+  if (_interruptSpeech) _interruptSpeech();
   _scheduleSpeak(() => {
     if (!_sendToOllama) {
       if (_enqueueSpeak) _enqueueSpeak(item.title);
       return;
     }
-    const interruptCue = wasInterrupted
-      ? 'Important: you were just cut off mid-sentence. Open with a single short dry remark acknowledging the interruption (e.g. "Well, alright then —" or "Yes, yes, interrupting as usual."), then move on naturally. Do not dwell on it.'
-      : '';
-    const sysPrompt = `You are Starling. ${interruptCue} The user has tapped a news headline. Read the headline naturally, share a brief 1-2 sentence reaction or context, then ask if they would like to open the full article. Keep your total response under 5 sentences.`.trim();
+    const sysPrompt = 'You are Starling. The user has tapped a news headline. Read the headline naturally, share a brief 1-2 sentence reaction or context, then ask if they would like to open the full article. Keep your total response under 5 sentences.';
     _sendToOllama(
       `Headline: "${item.title}"${item.summary ? `\nSummary: "${item.summary}"` : ''}`,
       { ephemeralMessages: [{ role: 'system', content: sysPrompt }] },
@@ -575,7 +572,7 @@ function _speakHeadline(item) {
 }
 
 function _speakStory(story) {
-  const wasInterrupted = _interruptSpeech ? _interruptSpeech() : false;
+  if (_interruptSpeech) _interruptSpeech();
   _scheduleSpeak(() => {
     if (!_sendToOllama) {
       if (_enqueueSpeak) _enqueueSpeak(story.headline);
@@ -584,10 +581,7 @@ function _speakStory(story) {
     const srcList = story.sources?.length > 1
       ? `\nCovered by ${story.sources.length} outlets including: ${story.sources.slice(0, 3).map(s => s.name).join(', ')}.`
       : '';
-    const interruptCue = wasInterrupted
-      ? 'Important: you were just cut off mid-sentence. Open with a single short dry remark acknowledging the interruption (e.g. "Well, alright then —" or "Yes, yes, interrupting as usual."), then move on naturally. Do not dwell on it.'
-      : '';
-    const sysPrompt = `You are Starling. ${interruptCue} The user has tapped a news story. Read the headline naturally, share a brief 1-2 sentence reaction, mention the number of sources covering it, then ask if they would like to open the full article. Keep your total response under 5 sentences.`.trim();
+    const sysPrompt = 'You are Starling. The user has tapped a news story. Read the headline naturally, share a brief 1-2 sentence reaction, mention the number of sources covering it, then ask if they would like to open the full article. Keep your total response under 5 sentences.';
     _sendToOllama(
       `Headline: "${story.headline}"${story.summary ? `\nSummary: "${story.summary}"` : ''}${srcList}`,
       { ephemeralMessages: [{ role: 'system', content: sysPrompt }] },
