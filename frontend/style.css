@@ -87,6 +87,25 @@ html, body {
   display: flex; align-items: baseline; gap: 16px;
   margin-bottom: 7px;
 }
+.toolkit-menu-btn {
+  background: transparent;
+  border: 1px solid rgba(200,200,200,0.2);
+  color: rgba(200,200,200,0.45);
+  font-size: 9px; letter-spacing: 3px;
+  padding: 3px 7px; height: 20px;
+  border-radius: 2px; cursor: pointer;
+  font-family: 'Share Tech Mono', monospace;
+  transition: color 0.2s, border-color 0.2s, box-shadow 0.2s;
+  white-space: nowrap;
+  align-self: flex-start;
+  margin-bottom: 3px;
+}
+.toolkit-menu-btn:hover {
+  border-color: rgba(200,200,200,0.55);
+  color: rgba(200,200,200,0.9);
+  box-shadow: 0 0 8px rgba(200,200,200,0.1);
+}
+
 .power-btn {
   background: transparent;
   border: 1px solid rgba(220,80,80,0.25);
@@ -3826,6 +3845,10 @@ a.news-story-source-title:hover {
   gap: 10px;
 }
 .toolkit-list-view.hidden { display: none; }
+.toolkit-list-view::-webkit-scrollbar { width: 3px; }
+.toolkit-list-view::-webkit-scrollbar-track { background: transparent; }
+.toolkit-list-view::-webkit-scrollbar-thumb { background: rgba(200,200,200,0.1); border-radius: 2px; }
+.toolkit-list-view::-webkit-scrollbar-thumb:hover { background: rgba(200,200,200,0.22); }
 
 .toolkit-card {
   padding: 12px 14px;

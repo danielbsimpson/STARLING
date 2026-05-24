@@ -1705,7 +1705,8 @@ function detectToolkitMenuTrigger(text) {
     /\b(?:show|open|display|list)\b.{0,20}\b(?:tools?|toolkit|menu)\b/i.test(t) ||
     /\bwhat tools?\b/i.test(t) ||
     /\bshow me (?:your|all) tools?\b/i.test(t) ||
-    /\btool (?:menu|list)\b/i.test(t)
+    /\btool (?:menu|list)\b/i.test(t) ||
+    /\bsystem\s+(?:settings|menu)\b/i.test(t)
   );
 }
 
@@ -2438,6 +2439,11 @@ document.getElementById('yt-close-btn')?.addEventListener('click', () => {
 document.getElementById('reddit-close-btn')?.addEventListener('click', () => {
   exitRedditMode();
   setState('idle');
+});
+
+// ── Toolkit menu button ──────────────────────────────────────────────────────
+document.getElementById('toolkit-menu-btn')?.addEventListener('click', () => {
+  openToolkitPanel();
 });
 
 // ── Wikipedia close button ────────────────────────────────────────────────────
