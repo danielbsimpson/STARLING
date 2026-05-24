@@ -821,6 +821,144 @@ html, body {
   color: rgba(200,200,200,0.35); flex-shrink: 0; min-width: 50px; text-align: right;
 }
 
+/* ── Custom voice picker (replaces native <select> in the menu) ─────────────── */
+.voice-picker {
+  flex: 1;
+  position: relative;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  user-select: none;
+}
+
+.voice-picker-selected {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 28px;
+  padding: 0 8px;
+  background: rgba(200,200,200,0.03);
+  border: 0.5px solid rgba(200,200,200,0.12);
+  border-radius: 5px;
+  color: var(--c);
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+.voice-picker:not(.voice-picker-disabled) .voice-picker-selected:hover {
+  border-color: rgba(200,200,200,0.32);
+  background: rgba(200,200,200,0.06);
+}
+
+.voice-picker-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.voice-picker-chevron {
+  font-size: 9px;
+  color: rgba(200,200,200,0.4);
+  margin-left: 6px;
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+
+.voice-picker-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0; right: 0;
+  z-index: 200;
+  background: #0e0e0e;
+  border: 0.5px solid rgba(200,200,200,0.18);
+  border-radius: 5px;
+  overflow-y: auto;
+  max-height: 260px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.7);
+}
+.voice-picker-dropdown.hidden { display: none; }
+.voice-picker-dropdown::-webkit-scrollbar { width: 3px; }
+.voice-picker-dropdown::-webkit-scrollbar-track { background: transparent; }
+.voice-picker-dropdown::-webkit-scrollbar-thumb { background: rgba(200,200,200,0.1); border-radius: 2px; }
+
+.voice-picker-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  color: rgba(200,200,200,0.6);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+  border-bottom: 1px solid rgba(200,200,200,0.04);
+}
+.voice-picker-item:last-child { border-bottom: none; }
+.voice-picker-item:hover {
+  background: rgba(200,200,200,0.07);
+  color: var(--c);
+}
+.voice-picker-item.active {
+  color: var(--c);
+  background: rgba(200,200,200,0.04);
+}
+
+.voice-picker-disabled .voice-picker-selected {
+  opacity: 0.3;
+  cursor: default;
+  pointer-events: none;
+}
+
+.voice-test-btn {
+  height: 28px;
+  padding: 0 8px;
+  background: transparent;
+  border: 0.5px solid rgba(200,200,200,0.15);
+  border-radius: 5px;
+  color: rgba(200,200,200,0.45);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 8px;
+  letter-spacing: 1.5px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color 0.2s, color 0.2s;
+}
+.voice-test-btn:hover {
+  border-color: rgba(200,200,200,0.45);
+  color: rgba(200,200,200,0.9);
+}
+.voice-test-btn:disabled {
+  opacity: 0.2;
+  cursor: default;
+  pointer-events: none;
+}
+
+.voice-default-btn {
+  height: 28px;
+  padding: 0 8px;
+  background: transparent;
+  border: 0.5px solid rgba(200,200,200,0.15);
+  border-radius: 5px;
+  color: rgba(200,200,200,0.45);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 8px;
+  letter-spacing: 1.5px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color 0.2s, color 0.2s;
+  white-space: nowrap;
+}
+.voice-default-btn:hover {
+  border-color: rgba(200,200,200,0.45);
+  color: rgba(200,200,200,0.9);
+}
+.voice-default-btn:disabled {
+  opacity: 0.2;
+  cursor: default;
+  pointer-events: none;
+}
+
+.voice-picker-star {
+  font-size: 8px;
+  color: var(--c);
+  opacity: 0.55;
+  margin-left: 6px;
+  flex-shrink: 0;
+}
+
 /* ── Clock Panel ─────────────────────────────────────────────────────────────── */
 
 .clock-panel {
@@ -3849,38 +3987,150 @@ a.news-story-source-title:hover {
 .toolkit-list-view::-webkit-scrollbar-thumb { background: rgba(200,200,200,0.1); border-radius: 2px; }
 .toolkit-list-view::-webkit-scrollbar-thumb:hover { background: rgba(200,200,200,0.22); }
 
-.toolkit-card {
-  padding: 12px 14px;
-  border: 1px solid rgba(200, 200, 200, 0.1);
-  border-radius: 2px;
+/* ── Toolkit picker (inside TOOLKIT menu section) ─────────────────────────── */
+.toolkit-picker {
+  position: relative;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  user-select: none;
+}
+
+.toolkit-picker-selected {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 28px;
+  padding: 0 8px;
+  background: rgba(200,200,200,0.03);
+  border: 0.5px solid rgba(200,200,200,0.12);
+  border-radius: 5px;
+  color: var(--c);
   cursor: pointer;
   transition: border-color 0.2s, background 0.2s;
 }
-.toolkit-card:hover {
-  border-color: rgba(200, 200, 200, 0.35);
-  background: rgba(200, 200, 200, 0.04);
+.toolkit-picker-selected:hover {
+  border-color: rgba(200,200,200,0.32);
+  background: rgba(200,200,200,0.06);
 }
 
-.toolkit-card-name {
-  font-family: 'Share Tech Mono', monospace;
+.toolkit-picker-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.toolkit-picker-chevron {
+  font-size: 9px;
+  color: rgba(200,200,200,0.4);
+  margin-left: 6px;
+  flex-shrink: 0;
+}
+
+.toolkit-picker-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0; right: 0;
+  z-index: 200;
+  background: #0e0e0e;
+  border: 0.5px solid rgba(200,200,200,0.18);
+  border-radius: 5px;
+  overflow-y: auto;
+  max-height: 260px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.7);
+}
+.toolkit-picker-dropdown.hidden { display: none; }
+.toolkit-picker-dropdown::-webkit-scrollbar { width: 3px; }
+.toolkit-picker-dropdown::-webkit-scrollbar-track { background: transparent; }
+.toolkit-picker-dropdown::-webkit-scrollbar-thumb { background: rgba(200,200,200,0.1); border-radius: 2px; }
+
+.toolkit-picker-item {
+  padding: 9px 10px;
+  color: rgba(200,200,200,0.6);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+  border-bottom: 1px solid rgba(200,200,200,0.04);
+  letter-spacing: 2px;
   font-size: 10px;
+}
+.toolkit-picker-item:last-child { border-bottom: none; }
+.toolkit-picker-item:hover {
+  background: rgba(200,200,200,0.07);
+  color: var(--c);
+}
+.toolkit-picker-item.active { color: var(--c); background: rgba(200,200,200,0.04); }
+
+/* ── Toolkit detail panel ─────────────────────────────────────────────────── */
+.toolkit-detail {
+  margin-top: 10px;
+  padding: 12px;
+  border: 0.5px solid rgba(200,200,200,0.1);
+  border-radius: 5px;
+  background: rgba(200,200,200,0.02);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.toolkit-detail.hidden { display: none; }
+
+.toolkit-detail-name {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
   letter-spacing: 3px;
   color: var(--c);
   text-transform: uppercase;
-  margin-bottom: 4px;
 }
 
-.toolkit-card-desc {
+.toolkit-detail-desc {
   font-size: 12px;
-  color: rgba(200, 200, 200, 0.55);
-  line-height: 1.5;
-  margin-bottom: 6px;
+  color: rgba(200,200,200,0.65);
+  line-height: 1.6;
+  margin: 0;
 }
 
-.toolkit-card-phrases {
+.toolkit-detail-phrases {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.toolkit-detail-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.toolkit-activate-btn {
+  height: 26px;
+  padding: 0 12px;
+  background: transparent;
+  border: 0.5px solid rgba(200,200,200,0.4);
+  border-radius: 3px;
+  color: rgba(200,200,200,0.75);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
+}
+.toolkit-activate-btn:hover {
+  border-color: rgba(200,200,200,0.8);
+  color: rgba(200,200,200,1.0);
+  background: rgba(200,200,200,0.07);
+}
+
+.toolkit-back-btn {
+  height: 26px;
+  padding: 0 12px;
+  background: transparent;
+  border: 0.5px solid rgba(200,200,200,0.15);
+  border-radius: 3px;
+  color: rgba(200,200,200,0.4);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+.toolkit-back-btn:hover {
+  border-color: rgba(200,200,200,0.35);
+  color: rgba(200,200,200,0.8);
 }
 
 .toolkit-phrase {
@@ -3980,9 +4230,7 @@ a.news-story-source-title:hover {
 }
 
 .toolkit-cards {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  display: block;
 }
 
 .menu-tts-row {

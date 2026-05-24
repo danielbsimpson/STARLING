@@ -68,9 +68,14 @@
             <div class="menu-section-label">VOICE &amp; SPEECH</div>
             <div class="menu-tts-row">
               <button class="tts-toggle" id="tts-toggle" title="Toggle text-to-speech">TTS ON</button>
-              <select class="voice-select" id="voice-select" title="Kokoro voice">
+              <!-- native select kept hidden — app.js reads/writes its value; the
+                   custom voice-picker below is what the user actually interacts with -->
+              <select class="voice-select" id="voice-select" title="Kokoro voice" style="display:none">
                 <option value="bm_george">George (GB ♂)</option>
               </select>
+              <div class="voice-picker" id="voice-picker"></div>
+              <button class="voice-test-btn" id="voice-test-btn" title="Preview current voice">TEST</button>
+              <button class="voice-default-btn" id="voice-default-btn" title="Save as startup default">SET DEFAULT</button>
               <div class="tts-engine" id="tts-engine">KOKORO</div>
             </div>
           </div>

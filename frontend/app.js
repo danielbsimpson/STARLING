@@ -360,6 +360,7 @@ const TOOLKIT_REGISTRY = [
     id: 'dossier',
     name: 'Dossier',
     description: 'Opens a full-screen personnel briefing panel with subject profile, portrait, and an automatic spoken intelligence report.',
+    ttsScript: 'Dossier mode displays a full-screen personnel briefing with subject profile, portrait, and a spoken intelligence report. Say: open dossier, or click Activate to launch it.',
     phrases: ['open dossier', 'show dossier on Daniel Simpson', 'pull up the dossier for Quinn'],
     openFn: () => enterPresMode(null),
   },
@@ -367,70 +368,80 @@ const TOOLKIT_REGISTRY = [
     id: 'timer',
     name: 'Timer',
     description: 'Sets and tracks multiple named countdown timers entirely in-browser, with a Web Audio API chime on completion.',
-    phrases: ['set a timer for five minutes', 'set a ten minute timer', 'cancel timer'],
+    ttsScript: 'The Timer tool sets named countdown timers in the browser with an audio chime on completion. Say something like: set a timer for five minutes.',
+    phrases: ['set a timer for five minutes', 'set a ten minute timer', 'timer for 2 minutes 30 seconds', 'cancel timer', 'cancel all timers'],
     openFn: () => enqueueSpeak('Timer tool ready. Tell me how long to set a timer for.'),
   },
   {
     id: 'time',
     name: 'Time',
     description: 'Speaks the current local time instantly with no backend call or LLM involved.',
-    phrases: ['what time is it', "what's the time", 'current time'],
+    ttsScript: 'The Time tool speaks the current local time instantly, with no internet or backend call needed.',
+    phrases: ['what time is it', "what's the time", 'current time', 'tell me the time', 'time now'],
     openFn: () => handleTimeQuery('what time is it'),
   },
   {
     id: 'date',
     name: 'Date',
     description: 'Speaks today\'s full date instantly with no backend call or LLM involved.',
-    phrases: ["what's today's date", 'what day is it', 'what day of the week is it'],
+    ttsScript: "The Date tool speaks today's full date instantly, with no internet or backend call needed.",
+    phrases: ["what's today's date", 'what day is it', 'what day of the week is it', 'what date is it today'],
     openFn: () => handleDateQuery("what's today's date"),
   },
   {
     id: 'weather',
     name: 'Weather',
     description: 'Fetches live local weather conditions and a 7-day forecast using Open-Meteo with no API key required.',
-    phrases: ["what's the weather", 'weather today', 'weather forecast'],
+    ttsScript: "The Weather tool fetches live local conditions and a seven-day forecast using Open-Meteo. No API key required. Say: what's the weather.",
+    phrases: ["what's the weather", 'weather today', 'weather forecast', 'weather report', 'how is it looking outside'],
     openFn: () => openWeatherPanel(),
   },
   {
     id: 'news',
     name: 'News',
     description: 'Delivers a spoken news briefing summarised from live RSS feeds across multiple categories and regions.',
-    phrases: ['give me a news briefing', "what's in the news", 'latest headlines'],
+    ttsScript: 'The News tool delivers a spoken briefing summarised from live RSS feeds across multiple categories. Say: give me a news briefing.',
+    phrases: ['give me a news briefing', "what's in the news", 'latest headlines', 'morning briefing'],
     openFn: () => { openNewsPanel(); enterNewsMode(); },
   },
   {
     id: 'stocks',
     name: 'Stocks & Market',
     description: 'Displays a live market dashboard with equity and cryptocurrency prices, charts, and a spoken briefing.',
-    phrases: ['show me the market', 'what are my stocks doing', 'crypto prices'],
+    ttsScript: 'The Market tool displays a live dashboard with equity and crypto prices, charts, and a spoken briefing. Say: show me the market.',
+    phrases: ['show me the market', 'what are my stocks doing', 'crypto prices', 'show stocks', 'bitcoin price'],
     openFn: () => { openMarketPanel('all').then(ctx => { if (ctx) enterMarketMode(); }); },
   },
   {
     id: 'browser',
     name: 'Browser',
     description: 'Opens an in-UI browser panel so you can navigate any webpage and ask Starling to read, summarise, or answer questions about it.',
-    phrases: ['open the browser', 'open browser', 'browse to a website'],
+    ttsScript: 'The Browser tool opens an in-display browser panel. I can navigate any webpage and read, summarise, or answer questions about it. Say: open the browser.',
+    phrases: ['open the browser', 'open browser', 'browse to a website', 'look up something in the browser'],
     openFn: () => openBrowserPanel(),
   },
   {
     id: 'ideas',
     name: 'Ideas Vault',
     description: 'Captures, stores, searches, and reads back your ideas in a local JSON vault using voice or text input.',
-    phrases: ['store an idea in the vault', 'save to the ideas vault', 'open ideas vault'],
+    ttsScript: 'The Ideas Vault stores, organises, and reads back your ideas using voice or text. Say: open ideas vault, or: store an idea in the vault.',
+    phrases: ['open ideas vault', 'store an idea in the vault', 'save to the ideas vault', 'search the vault for', 'what is in the ideas vault'],
     openFn: () => enterIdeasMode(),
   },
   {
     id: 'journal',
     name: 'Voice Journal',
     description: 'Records a multi-segment voice journal entry, generates an AI summary, and saves it to a local file.',
-    phrases: ['start a journal entry', 'open the journal', 'new journal entry'],
+    ttsScript: 'The Voice Journal records a multi-segment entry, generates an AI summary, and saves it locally. Say: start a journal entry.',
+    phrases: ['start a journal entry', 'new journal entry', 'begin a journal entry', 'show journal', 'read my journal'],
     openFn: () => enterJournalMode(),
   },
   {
     id: 'wiki',
     name: 'Wikipedia RAG',
     description: 'Searches a locally-embedded Wikipedia index using ChromaDB and answers questions entirely offline with no internet required.',
-    phrases: ['search local Wikipedia for', 'look up offline', 'search Wikipedia locally'],
+    ttsScript: 'Wikipedia RAG searches a locally-embedded Wikipedia index and answers questions entirely offline. Say: search local Wikipedia for, followed by your topic.',
+    phrases: ['search local Wikipedia for', 'local wiki article on', 'offline Wikipedia search', 'look up offline'],
     openFn: () => enqueueSpeak('Wikipedia RAG ready. Ask me to look up any topic offline, for example: search Wikipedia for Albert Einstein.'),
   },
 ];
@@ -511,7 +522,10 @@ const statStatus  = document.getElementById('stat-status');
 const waveformEl  = document.getElementById('waveform');
 const ttsToggle   = document.getElementById('tts-toggle');
 const voiceSelect = document.getElementById('voice-select');
-const ttsEngineEl = document.getElementById('tts-engine');
+const voicePicker   = document.getElementById('voice-picker');
+const voiceTestBtn    = document.getElementById('voice-test-btn');
+const voiceDefaultBtn = document.getElementById('voice-default-btn');
+const ttsEngineEl     = document.getElementById('tts-engine');
 const footerTts = document.getElementById('ftr-tts');
 const footerWhisperDevice = document.getElementById('ftr-whisper-dev');
 const footerKokoroDevice = document.getElementById('ftr-kokoro-dev');
@@ -549,7 +563,7 @@ document.addEventListener('mousemove', e => { _mouseX = e.clientX; _mouseY = e.c
 document.addEventListener('mouseleave', () => { _mouseX = -9999; _mouseY = -9999; });
 
 let _uiHovered = false;
-const UI_HOVER_IDS = ['mic-btn', 'send-btn', 'clear-btn', 'tts-toggle', 'voice-select', 'text-input'];
+const UI_HOVER_IDS = ['mic-btn', 'send-btn', 'clear-btn', 'tts-toggle', 'voice-picker', 'text-input'];
 UI_HOVER_IDS.forEach(id => {
   const el = document.getElementById(id);
   if (!el) return;
@@ -1477,18 +1491,27 @@ function _applyTtsMode() {
     ttsToggle.textContent    = 'TTS OFF';
     ttsToggle.classList.add('tts-off');
     voiceSelect.disabled     = true;
+    voicePicker  && voicePicker.classList.add('voice-picker-disabled');
+    if (voiceTestBtn)    voiceTestBtn.disabled    = true;
+    if (voiceDefaultBtn) voiceDefaultBtn.disabled = true;
     ttsEngineEl.textContent  = 'OFF';
     if (footerTts) footerTts.textContent = 'Off';
   } else if (ttsMode === 'browser') {
     ttsToggle.textContent    = 'TTS: BROWSER';
     ttsToggle.classList.remove('tts-off');
     voiceSelect.disabled     = true;
+    voicePicker  && voicePicker.classList.add('voice-picker-disabled');
+    if (voiceTestBtn)    voiceTestBtn.disabled    = true;
+    if (voiceDefaultBtn) voiceDefaultBtn.disabled = true;
     ttsEngineEl.textContent  = 'BROWSER';
     if (footerTts) footerTts.textContent = 'Web Speech';
   } else {
     ttsToggle.textContent    = 'TTS: KOKORO';
     ttsToggle.classList.remove('tts-off');
     voiceSelect.disabled     = false;
+    voicePicker  && voicePicker.classList.remove('voice-picker-disabled');
+    if (voiceTestBtn)    voiceTestBtn.disabled    = false;
+    if (voiceDefaultBtn) voiceDefaultBtn.disabled = false;
     ttsEngineEl.textContent  = 'KOKORO';
     if (footerTts) footerTts.textContent = 'Kokoro (local)';
   }
@@ -1502,8 +1525,128 @@ ttsToggle.addEventListener('click', () => {
 });
 
 voiceSelect.addEventListener('change', () => {
+  // Only update in-session voice — use SET DEFAULT to persist across reboots.
   ttsVoice = voiceSelect.value;
-  localStorage.setItem('starling_tts_voice', ttsVoice);
+});
+
+// ── Voice preview (TEST button in the menu) ───────────────────────────────
+let _previewAudio = null;
+
+function _cancelPreview() {
+  if (_previewAudio) { _previewAudio.pause(); _previewAudio.src = ''; _previewAudio = null; }
+}
+
+async function _playVoicePreview(voiceId) {
+  _cancelPreview();
+  if (ttsMode === 'off') return;
+  try {
+    const res = await fetch(`${BACKEND_BASE}/synthesize/`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ text: 'Hello, I am Starling.', voice: voiceId, speed: 1.0 }),
+    });
+    if (!res.ok) return;
+    const blob  = await res.blob();
+    const url   = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    _previewAudio = audio;
+    audio.onended = audio.onerror = () => {
+      URL.revokeObjectURL(url);
+      if (_previewAudio === audio) _previewAudio = null;
+    };
+    audio.play().catch(() => {});
+  } catch { /* ignore — backend may not be ready */ }
+}
+
+if (voiceTestBtn) {
+  voiceTestBtn.addEventListener('click', () => _playVoicePreview(ttsVoice));
+}
+
+if (voiceDefaultBtn) {
+  voiceDefaultBtn.addEventListener('click', () => {
+    localStorage.setItem('starling_tts_voice', ttsVoice);
+    // Move the ★ indicator to the newly saved default item.
+    if (_pickerDropdown) {
+      _pickerDropdown.querySelectorAll('.voice-picker-item').forEach(item => {
+        const s = item.querySelector('.voice-picker-star');
+        if (s) s.hidden = item.dataset.voiceId !== ttsVoice;
+      });
+    }
+    // Brief visual confirmation.
+    voiceDefaultBtn.textContent = 'SAVED \u2713';
+    voiceDefaultBtn.disabled = true;
+    setTimeout(() => {
+      voiceDefaultBtn.textContent = 'SET DEFAULT';
+      if (ttsMode === 'kokoro') voiceDefaultBtn.disabled = false;
+    }, 2000);
+  });
+}
+
+// Module-level ref so the outside-click handler can reach the open dropdown.
+let _pickerDropdown = null;
+
+function _buildVoicePicker(voices) {
+  if (!voicePicker) return;
+  voicePicker.innerHTML = '';
+
+  const selected = document.createElement('div');
+  selected.className = 'voice-picker-selected';
+
+  const labelSpan = document.createElement('span');
+  labelSpan.className = 'voice-picker-label';
+  const currentVoice = voices.find(v => v.id === ttsVoice);
+  labelSpan.textContent = currentVoice?.label ?? voices[0]?.label ?? '—';
+
+  const chevron = document.createElement('span');
+  chevron.className = 'voice-picker-chevron';
+  chevron.textContent = '▾';
+  selected.append(labelSpan, chevron);
+
+  const dropdown = document.createElement('div');
+  dropdown.className = 'voice-picker-dropdown hidden';
+  _pickerDropdown = dropdown;
+
+  voices.forEach(v => {
+    const item = document.createElement('div');
+    item.className = 'voice-picker-item';
+    if (v.id === ttsVoice) item.classList.add('active');
+    item.dataset.voiceId = v.id;
+
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = v.label;
+    const star = document.createElement('span');
+    star.className = 'voice-picker-star';
+    star.textContent = '\u2605';  // ★
+    // ttsVoice equals the saved localStorage default on first load;
+    // it stays in sync via _buildVoicePicker being called once at boot.
+    star.hidden = v.id !== ttsVoice;
+    item.append(nameSpan, star);
+
+    item.addEventListener('click', e => {
+      e.stopPropagation();
+      _cancelPreview();
+      voiceSelect.value = v.id;
+      voiceSelect.dispatchEvent(new Event('change'));  // updates ttsVoice for this session
+      labelSpan.textContent = v.label;
+      dropdown.querySelectorAll('.voice-picker-item').forEach(el => el.classList.remove('active'));
+      item.classList.add('active');
+      dropdown.classList.add('hidden');
+    });
+    dropdown.appendChild(item);
+  });
+
+  selected.addEventListener('click', e => {
+    e.stopPropagation();
+    if (voicePicker.classList.contains('voice-picker-disabled')) return;
+    dropdown.classList.toggle('hidden');
+  });
+
+  voicePicker.append(selected, dropdown);
+}
+
+// Close the voice picker dropdown when clicking anywhere outside it.
+document.addEventListener('click', () => {
+  if (_pickerDropdown) _pickerDropdown.classList.add('hidden');
 });
 
 // Populate voice dropdown from /synthesize/voices
@@ -1526,6 +1669,7 @@ async function loadVoices() {
       voiceSelect.value = ttsVoice;
       localStorage.setItem('starling_tts_voice', ttsVoice);
     }
+    _buildVoicePicker(voices);
   } catch { /* backend not running — leave static fallback option */ }
 }
 
@@ -2461,30 +2605,10 @@ document.getElementById('wiki-close-btn')?.addEventListener('click', () => {
 });
 
 // ── Toolkit menu event handlers ──────────────────────────────────────────────
-window.addEventListener('toolkit:tool-selected', async (e) => {
-  _clearToolkitConfirmState();
-  _toolkitPendingTool     = e.detail;
-  _toolkitConfirmPending  = true;
-  showToolkitConfirmView(e.detail.name);
-
-  const responseEl = document.getElementById('toolkit-confirm-response');
-  if (responseEl) responseEl.textContent = '…';
-
-  const spoken = await _callLLMSilently(
-    `The user is browsing the Starling toolkit menu and has selected the tool called "${e.detail.name}". ` +
-    `Here is its description: ${e.detail.description} ` +
-    `In one or two concise sentences, tell the user what this tool does, then ask them plainly whether they would like to activate it now.`,
-    [{ role: 'system', content: SYSTEM_PROMPT }],
-  );
-
-  if (responseEl) responseEl.textContent = spoken || '';
-  if (spoken) enqueueSpeak(spoken);
-
-  _toolkitConfirmTimeoutId = setTimeout(() => {
-    _clearToolkitConfirmState();
-    closeToolkitPanel();
-    enqueueSpeak('Okay, closing the toolkit menu.');
-  }, 20000);
+window.addEventListener('toolkit:tool-selected', (e) => {
+  // Read the pre-written script directly via Kokoro — no LLM call needed.
+  const entry = e.detail;
+  if (entry.ttsScript && ttsMode !== 'off') enqueueSpeak(entry.ttsScript);
 });
 
 window.addEventListener('toolkit:confirm', (e) => {
