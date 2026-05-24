@@ -626,8 +626,10 @@ function updateLlmMetrics(m) {
       lmCtx.textContent    = `${used} / ${_ctxLimit}`;
       lmCtxPct.textContent = `${pct}%`;
       lmCtxFill.style.width = `${pct}%`;
-      lmCtxFill.className = 'lm-ctx-fill' +
-        (pct >= 90 ? ' crit' : pct >= 70 ? ' warn' : '');
+      let ctxClass = 'lm-ctx-fill';
+      if (pct >= 90)      ctxClass += ' crit';
+      else if (pct >= 70) ctxClass += ' warn';
+      lmCtxFill.className = ctxClass;
     } else {
       lmCtx.textContent = `${used} tok`;
     }
@@ -656,7 +658,6 @@ async function fetchSystemStatus() {
 
 /**
  * Detect a time query in a Whisper transcript.
- * Returns true if matched, null otherwise.
  */
 function detectTimeTrigger(transcript) {
   const t = transcript.trim().toLowerCase();
@@ -671,12 +672,11 @@ function detectTimeTrigger(transcript) {
     /\bwhat\s+time\s+(?:is\s+it\s+)?(?:right\s+now|now)\b/,
     /\bhow\s+late\s+is\s+it\b/,
   ];
-  return patterns.some(p => p.test(t)) ? true : null;
+  return patterns.some(p => p.test(t));
 }
 
 /**
  * Detect a date query in a Whisper transcript.
- * Returns true if matched, null otherwise.
  * Checked before detectTimeTrigger — date phrases are more specific.
  */
 function detectDateTrigger(transcript) {
@@ -688,21 +688,26 @@ function detectDateTrigger(transcript) {
     /\btoday(?:'s)?\s+date\b/,
     /\bwhat\s+day\s+is\s+(?:it\s+)?today\b/,
   ];
-  return patterns.some(p => p.test(t)) ? true : null;
+  return patterns.some(p => p.test(t));
 }
 
 /** Format the current time into a natural spoken phrase. */
 function _formatTimeSpoken(now) {
-  const h   = now.getHours();
-  const m   = now.getMinutes();
-  const min = m === 0   ? 'on the hour'
-            : m < 10   ? `oh ${m}`
-            : String(m);
-  const hr12   = h % 12 === 0 ? 12 : h % 12;
-  const period = h < 12  ? 'in the morning'
-               : h < 17  ? 'in the afternoon'
-               : h < 21  ? 'in the evening'
-               : 'at night';
+  const h  = now.getHours();
+  const m  = now.getMinutes();
+  const hr12 = h % 12 === 0 ? 12 : h % 12;
+
+  let min;
+  if (m === 0)      min = 'on the hour';
+  else if (m < 10)  min = `oh ${m}`;
+  else              min = String(m);
+
+  let period;
+  if (h < 12)      period = 'in the morning';
+  else if (h < 17) period = 'in the afternoon';
+  else if (h < 21) period = 'in the evening';
+  else             period = 'at night';
+
   const timeStr = m === 0 ? `${hr12} ${period}` : `${hr12} ${min} ${period}`;
   return `It's ${timeStr}.`;
 }
@@ -791,10 +796,8 @@ function dismissNonNewsPanels() {
   exitWikiMode();
 }
 
-/**
- * Handle a time query — reads Date() directly, speaks immediately, no LLM call.
- */
-function handleTimeQuery(transcript) {
+/** Shared clock display + speak logic for time and date queries. */
+function _handleClockQuery(transcript, formatSpokenFn) {
   const now = new Date();
   const tz  = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const timeDisplay = now.toLocaleTimeString('en-US', {
@@ -804,31 +807,19 @@ function handleTimeQuery(transcript) {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   });
   _showClockPanel(timeDisplay, dateDisplay, tz);
-  const spoken = _formatTimeSpoken(now);
+  const spoken = formatSpokenFn(now);
   appendMessage('user', transcript);
   const { txt } = appendMessage('assistant', spoken);
   setState('speaking');
   enqueueSpeak(spoken, () => { txt.textContent = spoken; });
 }
 
-/**
- * Handle a date query — reads Date() directly, speaks immediately, no LLM call.
- */
+function handleTimeQuery(transcript) {
+  _handleClockQuery(transcript, _formatTimeSpoken);
+}
+
 function handleDateQuery(transcript) {
-  const now = new Date();
-  const tz  = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const timeDisplay = now.toLocaleTimeString('en-US', {
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true,
-  });
-  const dateDisplay = now.toLocaleDateString('en-US', {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-  });
-  _showClockPanel(timeDisplay, dateDisplay, tz);
-  const spoken = _formatDateSpoken(now);
-  appendMessage('user', transcript);
-  const { txt } = appendMessage('assistant', spoken);
-  setState('speaking');
-  enqueueSpeak(spoken, () => { txt.textContent = spoken; });
+  _handleClockQuery(transcript, _formatDateSpoken);
 }
 
 // ── Waveform bars ─────────────────────────────────────────────────────────────
@@ -1064,12 +1055,13 @@ function initSphere() {
     else                          orbColorTarget = ORB_WHITE;
 
     // Smoothly ramp orbit speed up during active states
-    const targetSpeedMult = isListening          ? 1.9
-      : isThinking           ? 0.2
-      : isSpeaking           ? 2.2
-      : proximityVal > 0.01  ? 1.0 + proxCurved * 0.8   // up to 1.8× at sphere edge
-      : _uiHovered           ? 1.15
-      : 1.0;
+    let targetSpeedMult;
+    if (isListening)              targetSpeedMult = 1.9;
+    else if (isThinking)          targetSpeedMult = 0.2;
+    else if (isSpeaking)          targetSpeedMult = 2.2;
+    else if (proximityVal > 0.01) targetSpeedMult = 1.0 + proxCurved * 0.8;  // up to 1.8× at sphere edge
+    else if (_uiHovered)          targetSpeedMult = 1.15;
+    else                          targetSpeedMult = 1.0;
     orbSpeedMult += (targetSpeedMult - orbSpeedMult) * 0.03;
     orbTimeAccum += delta * orbSpeedMult;
 
@@ -1501,33 +1493,37 @@ let ttsMode  = localStorage.getItem('starling_tts_mode') || 'kokoro';
 let ttsVoice = localStorage.getItem('starling_tts_voice') || 'bm_george';
 
 function _applyTtsMode() {
-  if (ttsMode === 'off') {
-    ttsToggle.textContent    = 'TTS OFF';
-    ttsToggle.classList.add('tts-off');
-    voiceSelect.disabled     = true;
-    voicePicker  && voicePicker.classList.add('voice-picker-disabled');
-    if (voiceTestBtn)    voiceTestBtn.disabled    = true;
-    if (voiceDefaultBtn) voiceDefaultBtn.disabled = true;
-    ttsEngineEl.textContent  = 'OFF';
-    if (footerTts) footerTts.textContent = 'Off';
-  } else if (ttsMode === 'browser') {
-    ttsToggle.textContent    = 'TTS: BROWSER';
-    ttsToggle.classList.remove('tts-off');
-    voiceSelect.disabled     = true;
-    voicePicker  && voicePicker.classList.add('voice-picker-disabled');
-    if (voiceTestBtn)    voiceTestBtn.disabled    = true;
-    if (voiceDefaultBtn) voiceDefaultBtn.disabled = true;
-    ttsEngineEl.textContent  = 'BROWSER';
-    if (footerTts) footerTts.textContent = 'Web Speech';
-  } else {
-    ttsToggle.textContent    = 'TTS: KOKORO';
-    ttsToggle.classList.remove('tts-off');
-    voiceSelect.disabled     = false;
-    voicePicker  && voicePicker.classList.remove('voice-picker-disabled');
-    if (voiceTestBtn)    voiceTestBtn.disabled    = false;
-    if (voiceDefaultBtn) voiceDefaultBtn.disabled = false;
-    ttsEngineEl.textContent  = 'KOKORO';
-    if (footerTts) footerTts.textContent = 'Kokoro (local)';
+  switch (ttsMode) {
+    case 'off':
+      ttsToggle.textContent = 'TTS OFF';
+      ttsToggle.classList.add('tts-off');
+      voiceSelect.disabled = true;
+      if (voicePicker)     voicePicker.classList.add('voice-picker-disabled');
+      if (voiceTestBtn)    voiceTestBtn.disabled    = true;
+      if (voiceDefaultBtn) voiceDefaultBtn.disabled = true;
+      ttsEngineEl.textContent = 'OFF';
+      if (footerTts) footerTts.textContent = 'Off';
+      break;
+    case 'browser':
+      ttsToggle.textContent = 'TTS: BROWSER';
+      ttsToggle.classList.remove('tts-off');
+      voiceSelect.disabled = true;
+      if (voicePicker)     voicePicker.classList.add('voice-picker-disabled');
+      if (voiceTestBtn)    voiceTestBtn.disabled    = true;
+      if (voiceDefaultBtn) voiceDefaultBtn.disabled = true;
+      ttsEngineEl.textContent = 'BROWSER';
+      if (footerTts) footerTts.textContent = 'Web Speech';
+      break;
+    default: // 'kokoro'
+      ttsToggle.textContent = 'TTS: KOKORO';
+      ttsToggle.classList.remove('tts-off');
+      voiceSelect.disabled = false;
+      if (voicePicker)     voicePicker.classList.remove('voice-picker-disabled');
+      if (voiceTestBtn)    voiceTestBtn.disabled    = false;
+      if (voiceDefaultBtn) voiceDefaultBtn.disabled = false;
+      ttsEngineEl.textContent = 'KOKORO';
+      if (footerTts) footerTts.textContent = 'Kokoro (local)';
+      break;
   }
 }
 

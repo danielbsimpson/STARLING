@@ -261,13 +261,16 @@ async def wiki_chat(req: WikiChatRequest):
     system_prompt = build_wiki_system_prompt(excerpts)
 
     # Build message list: wiki system → conversation history → current user turn
-    messages = [{"role": "system", "content": system_prompt}]
-    for h in req.history:
-        role    = h.get("role", "user")
-        content = h.get("content", "")
-        if role in ("user", "assistant") and content:
-            messages.append({"role": role, "content": content})
-    messages.append({"role": "user", "content": req.message})
+    history_msgs = [
+        {"role": h.get("role", "user"), "content": h["content"]}
+        for h in req.history
+        if h.get("role") in ("user", "assistant") and h.get("content")
+    ]
+    messages = [
+        {"role": "system", "content": system_prompt},
+        *history_msgs,
+        {"role": "user", "content": req.message},
+    ]
 
     if LLM_BACKEND == "llama":
         payload = {
