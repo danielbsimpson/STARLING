@@ -3960,6 +3960,46 @@ a.news-story-source-title:hover {
   color: rgba(10, 10, 10, 0.95);
 }
 
+/* ── Menu sections (inside toolkit panel) ──────────────────────────────────── */
+.menu-section {
+  margin-bottom: 24px;
+}
+.menu-section:last-child {
+  margin-bottom: 0;
+}
+
+.menu-section-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 8px;
+  letter-spacing: 3px;
+  color: rgba(200, 200, 200, 0.28);
+  text-transform: uppercase;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(200, 200, 200, 0.07);
+}
+
+.toolkit-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.menu-tts-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.menu-tts-row .voice-select {
+  flex: 1;
+}
+
+/* Power button overrides when placed inside menu */
+.menu-section .power-btn {
+  align-self: auto;
+  margin-bottom: 0;
+}
+
 /* ── Journal-mode layout (same pattern as news-mode / mkt-mode) ──────────── */
 
 .body-cols > .journal-panel {
