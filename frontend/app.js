@@ -45,6 +45,14 @@ import {
   handleJournalRead,
   wireJournalButtons,
 } from './journal-panel.js';
+import {
+  initToolkitPanel,
+  openToolkitPanel,
+  closeToolkitPanel,
+  isToolkitPanelOpen,
+  showToolkitConfirmView,
+  showToolkitListView,
+} from './toolkit-panel.js';
 
 // ── Session event logger ──────────────────────────────────────────────────────
 /**
@@ -343,12 +351,100 @@ const SYSTEM_PROMPT =
   'Never narrate or describe your own visual state, sphere behaviour, orb colours, animations, or any on-screen elements — ' +
   'do not include bracketed stage directions, action lines, or commentary about what you are displaying or doing visually.'
 
+// ── Toolkit registry ─────────────────────────────────────────────────────────
+// One entry per active tool. openFn is a zero-argument closure that activates
+// the tool; it is called by the toolkit:confirm handler in app.js.
+const TOOLKIT_REGISTRY = [
+  {
+    id: 'dossier',
+    name: 'Dossier',
+    description: 'Opens a full-screen personnel briefing panel with subject profile, portrait, and an automatic spoken intelligence report.',
+    phrases: ['open dossier', 'show dossier on Daniel Simpson', 'pull up the dossier for Quinn'],
+    openFn: () => enterPresMode(null),
+  },
+  {
+    id: 'timer',
+    name: 'Timer',
+    description: 'Sets and tracks multiple named countdown timers entirely in-browser, with a Web Audio API chime on completion.',
+    phrases: ['set a timer for five minutes', 'set a ten minute timer', 'cancel timer'],
+    openFn: () => enqueueSpeak('Timer tool ready. Tell me how long to set a timer for.'),
+  },
+  {
+    id: 'time',
+    name: 'Time',
+    description: 'Speaks the current local time instantly with no backend call or LLM involved.',
+    phrases: ['what time is it', "what's the time", 'current time'],
+    openFn: () => handleTimeQuery('what time is it'),
+  },
+  {
+    id: 'date',
+    name: 'Date',
+    description: 'Speaks today\'s full date instantly with no backend call or LLM involved.',
+    phrases: ["what's today's date", 'what day is it', 'what day of the week is it'],
+    openFn: () => handleDateQuery("what's today's date"),
+  },
+  {
+    id: 'weather',
+    name: 'Weather',
+    description: 'Fetches live local weather conditions and a 7-day forecast using Open-Meteo with no API key required.',
+    phrases: ["what's the weather", 'weather today', 'weather forecast'],
+    openFn: () => openWeatherPanel(),
+  },
+  {
+    id: 'news',
+    name: 'News',
+    description: 'Delivers a spoken news briefing summarised from live RSS feeds across multiple categories and regions.',
+    phrases: ['give me a news briefing', "what's in the news", 'latest headlines'],
+    openFn: () => { openNewsPanel(); enterNewsMode(); },
+  },
+  {
+    id: 'stocks',
+    name: 'Stocks & Market',
+    description: 'Displays a live market dashboard with equity and cryptocurrency prices, charts, and a spoken briefing.',
+    phrases: ['show me the market', 'what are my stocks doing', 'crypto prices'],
+    openFn: () => { openMarketPanel('all').then(ctx => { if (ctx) enterMarketMode(); }); },
+  },
+  {
+    id: 'browser',
+    name: 'Browser',
+    description: 'Opens an in-UI browser panel so you can navigate any webpage and ask Starling to read, summarise, or answer questions about it.',
+    phrases: ['open the browser', 'open browser', 'browse to a website'],
+    openFn: () => openBrowserPanel(),
+  },
+  {
+    id: 'ideas',
+    name: 'Ideas Vault',
+    description: 'Captures, stores, searches, and reads back your ideas in a local JSON vault using voice or text input.',
+    phrases: ['store an idea in the vault', 'save to the ideas vault', 'open ideas vault'],
+    openFn: () => enterIdeasMode(),
+  },
+  {
+    id: 'journal',
+    name: 'Voice Journal',
+    description: 'Records a multi-segment voice journal entry, generates an AI summary, and saves it to a local file.',
+    phrases: ['start a journal entry', 'open the journal', 'new journal entry'],
+    openFn: () => enterJournalMode(),
+  },
+  {
+    id: 'wiki',
+    name: 'Wikipedia RAG',
+    description: 'Searches a locally-embedded Wikipedia index using ChromaDB and answers questions entirely offline with no internet required.',
+    phrases: ['search local Wikipedia for', 'look up offline', 'search Wikipedia locally'],
+    openFn: () => enqueueSpeak('Wikipedia RAG ready. Ask me to look up any topic offline, for example: search Wikipedia for Albert Einstein.'),
+  },
+];
+
 // ── Conversation state ────────────────────────────────────────────────────────
 let conversationHistory = [{ role: 'system', content: SYSTEM_PROMPT }];
 
 // Reference to the assistant message <p> element showing journal status text.
 // Kept here so confirm/discard/rerecord callbacks can update the same bubble.
 let _pendingJournalStatusTxt = null;
+
+// ── Toolkit confirm state ─────────────────────────────────────────────────────
+let _toolkitConfirmPending    = false;
+let _toolkitPendingTool       = null;
+let _toolkitConfirmTimeoutId  = null;
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const starlingEl  = document.getElementById('starling');
@@ -1586,10 +1682,50 @@ function _speakBrowser(text) {
   window.speechSynthesis.speak(utt);
 }
 
+// ── Toolkit helpers ─────────────────────────────────────────────────────────
+
+/**
+ * Reset all toolkit confirm state and return the panel to list view.
+ * Safe to call even when toolkit is not open.
+ */
+function _clearToolkitConfirmState() {
+  _toolkitConfirmPending   = false;
+  _toolkitPendingTool      = null;
+  clearTimeout(_toolkitConfirmTimeoutId);
+  _toolkitConfirmTimeoutId = null;
+  showToolkitListView();
+}
+
+/**
+ * Returns true if the lowercased transcript matches any toolkit menu trigger phrase.
+ */
+function detectToolkitMenuTrigger(text) {
+  const t = text.trim();
+  return (
+    /\b(?:show|open|display|list)\b.{0,20}\b(?:tools?|toolkit|menu)\b/i.test(t) ||
+    /\bwhat tools?\b/i.test(t) ||
+    /\bshow me (?:your|all) tools?\b/i.test(t) ||
+    /\btool (?:menu|list)\b/i.test(t)
+  );
+}
+
 // ── Unified input router ──────────────────────────────────────────────────────
 // Handles all trigger intercepts; falls through to the LLM for unmatched input.
 // Called by both handleSend (text path) and mediaRecorder.onstop (voice path).
 async function _routeInput(text) {
+  // ── Toolkit confirm intercept (position 1 — must be first) ────────────────
+  if (_toolkitConfirmPending) {
+    const t = text.trim().toLowerCase();
+    if (/\b(?:yes|yeah|yep|sure|do it|activate|open it|confirm)\b/.test(t)) {
+      window.dispatchEvent(new CustomEvent('toolkit:confirm', { detail: { confirmed: true } }));
+      return;
+    }
+    if (/\b(?:no|nope|cancel|never mind|nevermind|back|go back|close)\b/.test(t)) {
+      window.dispatchEvent(new CustomEvent('toolkit:confirm', { detail: { confirmed: false } }));
+      return;
+    }
+  }
+
   // ── Journal dictation mode: next mic press = a new segment ─────────────
   // Checked FIRST — while journalMode is active, consume all input here.
   if (journalMode) {
@@ -1719,6 +1855,13 @@ async function _routeInput(text) {
     setState('idle');
     return;
   }
+
+  // ── Toolkit menu trigger ─────────────────────────────────────────────────
+  if (detectToolkitMenuTrigger(text)) {
+    openToolkitPanel();
+    return;
+  }
+
   const _triggerResult = _parseTrigger(text);
   if (_triggerResult.matched) {
     logEvent('tool_dispatch', { tool: 'dossier', trigger_phrase: text });
@@ -2275,6 +2418,7 @@ initWeatherPanel({ enqueueSpeak });
 initRedditPanel({ enqueueSpeak, sendToOllama, interruptSpeech });
 initYouTubePanel({ enqueueSpeak, sendToOllama, interruptSpeech });
 initNewsPanel({ enqueueSpeak, sendToOllama, interruptSpeech, onClose: exitNewsMode });
+initToolkitPanel(TOOLKIT_REGISTRY);
 initSphere();
 statModel.textContent = MODEL;
 _applyTtsMode();
@@ -2300,6 +2444,46 @@ document.getElementById('reddit-close-btn')?.addEventListener('click', () => {
 document.getElementById('wiki-close-btn')?.addEventListener('click', () => {
   exitWikiMode();
   setState('idle');
+});
+
+// ── Toolkit menu event handlers ──────────────────────────────────────────────
+window.addEventListener('toolkit:tool-selected', async (e) => {
+  _clearToolkitConfirmState();
+  _toolkitPendingTool     = e.detail;
+  _toolkitConfirmPending  = true;
+  showToolkitConfirmView(e.detail.name);
+
+  const responseEl = document.getElementById('toolkit-confirm-response');
+  if (responseEl) responseEl.textContent = '…';
+
+  const spoken = await _callLLMSilently(
+    `The user is browsing the Starling toolkit menu and has selected the tool called "${e.detail.name}". ` +
+    `Here is its description: ${e.detail.description} ` +
+    `In one or two concise sentences, tell the user what this tool does, then ask them plainly whether they would like to activate it now.`,
+    [{ role: 'system', content: SYSTEM_PROMPT }],
+  );
+
+  if (responseEl) responseEl.textContent = spoken || '';
+  if (spoken) enqueueSpeak(spoken);
+
+  _toolkitConfirmTimeoutId = setTimeout(() => {
+    _clearToolkitConfirmState();
+    closeToolkitPanel();
+    enqueueSpeak('Okay, closing the toolkit menu.');
+  }, 20000);
+});
+
+window.addEventListener('toolkit:confirm', (e) => {
+  clearTimeout(_toolkitConfirmTimeoutId);
+  if (e.detail.confirmed && _toolkitPendingTool) {
+    const tool = _toolkitPendingTool;
+    _clearToolkitConfirmState();
+    closeToolkitPanel();
+    tool.openFn();
+  } else {
+    _clearToolkitConfirmState();
+    // Panel stays open — user returned to list view
+  }
 });
 wireJournalButtons({
   onSubmit: async () => {

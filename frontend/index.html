@@ -54,6 +54,25 @@
     <!-- Two-column body -->
     <div class="body-cols">
 
+      <!-- Toolkit Menu Panel — full-viewport overlay, shown via openToolkitPanel() -->
+      <div id="toolkit-panel" class="toolkit-panel hidden">
+        <div class="toolkit-header">
+          <div class="toolkit-title">TOOLKIT</div>
+          <button class="toolkit-close-btn" id="toolkit-close-btn">&#x2715;</button>
+        </div>
+        <div class="toolkit-list-view" id="toolkit-list-view">
+          <div class="toolkit-cards" id="toolkit-cards"></div>
+        </div>
+        <div class="toolkit-confirm-view hidden" id="toolkit-confirm-view">
+          <div class="toolkit-confirm-label">Activate <span class="toolkit-confirm-tool-name" id="toolkit-confirm-tool-name"></span>?</div>
+          <div class="toolkit-confirm-response" id="toolkit-confirm-response"></div>
+          <div class="toolkit-confirm-buttons">
+            <button class="toolkit-btn-yes" id="toolkit-btn-yes">YES</button>
+            <button class="toolkit-btn-no" id="toolkit-btn-no">NO — BACK</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Left column: sphere + waveform + chat (repositions below sphere in pres-mode) -->
       <div class="col-left">
         <div class="ring-section">
