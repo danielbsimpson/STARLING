@@ -557,7 +557,8 @@ function _scheduleSpeak(fn) {
 }
 
 function _speakHeadline(item) {
-  if (_interruptSpeech) _interruptSpeech();
+  const interruptResult = _interruptSpeech ? _interruptSpeech() : null;
+  const existingEl = interruptResult?.wasActive ? interruptResult : null;
   _scheduleSpeak(() => {
     if (!_sendToOllama) {
       if (_enqueueSpeak) _enqueueSpeak(item.title);
@@ -566,13 +567,14 @@ function _speakHeadline(item) {
     const sysPrompt = 'You are Starling. The user has tapped a news headline. Read the headline naturally, share a brief 1-2 sentence reaction or context, then ask if they would like to open the full article. Keep your total response under 5 sentences.';
     _sendToOllama(
       `Headline: "${item.title}"${item.summary ? `\nSummary: "${item.summary}"` : ''}`,
-      { ephemeralMessages: [{ role: 'system', content: sysPrompt }] },
+      { ephemeralMessages: [{ role: 'system', content: sysPrompt }], existingElement: existingEl },
     );
   });
 }
 
 function _speakStory(story) {
-  if (_interruptSpeech) _interruptSpeech();
+  const interruptResult = _interruptSpeech ? _interruptSpeech() : null;
+  const existingEl = interruptResult?.wasActive ? interruptResult : null;
   _scheduleSpeak(() => {
     if (!_sendToOllama) {
       if (_enqueueSpeak) _enqueueSpeak(story.headline);
@@ -584,7 +586,7 @@ function _speakStory(story) {
     const sysPrompt = 'You are Starling. The user has tapped a news story. Read the headline naturally, share a brief 1-2 sentence reaction, mention the number of sources covering it, then ask if they would like to open the full article. Keep your total response under 5 sentences.';
     _sendToOllama(
       `Headline: "${story.headline}"${story.summary ? `\nSummary: "${story.summary}"` : ''}${srcList}`,
-      { ephemeralMessages: [{ role: 'system', content: sysPrompt }] },
+      { ephemeralMessages: [{ role: 'system', content: sysPrompt }], existingElement: existingEl },
     );
   });
 }

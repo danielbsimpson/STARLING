@@ -1231,7 +1231,7 @@ function _drainSentenceBuffer(buf, re, flushFn) {
 
 // ── Ollama streaming chat ─────────────────────────────────────────────────────
 async function sendToOllama(userText, options = {}) {
-  const { ephemeralMessages = null, extraContext = null } = options;
+  const { ephemeralMessages = null, extraContext = null, existingElement = null } = options;
 
   let messages;
   if (ephemeralMessages) {
@@ -1247,7 +1247,21 @@ async function sendToOllama(userText, options = {}) {
       : conversationHistory;
   }
 
-  const { wrap, txt } = appendMessage('assistant', '');
+  // If an existing interrupt bubble is provided, reuse it so the LLM response
+  // appears seamlessly in the same message rather than as a new bubble.
+  let wrap, txt, _prefix;
+  if (existingElement) {
+    wrap    = existingElement.wrap;
+    txt     = existingElement.txt;
+    _prefix = existingElement.phrase ? existingElement.phrase + ' ' : '';
+    // Cancel any still-running interrupt typewriter before taking over the element
+    if (_textStreamTimer !== null) { clearInterval(_textStreamTimer); _textStreamTimer = null; }
+    txt.textContent     = _prefix;
+    chatInner.scrollTop = chatInner.scrollHeight;
+  } else {
+    ({ wrap, txt } = appendMessage('assistant', ''));
+    _prefix = '';
+  }
   wrap.classList.add('streaming');
   const abortCtrl = new AbortController();
   _currentAbortCtrl = abortCtrl;
@@ -1307,7 +1321,7 @@ async function sendToOllama(userText, options = {}) {
 
           // TTS off — display immediately; TTS on — text is revealed sentence-by-sentence on audio start
           if (ttsMode === 'off') {
-            txt.textContent     = full;
+            txt.textContent     = _prefix + full;
             chatInner.scrollTop = chatInner.scrollHeight;
           }
 
@@ -1319,8 +1333,8 @@ async function sendToOllama(userText, options = {}) {
             const _txt = txt; const _ci = chatInner;
             enqueueSpeak(clean, (audio) => {
               const dur = audio && Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : null;
-              if (dur) { _streamTextInto(_txt, _ci, snapshot, dur); }
-              else     { _txt.textContent = snapshot; _ci.scrollTop = _ci.scrollHeight; }
+              if (dur) { _streamTextInto(_txt, _ci, _prefix + snapshot, dur); }
+              else     { _txt.textContent = _prefix + snapshot; _ci.scrollTop = _ci.scrollHeight; }
             });
             anySentenceEnqueued = true;
           };
@@ -1347,8 +1361,8 @@ async function sendToOllama(userText, options = {}) {
         const _txt = txt; const _ci = chatInner;
         enqueueSpeak(clean, (audio) => {
           const dur = audio && Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : null;
-          if (dur) { _streamTextInto(_txt, _ci, snapshot, dur); }
-          else     { _txt.textContent = snapshot; _ci.scrollTop = _ci.scrollHeight; }
+          if (dur) { _streamTextInto(_txt, _ci, _prefix + snapshot, dur); }
+          else     { _txt.textContent = _prefix + snapshot; _ci.scrollTop = _ci.scrollHeight; }
         });
         anySentenceEnqueued = true;
       }
@@ -1810,16 +1824,33 @@ function clearAudioQueue() {
 // Interrupt Starling mid-speech or mid-thought.
 // If something was actively playing, picks a random annoyance phrase, speaks it
 // immediately via Kokoro, and shows it in the conversation window.
-// Returns true when something was actually cut off.
+// Returns { wasActive, wrap, txt, phrase } — callers can pass this to sendToOllama
+// as { existingElement } so the LLM response continues in the same bubble.
 function interruptSpeech() {
   const wasActive = _currentAbortCtrl !== null || _activeAudio !== null;
   if (wasActive) {
     clearAudioQueue();
     const phrase = getInterruptPhrase();
-    appendMessage('assistant', phrase);
+    const { wrap, txt } = appendMessage('assistant', '');
+    // Animate the phrase character-by-character (streaming-style)
+    if (_textStreamTimer !== null) { clearInterval(_textStreamTimer); _textStreamTimer = null; }
+    let i = 0;
+    const msPerChar = Math.max(16, 350 / phrase.length);
+    _textStreamTimer = setInterval(() => {
+      i++;
+      txt.textContent = phrase.slice(0, i);
+      chatInner.scrollTop = chatInner.scrollHeight;
+      if (i >= phrase.length) {
+        clearInterval(_textStreamTimer);
+        _textStreamTimer = null;
+        txt.textContent = phrase + ' .....';
+        chatInner.scrollTop = chatInner.scrollHeight;
+      }
+    }, msPerChar);
     enqueueSpeak(phrase);
+    return { wasActive: true, wrap, txt, phrase };
   }
-  return wasActive;
+  return { wasActive: false, wrap: null, txt: null, phrase: null };
 }
 
 function _speakBrowser(text) {

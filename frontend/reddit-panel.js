@@ -229,7 +229,8 @@ function _renderPostList() {
 // ── Post speech ──────────────────────────────────────────────────────────────────
 
 function _speakPost(post) {
-  if (_interruptSpeech) _interruptSpeech();
+  const interruptResult = _interruptSpeech ? _interruptSpeech() : null;
+  const existingEl = interruptResult?.wasActive ? interruptResult : null;
   if (!_sendToOllama) {
     if (_enqueueSpeak) _enqueueSpeak(post.title);
     return;
@@ -237,7 +238,7 @@ function _speakPost(post) {
   const sysPrompt = `You are Starling. The user has tapped a Reddit post. Read the post title naturally, briefly mention it has ${post.score} upvotes and ${post.num_comments} comments, and share a one-sentence reaction. Keep your total response under 4 sentences.`;
   _sendToOllama(
     `Post title: "${post.title}"\nSubreddit: r/${post.subreddit}`,
-    { ephemeralMessages: [{ role: 'system', content: sysPrompt }] },
+    { ephemeralMessages: [{ role: 'system', content: sysPrompt }], existingElement: existingEl },
   );
 }
 
