@@ -9,24 +9,32 @@ The first matching tool wins; unmatched input falls through to the LLM.
 
 | Priority | Tool | Notes |
 |----------|------|-------|
-| 1 | Browser — close | Only when browser panel is open; checked before everything else |
-| 2 | Wikipedia RAG — exit | Only when wiki panel is active |
-| 3 | Journal — in-mode routing | Only when journal dictation / interview is active |
-| 4 | Dossier — exit | |
-| 5 | Dossier — open | |
-| 6 | Wikipedia RAG — open | Requires **"local"** or **"offline"** keyword |
-| 7 | Journal — start | |
-| 8 | Journal — read / search | |
-| 9 | Timer | Checked before Time to avoid "timer" matching time patterns |
-| 10 | Date | Checked before Time — date phrases are more specific |
-| 11 | Time | |
-| 12 | Ideas Vault — capture | Both "idea/ideas" **and** "vault" must appear |
-| 13 | Ideas Vault — read / manage | Both "idea/ideas" **and** "vault" must appear |
-| 14 | Weather | |
-| 15 | Market / Stocks / Crypto | Checked before News — more specific domain vocabulary |
-| 16 | News | |
-| 17 | Browser — open | Requires **"browser"** keyword; Wikipedia lookup also requires **"browser"** |
-| 18 | LLM fallback | Anything unmatched |
+| 1 | Toolkit confirm intercept | Active only while a toolkit confirm is pending; must be first |
+| 2 | Browser — close | Only when browser panel is open |
+| 3 | Wikipedia RAG — exit | Only when wiki panel is active |
+| 4 | Journal — in-mode routing | Only when journal dictation / interview is active |
+| 5 | Ideas — in-mode routing | Only when ideas capture mode is active |
+| 6 | Weather — close | Only when weather panel is open |
+| 7 | YouTube — close | |
+| 8 | Reddit — close | |
+| 9 | Dossier — exit | |
+| 10 | Toolkit Menu — open | Checked before dossier open to avoid conflicts |
+| 11 | Dossier — open | |
+| 12 | Wikipedia RAG — open | Requires **"local"** or **"offline"** keyword |
+| 13 | Journal — start | |
+| 14 | Journal — read / search | |
+| 15 | Timer | Checked before Time to avoid "timer" matching time patterns |
+| 16 | Date | Checked before Time — date phrases are more specific |
+| 17 | Time | |
+| 18 | Ideas Vault — capture | Both "idea/ideas" **and** "vault" must appear |
+| 19 | Ideas Vault — read / manage | Both "idea/ideas" **and** "vault" must appear |
+| 20 | Weather | |
+| 21 | Market / Stocks / Crypto | Checked before News — more specific domain vocabulary |
+| 22 | YouTube feed | Requires **"youtube feed"** — checked before Reddit and News |
+| 23 | Reddit social feed | Requires **"reddit social"** — checked before News |
+| 24 | News | |
+| 25 | Browser — open | Requires **"browser"** keyword; Wikipedia lookup also requires **"browser"** |
+| 26 | LLM fallback | Anything unmatched |
 
 ---
 
@@ -66,7 +74,37 @@ Optional subject: `on` / `for` / `about` / `regarding` / `of` + name
 
 ---
 
-## 2 · Timer
+## 2 · Toolkit Menu
+
+Opens a browsable overlay panel listing every active Starling tool with its name,
+description, and representative activation phrases. Selecting a tool triggers an LLM
+spoken briefing about it; a Yes / No confirmation (voice or click) then opens the tool
+directly or returns to the menu. The confirm state auto-cancels after 20 seconds.
+
+### Open
+
+| Example phrase |
+|----------------|
+| `show tools` · `open tools` · `display tools` · `list tools` |
+| `show toolkit` · `open toolkit` · `display toolkit` |
+| `show the menu` · `open the menu` · `show tool menu` |
+| `what tools do you have` · `what tools` |
+| `show me your tools` · `show me all tools` |
+| `tool menu` · `tool list` |
+| `system settings` · `system menu` |
+
+### Confirm / Cancel (active only while toolkit confirm is pending)
+
+| Example phrase | Action |
+|----------------|--------|
+| `yes` · `yeah` · `yep` · `sure` · `do it` · `activate` · `open it` · `confirm` | Activate selected tool |
+| `no` · `nope` · `cancel` · `never mind` · `back` · `go back` · `close` | Dismiss and return to list |
+
+> **Note:** The confirm state auto-cancels after 20 seconds with no follow-up.
+
+---
+
+## 3 · Timer
 
 Sets or cancels a countdown timer with an optional label.
 
@@ -103,7 +141,7 @@ Sets or cancels a countdown timer with an optional label.
 
 ---
 
-## 3 · Date
+## 4 · Date
 
 Returns today's date spoken aloud. Checked before Time.
 
@@ -119,7 +157,7 @@ Returns today's date spoken aloud. Checked before Time.
 
 ---
 
-## 4 · Time
+## 5 · Time
 
 Returns the current local time spoken aloud.
 
@@ -137,7 +175,7 @@ Returns the current local time spoken aloud.
 
 ---
 
-## 5 · Voice Journal
+## 6 · Voice Journal
 
 Opens a multi-segment dictation panel. Each mic press adds a segment; the LLM
 silently generates a summary and tags on submit. Supports standard dictation,
@@ -190,7 +228,7 @@ guided interviewer Q&A mode, read-back, and keyword search.
 
 ---
 
-## 6 · Wikipedia RAG (Local / Offline)
+## 7 · Wikipedia RAG (Local / Offline)
 
 Searches the locally-ingested Simple English Wikipedia dump (ChromaDB) and opens
 a guardrailed Q&A session in the wiki panel.
@@ -228,7 +266,7 @@ from the browser-panel Wikipedia lookup, which requires "browser" instead.
 
 ---
 
-## 7 · Ideas Vault
+## 8 · Ideas Vault
 
 Captures, lists, searches, and manages ideas stored to a local JSON file.
 **Both `idea`/`ideas` and `vault` must appear in the phrase** — this two-word combination
@@ -300,7 +338,7 @@ The query is extracted from the phrase automatically.
 
 ---
 
-## 8 · Weather
+## 9 · Weather
 
 Opens the weather panel for the current location or a named city.
 Optional location is extracted after `in` / `for` / `at` following `weather` or `forecast`.
@@ -325,7 +363,7 @@ Optional location is extracted after `in` / `for` / `at` following `weather` or 
 
 ---
 
-## 8 · Market / Stocks / Crypto
+## 10 · Market / Stocks / Crypto
 
 Opens the market dashboard. The detected intent selects a view filter.
 Returns a LLM-spoken briefing scoped to the filter.
@@ -367,7 +405,66 @@ Returns a LLM-spoken briefing scoped to the filter.
 
 ---
 
-## 9 · News
+## 11 · YouTube Feed
+
+Opens the YouTube feed panel. Fetches latest videos from configured channels via RSS.
+LLM synthesis runs in the background and Starling delivers a spoken briefing.
+Supports filtering by video type (all / long / shorts), by channel, and by sort order.
+An in-panel video modal lets you open any video for playback.
+
+**Trigger is highly specific** — only the exact phrases below match; generic "YouTube"
+mentions fall through to the LLM.
+
+### Open
+
+| Example phrase |
+|----------------|
+| `open youtube feed` |
+| `view youtube feed` |
+
+### Close (priority 7)
+
+| Example phrase |
+|----------------|
+| `close youtube` |
+| `close feed` |
+| `close the youtube feed` |
+
+> **Settings:** Configure default channels via the in-panel ⚙ button or by setting
+> `YOUTUBE_CHANNELS` in `.env` (comma-separated channel IDs).
+
+---
+
+## 12 · Reddit Social Feed
+
+Opens the Reddit social feed panel. Fetches top/hot posts from configured subreddits via
+the public Reddit JSON API (no auth required). LLM synthesis runs in the background and
+Starling delivers a spoken briefing. Supports per-subreddit filter tabs.
+
+**Trigger is highly specific** — only the exact phrases below match; generic "Reddit"
+mentions fall through to the LLM.
+
+### Open
+
+| Example phrase |
+|----------------|
+| `open reddit social` |
+| `view reddit social` |
+
+### Close (priority 8)
+
+| Example phrase |
+|----------------|
+| `close reddit` |
+| `close social` |
+| `close the reddit feed` |
+
+> **Settings:** Configure default subreddits via the in-panel ⚙ button or by setting
+> `REDDIT_SUBREDDITS` in `.env` (comma-separated subreddit names).
+
+---
+
+## 13 · News
 
 Opens the news panel and delivers a spoken briefing. Defaults to world news.
 Saying a category keyword anywhere in the phrase selects that feed.
@@ -422,7 +519,7 @@ The category keyword maps to the feed as shown below.
 
 ---
 
-## 10 · Browser / Web Panel
+## 14 · Browser / Web Panel
 
 Opens an embedded browser panel (iframe) in the UI. The close phrase is checked at the
 highest priority whenever the panel is open. The open trigger fires last — after all other
@@ -431,7 +528,7 @@ tools — so that short phrases like `"search"` don't accidentally hijack longer
 Page text is extracted server-side and injected as LLM context, enabling on-page Q&A and
 summarisation.
 
-### Close (priority 1 — panel must be open)
+### Close (priority 2 — panel must be open)
 
 | Example phrase |
 |----------------|
@@ -441,11 +538,11 @@ summarisation.
 | `hide browser` · `hide the browser` |
 | `shut browser` · `shut the browser` |
 
-### Wikipedia lookup in browser (priority 17)
+### Wikipedia lookup in browser (priority 25)
 
 Extracts the topic and navigates to the English Wikipedia article in the browser panel.
 **Requires "browser" or "browser window" or "in browser" in the phrase.**  
-To query the local offline Wikipedia instead, use the **"local wiki"** / **"offline wikipedia"** triggers (priority 6).
+To query the local offline Wikipedia instead, use the **"local wiki"** / **"offline wikipedia"** triggers (priority 12).
 
 | Example phrase | Topic resolved |
 |----------------|---------------|
@@ -456,7 +553,7 @@ To query the local offline Wikipedia instead, use the **"local wiki"** / **"offl
 | `wikipedia in browser for photosynthesis` | photosynthesis |
 | `search Wikipedia in the browser window for Alan Turing` | Alan Turing |
 
-### Open URL (priority 10)
+### Open URL (priority 25)
 
 Navigates directly to a given URL or bare domain.
 
@@ -466,7 +563,7 @@ Navigates directly to a given URL or bare domain.
 | `open browser example.com` | `https://example.com` |
 | `open browser news.ycombinator.com` | `https://news.ycombinator.com` |
 
-### Web search (priority 10)
+### Web search (priority 25)
 
 Opens a DuckDuckGo plain-HTML search (iframe-friendly).
 

@@ -2342,12 +2342,34 @@ async function _routeInput(text) {
   // ── Browser / web trigger ────────────────────────────────────────────────────
   const _browserTrigger = detectBrowserTrigger(text);
   if (_browserTrigger) {
-    logEvent('tool_dispatch', { tool: 'browser', trigger_phrase: text, url: _browserTrigger.url });
     setState('thinking');
     appendMessage('user', text);
-    openBrowserPanel(_browserTrigger.url);
+
+    // Pass the raw transcript through an LLM call to get a clean, normalised URL.
+    // This corrects common STT artefacts such as "DOT" being transcribed instead of ".".
+    let _resolvedUrl   = _browserTrigger.url;
+    let _resolvedLabel = _browserTrigger.label;
+    try {
+      const _resolveRes = await fetch(`${BACKEND_BASE}/api/browser/resolve-url`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ text, model: MODEL }),
+      });
+      if (_resolveRes.ok) {
+        const _resolveData = await _resolveRes.json();
+        if (_resolveData.url) {
+          _resolvedUrl   = _resolveData.url;
+          _resolvedLabel = _resolveData.label || _resolvedLabel;
+        }
+      }
+    } catch (_e) {
+      // Resolve failed — fall back to the regex-extracted URL
+    }
+
+    logEvent('tool_dispatch', { tool: 'browser', trigger_phrase: text, url: _resolvedUrl });
+    openBrowserPanel(_resolvedUrl);
     await sendToOllama(
-      `The user has opened ${_browserTrigger.label} in the browser panel. ` +
+      `The user has opened ${_resolvedLabel} in the browser panel. ` +
       `In two or three natural spoken sentences: confirm the page is open and that you are reading its content, ` +
       `then let the user know they can ask you to summarize it, answer questions about it, or explain anything on the page.`,
       {

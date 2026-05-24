@@ -6,6 +6,7 @@ Runs server-side to avoid iframe cross-origin restrictions.
 """
 
 import asyncio
+import os
 import re
 import time
 from html.parser import HTMLParser
@@ -14,9 +15,13 @@ from urllib.parse import unquote
 import httpx
 import requests as _requests
 from fastapi import APIRouter
+from pydantic import BaseModel
 import session_log
 
 router = APIRouter()
+
+_OLLAMA_BASE  = os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434')
+_DEFAULT_MODEL = os.getenv('OLLAMA_MODEL', 'llama3.2:3b')
 
 # Tags whose entire subtree (including nested content) is discarded
 _SKIP_TAGS = frozenset({
@@ -232,3 +237,78 @@ async def fetch_wiki_section(url: str, section: str):
             'available_sections': result.get('available', []),
         }
     return {'text': result['text'], 'section': result['section']}
+
+
+# ── URL resolver ──────────────────────────────────────────────────────────────
+
+class _ResolveUrlRequest(BaseModel):
+    text: str
+    model: str = _DEFAULT_MODEL
+
+
+_RESOLVE_SYSTEM = (
+    "You are a URL extraction assistant. Your only job is to extract a valid URL "
+    "from a spoken voice command and return it as a clean URL.\n"
+    "Rules:\n"
+    "- Return ONLY the URL — no explanation, no punctuation, no markdown, no quotes.\n"
+    "- Spoken artifacts: 'DOT' means '.', 'SLASH' or 'forward slash' means '/', "
+    "'COLON' means ':', 'DASH' or 'hyphen' means '-', 'UNDERSCORE' means '_'.\n"
+    "- Remove any spaces that appear inside domain names or paths.\n"
+    "- Always prefix with https:// unless the user explicitly said http://.\n"
+    "- If no recognisable URL or domain is present, return exactly: UNKNOWN"
+)
+
+
+@router.post('/browser/resolve-url')
+async def resolve_browser_url(req: _ResolveUrlRequest):
+    """Use the LLM to extract and normalise a URL from a spoken transcript.
+
+    Returns { url, label } on success or { url: null, error } on failure.
+    Uses temperature=0 and a system prompt that corrects common STT artefacts
+    such as 'DOT' being transcribed instead of '.'.
+    """
+    session_log.log('tool_call', {
+        'endpoint': '/api/browser/resolve-url',
+        'method':   'POST',
+        'params_summary': f'text={req.text[:120]}',
+    })
+
+    payload = {
+        'model': req.model,
+        'messages': [
+            {'role': 'system', 'content': _RESOLVE_SYSTEM},
+            {'role': 'user',   'content': f'Extract the URL from this spoken command: {req.text}'},
+        ],
+        'options': {'temperature': 0},
+        'stream': False,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(f'{_OLLAMA_BASE}/api/chat', json=payload)
+            resp.raise_for_status()
+            data    = resp.json()
+            raw_url = data.get('message', {}).get('content', '').strip()
+
+        if not raw_url or raw_url.upper() == 'UNKNOWN':
+            return {'url': None, 'label': None, 'error': 'LLM could not extract a URL'}
+
+        # Ensure a scheme
+        if not re.match(r'^https?://', raw_url, re.IGNORECASE):
+            raw_url = f'https://{raw_url}'
+
+        label = re.sub(r'^https?://', '', raw_url, flags=re.IGNORECASE)
+        session_log.log('tool_result', {
+            'endpoint': '/api/browser/resolve-url',
+            'status_code': 200,
+            'result_summary': f'resolved={raw_url[:120]}',
+        })
+        return {'url': raw_url, 'label': label}
+
+    except Exception as exc:  # noqa: BLE001
+        session_log.log('tool_result', {
+            'endpoint': '/api/browser/resolve-url',
+            'status_code': 500,
+            'result_summary': str(exc)[:200],
+        })
+        return {'url': None, 'label': None, 'error': str(exc)}

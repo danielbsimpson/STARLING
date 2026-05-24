@@ -32,6 +32,9 @@ Microphone → Speech-to-Text → llama-server (LLM on GPU) → Text-to-Speech �
 - 🌐 **In-UI browser panel** — say `"look up [topic] on Wikipedia"`, `"open browser [url]"`, or `"browser search for [query]"` to open an embedded iframe; page text is extracted server-side and injected as LLM context for on-page Q&A and summarisation; JS-rendered SPAs are detected and reported; Wikipedia sections can be summarised on demand with `"summarize section [name]"`
 - 💡 **Ideas vault** — say `"store idea in the vault"` to enter single-press capture mode; ideas are LLM-tagged and saved locally; retrieve with `"open ideas vault"`, search with `"search the vault for [topic]"`, or discard the last with `"discard the last idea from the vault"`
 - 📓 **Voice journal** — say `"start journal entry"` to begin multi-segment dictation or `"interviewer mode"` for a guided Q&A session; on submit the LLM silently generates a summary and tags; confirm or re-record before saving; read back entries and search by keyword or date
+- 📺 **YouTube feed panel** — say `"open YouTube feed"` to open a tile-grid panel of recent videos from configured channels via public RSS; filter by video type (All / Long / Shorts) and channel; in-panel modal for immediate playback; LLM spoken briefing; no API key required
+- 🟠 **Reddit social feed panel** — say `"open Reddit social"` to open a post feed from configured subreddits via the public JSON API; per-subreddit filter tabs; LLM spoken briefing; no login required
+- 🧰 **Toolkit menu** — say `"show tools"` or `"open toolkit"` to browse every active Starling tool by name and description; click any tool for a spoken LLM briefing, then confirm by voice or click to activate it directly
 
 > Tool panel screenshots and full trigger phrase reference: [`toolkit/README.md`](./toolkit/README.md)
 
@@ -43,7 +46,7 @@ A suite of voice-activated tools built as self-contained dispatch intercepts —
 the core chat pipeline.
 
 | # | Tool | Backend | Status |
-|---|---|---|---|
+|---|---|---|---|---|
 | 1 | Time & Date | None | ✅ Done |
 | 2 | Timers | None | ✅ Done |
 | 3 | Weather | Open-Meteo (free, no key) | ✅ Done |
@@ -54,8 +57,11 @@ the core chat pipeline.
 | 8 | Ideas Tracker | Local JSON file | ✅ Done |
 | 9 | Voice Journal | Local JSON files | ✅ Done |
 | 10 | Wikipedia RAG | ChromaDB + fastembed | ✅ Done |
-| 11 | Google Calendar | Google Calendar API (OAuth2) | 🔲 Planned |
-| 12 | Gmail | Gmail API (OAuth2) | 🔲 Planned |
+| 11 | Reddit Social Feed | Reddit JSON API (no auth) | ✅ Done |
+| 12 | YouTube Feed | YouTube Atom RSS (no key) | ✅ Done |
+| 13 | Toolkit Menu | None (frontend only) | ✅ Done |
+| 14 | Google Calendar | Google Calendar API (OAuth2) | 🔲 Planned |
+| 15 | Gmail | Gmail API (OAuth2) | 🔲 Planned |
 
 See [`toolkit/README.md`](./toolkit/README.md) for screenshots, trigger phrase reference,
 and per-tool documentation. Implementation plans for upcoming features are in [`plan/`](./plan/).
@@ -108,13 +114,17 @@ llm-speech-UI/
 │   ├── app.js              # Main application logic and voice dispatch router
 │   ├── browser-panel.js    # Tool: in-UI browser panel
 │   ├── ideas-panel.js      # Tool: ideas vault
+│   ├── interrupt-phrases.js  # Interrupt / barge-in phrase list
 │   ├── journal-panel.js    # Tool: voice journal
 │   ├── log-dashboard.html  # Session activity log dashboard
 │   ├── news-panel.js       # Tool: news briefing panel
+│   ├── reddit-panel.js     # Tool: Reddit social feed panel
 │   ├── stocks-panel.js     # Tool: stocks & crypto panel
 │   ├── timer-panel.js      # Tool: voice-activated timers
+│   ├── toolkit-panel.js    # Tool: toolkit browsing & activation menu
 │   ├── weather-panel.js    # Tool: weather forecast panel
-│   └── wiki-panel.js       # Tool: Wikipedia RAG Q&A
+│   ├── wiki-panel.js       # Tool: Wikipedia RAG Q&A
+│   └── youtube-panel.js    # Tool: YouTube feed panel
 ├── backend/                # FastAPI server
 │   ├── main.py             # App entry point, router registration, system-status
 │   ├── stt.py              # Speech-to-text via faster-whisper
@@ -127,10 +137,12 @@ llm-speech-UI/
 │   ├── journal_routes.py   # Voice journal endpoints
 │   ├── log_routes.py       # Session activity log endpoints
 │   ├── news.py             # News briefing endpoint (RSS / feedparser)
+│   ├── reddit.py           # Reddit social feed endpoint (public JSON API)
 │   ├── session_log.py      # Session event recording
 │   ├── stocks.py           # Stocks & crypto market data endpoint (yfinance)
 │   ├── weather.py          # Weather forecast endpoint (Open-Meteo)
 │   ├── wikipedia_rag.py    # Wikipedia RAG — session, retrieval, prompt builder
+│   ├── youtube.py          # YouTube feed endpoint (Atom RSS)
 │   └── memory/             # Runtime data — caches, JSON stores, and ChromaDB
 │       ├── chroma_db/      # Vector store (auto-created on first ingest)
 │       ├── journal/        # Journal entry files (JSON, one per entry)
@@ -157,8 +169,12 @@ llm-speech-UI/
 │   ├── feature-electron-packaging-1.md
 │   ├── feature-mac-m4-compatibility-1.md
 │   ├── feature-prompt-registry-1.md
+│   ├── feature-rag-memory-manager-1.md
+│   ├── feature-reddit-account-discovery-1.md
 │   ├── feature-sleep-mode-1.md
-│   └── feature-starling-soul-personality-1.md
+│   ├── feature-starling-soul-personality-1.md
+│   ├── feature-toolkit-menu-1.md           # ✅ Implemented
+│   └── feature-youtube-channel-discovery-1.md
 ├── toolkit/                # Voice trigger reference and tool documentation
 │   ├── README.md           # Per-tool screenshots, trigger phrases, and implementation notes
 │   └── TRIGGER_PHRASES.md  # Full voice command reference with dispatch priority order

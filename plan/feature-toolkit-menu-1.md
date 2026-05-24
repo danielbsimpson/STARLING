@@ -4,13 +4,13 @@ version: 1.0
 date_created: 2026-05-23
 last_updated: 2026-05-23
 owner: Daniel Simpson
-status: 'Planned'
+status: 'Complete'
 tags: [feature, frontend, voice-ux, toolkit, llm-interaction]
 ---
 
 # Introduction
 
-![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
+![Status: Complete](https://img.shields.io/badge/status-Complete-brightgreen)
 
 A voice- and button-triggered overlay panel that presents every Starling tool as a
 browsable card: tool name, one-sentence description, and canonical activation phrases.

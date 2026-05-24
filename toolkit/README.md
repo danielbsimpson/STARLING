@@ -21,9 +21,12 @@ See [`TRIGGER_PHRASES.md`](./TRIGGER_PHRASES.md) for the full voice command refe
 | 7 | In-UI Browser Panel | [`markdown/WEBCALL.md`](../markdown/WEBCALL.md) | None | ✅ Done |
 | 8 | Ideas Vault | [`markdown/IDEAS_TRACKER.md`](../markdown/IDEAS_TRACKER.md) | Local JSON file | ✅ Done |
 | 9 | Voice Journal | [`markdown/JOURNAL.md`](../markdown/JOURNAL.md) | Local JSON files | ✅ Done |
-| 10 | Wikipedia RAG | [`markdown/WIKIPEDIA.md`](../markdown/WIKIPEDIA.md) | ChromaDB + nomic-embed-text | 🔧 In Development |
-| 11 | Google Calendar | [`markdown/CALENDAR.md`](../markdown/CALENDAR.md) | Google Calendar API (OAuth2) | 🔲 Planned |
-| 12 | Gmail | [`markdown/GMAIL.md`](../markdown/GMAIL.md) | Gmail API (OAuth2) | 🔲 Planned |
+| 10 | Wikipedia RAG | [`markdown/WIKIPEDIA.md`](../markdown/WIKIPEDIA.md) | ChromaDB + fastembed | ✅ Done |
+| 11 | Reddit Social Feed | [`assets/archived/feature-reddit-social-1.md`](../assets/archived/feature-reddit-social-1.md) | Reddit JSON API (no auth) | ✅ Done |
+| 12 | YouTube Feed | [`assets/archived/feature-youtube-feed-1.md`](../assets/archived/feature-youtube-feed-1.md) | YouTube Atom RSS (no key) | ✅ Done |
+| 13 | Toolkit Menu | [`plan/feature-toolkit-menu-1.md`](../plan/feature-toolkit-menu-1.md) | None (frontend only) | ✅ Done |
+| 14 | Google Calendar | [`markdown/CALENDAR.md`](../markdown/CALENDAR.md) | Google Calendar API (OAuth2) | 🔲 Planned |
+| 15 | Gmail | [`markdown/GMAIL.md`](../markdown/GMAIL.md) | Gmail API (OAuth2) | 🔲 Planned |
 
 Tools dispatch in priority order — the first matching tool wins; unmatched input falls
 through to the LLM. See [`TRIGGER_PHRASES.md`](./TRIGGER_PHRASES.md) for the full ordering
@@ -35,24 +38,32 @@ reference.
 
 | Priority | Tool | Notes |
 |----------|------|-------|
-| 1 | Browser — close | Only when browser panel is open; checked before everything else |
-| 2 | Wikipedia RAG — exit | Only when wiki panel is active |
-| 3 | Journal — in-mode routing | Only when journal dictation / interview is active |
-| 4 | Dossier — exit | |
-| 5 | Dossier — open | |
-| 6 | Wikipedia RAG — open | Requires **"local"** or **"offline"** keyword |
-| 7 | Journal — start | |
-| 8 | Journal — read / search | |
-| 9 | Timer | Checked before Time to avoid "timer" matching time patterns |
-| 10 | Date | Checked before Time — date phrases are more specific |
-| 11 | Time | |
-| 12 | Ideas Vault — capture | Both "idea/ideas" **and** "vault" must appear |
-| 13 | Ideas Vault — read / manage | Both "idea/ideas" **and** "vault" must appear |
-| 14 | Weather | |
-| 15 | Market / Stocks / Crypto | More specific domain vocabulary, checked before News |
-| 16 | News | |
-| 17 | Browser — open | Requires **"browser"** keyword; Wikipedia also requires **"browser"** |
-| 18 | LLM fallback | Anything unmatched |
+| 1 | Toolkit confirm intercept | Active only while a toolkit confirm is pending; must be first |
+| 2 | Browser — close | Only when browser panel is open |
+| 3 | Wikipedia RAG — exit | Only when wiki panel is active |
+| 4 | Journal — in-mode routing | Only when journal dictation / interview is active |
+| 5 | Ideas — in-mode routing | Only when ideas capture mode is active |
+| 6 | Weather — close | Only when weather panel is open |
+| 7 | YouTube — close | |
+| 8 | Reddit — close | |
+| 9 | Dossier — exit | |
+| 10 | Toolkit Menu — open | Checked before dossier open to avoid conflicts |
+| 11 | Dossier — open | |
+| 12 | Wikipedia RAG — open | Requires **"local"** or **"offline"** keyword |
+| 13 | Journal — start | |
+| 14 | Journal — read / search | |
+| 15 | Timer | Checked before Time to avoid "timer" matching time patterns |
+| 16 | Date | Checked before Time — date phrases are more specific |
+| 17 | Time | |
+| 18 | Ideas Vault — capture | Both "idea/ideas" **and** "vault" must appear |
+| 19 | Ideas Vault — read / manage | Both "idea/ideas" **and** "vault" must appear |
+| 20 | Weather | |
+| 21 | Market / Stocks / Crypto | More specific domain vocabulary, checked before News |
+| 22 | YouTube feed | Requires **"youtube feed"** — checked before Reddit and News |
+| 23 | Reddit social feed | Requires **"reddit social"** — checked before News |
+| 24 | News | |
+| 25 | Browser — open | Requires **"browser"** keyword; Wikipedia also requires **"browser"** |
+| 26 | LLM fallback | Anything unmatched |
 
 ---
 
@@ -270,6 +281,61 @@ the phrase** to avoid conflict with the browser-panel Wikipedia lookup (which re
 
 Configuration: run `python scripts/ingest_wikipedia.py` once to build the index.  
 Implementation guide: [`markdown/WIKIPEDIA.md`](../markdown/WIKIPEDIA.md)
+
+---
+
+## Toolkit Menu
+
+A voice- and button-triggered overlay panel that lists every active Starling tool with its
+name, description, and representative activation phrases. Selecting a tool hands its name
+and description to the LLM for a natural spoken briefing, then asks whether to activate it.
+Yes / No confirmation available by voice or click. Confirm state auto-cancels after 20 s.
+
+**Open triggers:**  
+`"show tools"` · `"open toolkit"` · `"tool menu"` · `"what tools do you have"` · `"show me your tools"`
+
+![S.T.A.R.L.I.N.G. Toolkit Menu](../assets/images/toolkit_example.png)
+
+Implementation guide: [`plan/feature-toolkit-menu-1.md`](../plan/feature-toolkit-menu-1.md)
+
+---
+
+## Reddit Social Feed
+
+Opens a live Reddit feed panel sourced from the public Reddit JSON API — no API key or
+login required. Fetches top/hot posts from a configurable subreddit list with per-subreddit
+filter tabs. LLM synthesis runs in the background; Starling delivers a spoken briefing when
+ready. A settings panel lets you add or remove subreddits at runtime.
+
+**Open triggers (strict match only):**  
+`"open reddit social"` · `"view reddit social"`
+
+**Close triggers:**  
+`"close reddit"` · `"close social"`
+
+Configuration (`.env`): `REDDIT_SUBREDDITS`, `REDDIT_LIMIT_PER_SUB`, `REDDIT_CACHE_SECONDS`, `REDDIT_SORT`
+
+Implementation guide: [`assets/archived/feature-reddit-social-1.md`](../assets/archived/feature-reddit-social-1.md)
+
+---
+
+## YouTube Feed
+
+Opens a YouTube channel feed panel sourced from public Atom/RSS — no API key required.
+Displays recent videos as a tile grid with type filters (All / Long / Shorts), per-channel
+filters, and sort options. An in-panel modal lets you open any video for immediate playback.
+LLM synthesis runs in the background; Starling delivers a spoken briefing when ready.
+A settings panel lets you add or remove channels at runtime.
+
+**Open triggers (strict match only):**  
+`"open youtube feed"` · `"view youtube feed"`
+
+**Close triggers:**  
+`"close youtube"` · `"close feed"`
+
+Configuration (`.env`): `YOUTUBE_CHANNELS`, `YOUTUBE_CACHE_SECONDS`, `YOUTUBE_SYNTHESIS_ENABLED`
+
+Implementation guide: [`assets/archived/feature-youtube-feed-1.md`](../assets/archived/feature-youtube-feed-1.md)
 
 ---
 

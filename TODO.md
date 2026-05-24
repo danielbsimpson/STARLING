@@ -8,22 +8,23 @@ All implementation plans live in [`plan/`](./plan/). Completed feature guides ha
 
 | Feature | Plan | Status | Description |
 |---|---|---|---|
-| Reddit Feed | [`plan/feature-reddit-social-1.md`](./plan/feature-reddit-social-1.md) | ✅ Core complete | Voice-triggered panel fetching top posts from configurable subreddits via the Reddit JSON API; LLM synthesis; filter by subreddit and sort; expandable panel layout |
-| Reddit Auth (personalised) | [`plan/feature-reddit-social-1.md`](./plan/feature-reddit-social-1.md) | 🔲 Pending | OAuth2 login to Reddit so Starling can read your personal frontpage, saved posts, and upvoted content rather than fixed public subreddits |
-| YouTube Feed | [`plan/feature-youtube-feed-1.md`](./plan/feature-youtube-feed-1.md) | ✅ Core complete | Voice-triggered panel fetching latest videos from subscribed/default channels via YouTube RSS; LLM synthesis; filter by channel and sort; expandable tile panel |
-| YouTube Auth (personalised) | [`plan/feature-youtube-feed-1.md`](./plan/feature-youtube-feed-1.md) | 🔲 Pending | OAuth2 / YouTube Data API v3 login so Starling can pull your actual subscriptions feed instead of hardcoded default channels |
+| Reddit Feed | [`assets/archived/feature-reddit-social-1.md`](./assets/archived/feature-reddit-social-1.md) | ✅ Core complete | Voice-triggered panel fetching top posts from configurable subreddits via the Reddit JSON API; LLM synthesis; filter by subreddit and sort; expandable panel layout |
+| Reddit Auth (personalised) | [`plan/feature-reddit-account-discovery-1.md`](./plan/feature-reddit-account-discovery-1.md) | 🔲 Pending | OAuth2 login to Reddit so Starling can read your personal frontpage, saved posts, and upvoted content rather than fixed public subreddits |
+| YouTube Feed | [`assets/archived/feature-youtube-feed-1.md`](./assets/archived/feature-youtube-feed-1.md) | ✅ Core complete | Voice-triggered panel fetching latest videos from subscribed/default channels via YouTube RSS; LLM synthesis; filter by channel and sort; expandable tile panel |
+| YouTube Auth (personalised) | [`plan/feature-youtube-channel-discovery-1.md`](./plan/feature-youtube-channel-discovery-1.md) | 🔲 Pending | OAuth2 / YouTube Data API v3 login so Starling can pull your actual subscriptions feed instead of hardcoded default channels |
 
 ---
 
 ## Voice Tools
 
-| Feature | Plan | Description |
-|---|---|---|
-| RAG Memory Manager | [`plan/feature-rag-memory-manager-1.md`](./plan/feature-rag-memory-manager-1.md) | Voice-triggered panel to upload `.txt`/`.md` files into ChromaDB, view all ingested sources, preview chunks per document, and delete sources by name |
-| Wake Word & Interrupt | [`plan/WAKE_WORD.md`](./plan/WAKE_WORD.md) | "Hey Starling" always-on listener triggers the mic without a button press; speaking while Starling is talking immediately stops playback and starts listening |
-| Google Calendar | [`plan/CALENDAR.md`](./plan/CALENDAR.md) | Voice-triggered calendar panel; reads Google Calendar via OAuth2; daily and weekly event views; LLM spoken briefing ("what's on my schedule today?") |
-| Gmail | [`plan/GMAIL.md`](./plan/GMAIL.md) | Voice-triggered inbox panel; fetches unread messages via Gmail API; spoken summary ("you have 5 unread emails from…"); open any message for a full-text LLM summary |
-| Tool Awareness & Fuzzy Recovery | [`plan/TOOL_AWARENESS.md`](./plan/TOOL_AWARENESS.md) | Injects a structured tool manifest into the system prompt so Starling can describe her own capabilities; fuzzy-intent layer at the tail of the intercept chain catches near-miss transcripts and asks for confirmation before opening a tool |
+| Feature | Plan | Status | Description |
+|---|---|---|---|
+| Toolkit Menu | [`plan/feature-toolkit-menu-1.md`](./plan/feature-toolkit-menu-1.md) | ✅ Done | Voice- and button-triggered overlay panel listing every active Starling tool; click any tool for a spoken LLM briefing, then confirm by voice or click to activate it directly |
+| RAG Memory Manager | [`plan/feature-rag-memory-manager-1.md`](./plan/feature-rag-memory-manager-1.md) | 🔲 Pending | Voice-triggered panel to upload `.txt`/`.md` files into ChromaDB, view all ingested sources, preview chunks per document, and delete sources by name |
+| Wake Word & Interrupt | [`plan/WAKE_WORD.md`](./plan/WAKE_WORD.md) | 🔲 Pending | "Hey Starling" always-on listener triggers the mic without a button press; speaking while Starling is talking immediately stops playback and starts listening |
+| Google Calendar | [`plan/CALENDAR.md`](./plan/CALENDAR.md) | 🔲 Pending | Voice-triggered calendar panel; reads Google Calendar via OAuth2; daily and weekly event views; LLM spoken briefing ("what's on my schedule today?") |
+| Gmail | [`plan/GMAIL.md`](./plan/GMAIL.md) | 🔲 Pending | Voice-triggered inbox panel; fetches unread messages via Gmail API; spoken summary ("you have 5 unread emails from…"); open any message for a full-text LLM summary |
+| Tool Awareness & Fuzzy Recovery | [`plan/TOOL_AWARENESS.md`](./plan/TOOL_AWARENESS.md) | 🔲 Pending | Injects a structured tool manifest into the system prompt so Starling can describe her own capabilities; fuzzy-intent layer at the tail of the intercept chain catches near-miss transcripts and asks for confirmation before opening a tool |
 
 ---
 
