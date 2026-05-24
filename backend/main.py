@@ -124,11 +124,13 @@ _PID_FILE = Path(__file__).parent / "memory" / ".starling.pid"
 
 
 def _kill_pid(pid: int) -> None:
-    """Kill a process by PID, platform-appropriately."""
+    """Kill a process and its entire child tree by PID, platform-appropriately."""
     try:
         if os.name == "nt":
             import subprocess as _sp
-            _sp.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True)
+            # /T kills the full process tree so uvicorn --reload workers and
+            # any llama-server child processes are also terminated.
+            _sp.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
         else:
             os.kill(pid, signal.SIGTERM)
     except Exception:
@@ -149,7 +151,10 @@ async def system_shutdown(request: Request):
     pids_to_kill: list[int] = []
     try:
         data = json.loads(_PID_FILE.read_text(encoding="utf-8"))
-        for key in ("backend", "llama"):
+        # Kill llama first so the GPU is freed before the backend (this process)
+        # is terminated — the backend kill uses /T which will kill the current
+        # uvicorn worker, so anything after it in the list would never execute.
+        for key in ("llama", "backend"):
             if data.get(key):
                 pids_to_kill.append(int(data[key]))
     except Exception:

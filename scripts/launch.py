@@ -130,8 +130,18 @@ def _terminate(proc: "subprocess.Popen[bytes] | None", name: str, timeout: int =
         return
     _info(f"Stopping {name} (pid {proc.pid})…")
     try:
-        proc.terminate()
-        proc.wait(timeout=timeout)
+        if os.name == "nt":
+            # Use taskkill /T to kill the full process tree — proc.terminate() on
+            # Windows only kills the root PID and leaves child processes (e.g.
+            # uvicorn --reload workers, llama-server children) alive.
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                capture_output=True,
+            )
+            proc.wait(timeout=timeout)
+        else:
+            proc.terminate()
+            proc.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
         _err(f"{name} did not stop within {timeout}s — sending kill")
         try:
