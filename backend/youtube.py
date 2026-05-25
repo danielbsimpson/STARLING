@@ -23,6 +23,8 @@ Phase 3 stubs (activated when YOUTUBE_CLIENT_ID + YOUTUBE_CLIENT_SECRET are set)
 
 import asyncio
 import email.utils
+import functools
+import hashlib
 import html
 import json
 import logging
@@ -46,6 +48,10 @@ logger = logging.getLogger(__name__)
 _CHANNELS_ENV     = os.getenv("YOUTUBE_CHANNELS", "")
 _CACHE_SECONDS    = int(os.getenv("YOUTUBE_CACHE_SECONDS", "1800"))
 _SYNTHESIS_ON     = os.getenv("YOUTUBE_SYNTHESIS_ENABLED", "true").lower() in ("1", "true", "yes")
+
+# Disk-cache: persists video data across restarts, 12-hour TTL
+_DISK_CACHE_FILE  = Path(__file__).parent / "memory" / "youtube_cache.json"
+_DISK_CACHE_TTL   = int(os.getenv("YOUTUBE_DISK_CACHE_TTL", str(12 * 3600)))  # 12 hours
 
 # Validate channel IDs: must be UCxxxxxxxxxxxxxxxxxxxxxxxxx (24 chars)
 _CHANNEL_ID_RE = re.compile(r"^UC[A-Za-z0-9_\-]{22}$")
@@ -78,24 +84,94 @@ _DEFAULT_CHANNELS: list[str] = (
 )
 
 
-def _load_channels() -> list[str]:
-    """Load channel IDs from the JSON file, falling back to _DEFAULT_CHANNELS."""
+# ── Disk cache helpers ────────────────────────────────────────────────────────
+
+def _disk_cache_key(channels: list[str], max_per_channel: int) -> str:
+    """Stable hash key for the disk cache, based on channel list and max_per_channel."""
+    raw = f"{max_per_channel}:{'_'.join(sorted(channels))}"
+    return "yt_" + hashlib.sha1(raw.encode()).hexdigest()[:16]
+
+
+def _load_disk_cache() -> dict:
+    """Load the on-disk YouTube video cache. Returns {} on any error."""
+    try:
+        if _DISK_CACHE_FILE.exists():
+            return json.loads(_DISK_CACHE_FILE.read_text(encoding="utf-8"))
+    except Exception as exc:
+        logger.warning("YouTube disk cache read error: %s", exc)
+    return {}
+
+
+def _save_disk_cache(cache: dict) -> None:
+    """Write the disk cache atomically (write to .tmp, then os.replace)."""
+    try:
+        _DISK_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = _DISK_CACHE_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(cache, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, _DISK_CACHE_FILE)
+    except Exception as exc:
+        logger.error("YouTube disk cache write error: %s", exc)
+
+
+def _load_channel_objects() -> list[dict]:
+    """Load the full channel object list from JSON. Handles both old list[str] and new list[dict] formats."""
     try:
         if _CHANNELS_FILE.exists():
             raw = json.loads(_CHANNELS_FILE.read_text(encoding="utf-8"))
-            valid = [ch for ch in raw if isinstance(ch, str) and _CHANNEL_ID_RE.match(ch)]
-            if valid:
-                return valid
+            if not isinstance(raw, list):
+                return []
+            objects = []
+            for item in raw:
+                if isinstance(item, str):
+                    if _CHANNEL_ID_RE.match(item):
+                        objects.append({"name": None, "channel_id": item, "handle": None})
+                elif isinstance(item, dict):
+                    objects.append({
+                        "name":       item.get("name"),
+                        "channel_id": item.get("channel_id"),
+                        "handle":     item.get("handle"),
+                    })
+            return objects
     except Exception as exc:
         logger.warning("Failed to load youtube_channels.json: %s", exc)
-    return list(_DEFAULT_CHANNELS)
+    return []
+
+
+def _load_channels() -> list[str]:
+    """Load resolved channel IDs, pre-populating _channel_name_map from stored names."""
+    objects = _load_channel_objects()
+    if not objects:
+        return list(_DEFAULT_CHANNELS)
+    ids = []
+    for obj in objects:
+        cid = obj.get("channel_id")
+        if cid and isinstance(cid, str) and _CHANNEL_ID_RE.match(cid):
+            ids.append(cid)
+            name = obj.get("name")
+            if name:
+                _channel_name_map.setdefault(cid, name)
+    return ids if ids else list(_DEFAULT_CHANNELS)
 
 
 def _save_channels(channels: list[str]) -> None:
-    """Persist channel IDs to the JSON file. Never raises — a failed save must not break a request."""
+    """Persist channel IDs, merging with any existing name/handle metadata in the JSON file."""
     try:
         _CHANNELS_FILE.parent.mkdir(parents=True, exist_ok=True)
-        _CHANNELS_FILE.write_text(json.dumps(channels, indent=2), encoding="utf-8")
+        # Preserve existing metadata (name, handle) for known channel IDs
+        existing: dict[str, dict] = {}
+        if _CHANNELS_FILE.exists():
+            try:
+                raw = json.loads(_CHANNELS_FILE.read_text(encoding="utf-8"))
+                for item in raw:
+                    if isinstance(item, dict) and item.get("channel_id"):
+                        existing[item["channel_id"]] = item
+            except Exception:
+                pass
+        objects = [
+            existing.get(cid, {"name": _channel_name_map.get(cid), "channel_id": cid, "handle": None})
+            for cid in channels
+        ]
+        _CHANNELS_FILE.write_text(json.dumps(objects, indent=2), encoding="utf-8")
     except Exception as exc:
         logger.error("Failed to save youtube_channels.json: %s", exc)
 
@@ -155,10 +231,11 @@ def _fmt_views(n: int) -> str:
     return f"{n / 1_000_000:.1f}M"
 
 
-def _parse_channel_feed(channel_id: str) -> list[dict]:
+def _parse_channel_feed(channel_id: str, max_videos: int = 15) -> list[dict]:
     """
     Synchronously fetch and parse a YouTube channel RSS feed.
     Returns a list of video dicts.  Called via run_in_executor.
+    max_videos: maximum number of videos to return per channel (1-15).
     """
     url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
     try:
@@ -171,7 +248,7 @@ def _parse_channel_feed(channel_id: str) -> list[dict]:
     _channel_name_map[channel_id] = channel_name
 
     videos: list[dict] = []
-    for entry in feed.entries[:15]:
+    for entry in feed.entries[:max_videos]:
         # Extract video ID — prefer yt_videoid namespace attribute
         video_id = entry.get("yt_videoid", "")
         if not video_id and entry.get("link"):
@@ -247,15 +324,17 @@ def _parse_channel_feed(channel_id: str) -> list[dict]:
     return videos
 
 
-async def _fetch_all_channels_parallel(channels: list[str]) -> tuple[list[dict], dict]:
+async def _fetch_all_channels_parallel(channels: list[str], max_per_channel: int = 15) -> tuple[list[dict], dict]:
     """
     Fetch all channel feeds in parallel using a thread-pool executor
     (feedparser is synchronous).
     Returns (all_videos sorted by published_ts desc, by_channel dict).
+    max_per_channel: number of recent videos to fetch per channel.
     """
     loop = asyncio.get_running_loop()
+    fetch_fn = functools.partial(_parse_channel_feed, max_videos=max_per_channel)
     results = await asyncio.gather(
-        *[loop.run_in_executor(None, _parse_channel_feed, ch) for ch in channels],
+        *[loop.run_in_executor(None, fetch_fn, ch) for ch in channels],
         return_exceptions=True,
     )
 
@@ -401,6 +480,32 @@ async def _resolve_handle_to_channel_id(handle: str) -> str | None:
         return None
 
 
+async def _resolve_handle_no_api(handle: str) -> str | None:
+    """
+    Resolve a YouTube @handle to a channel ID by scraping the channel page.
+    No API key required.  Validates the handle before making any HTTP request (SEC-006).
+    """
+    clean = re.sub(r'^@', '', handle.strip())
+    if not re.match(r'^[A-Za-z0-9._-]{1,100}$', clean):
+        return None
+    url = f"https://www.youtube.com/@{clean}"
+    try:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0 (compatible; STARLING/1.0)"})
+        # Primary: channelId JSON field embedded in page source
+        m = re.search(r'"channelId":"(UC[A-Za-z0-9_\-]{22})"', resp.text)
+        if m and _CHANNEL_ID_RE.match(m.group(1)):
+            return m.group(1)
+        # Fallback: <link rel="canonical"> tag
+        m = re.search(r'<link rel="canonical" href="https://www\.youtube\.com/channel/(UC[A-Za-z0-9_\-]{22})"', resp.text)
+        if m and _CHANNEL_ID_RE.match(m.group(1)):
+            return m.group(1)
+        return None
+    except Exception as exc:
+        logger.warning("Handle no-API resolution failed for %r: %s", handle, exc)
+        return None
+
+
 async def _enrich_with_durations(videos: list[dict]) -> None:
     """
     Phase 2: Mutates videos in-place adding duration_seconds (int) and
@@ -467,8 +572,9 @@ async def _fetch_subscribed_channels() -> tuple[list[str], str]:
 
 @router.get("/youtube")
 async def get_youtube(
-    channel: str              = Query(None),
-    sort:    str              = Query("date"),
+    channel:         str = Query(None),
+    sort:            str = Query("date"),
+    max_per_channel: int = Query(default=15, ge=1, le=15),
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
     """
@@ -507,7 +613,7 @@ async def get_youtube(
 
     cache_key = "youtube_" + "_".join(sorted(channels))
 
-    # Serve from cache if fresh
+    # ── Serve from in-memory cache if fresh ──────────────────────────────────
     cached = _raw_cache.get(cache_key)
     if cached and (time.time() - cached["ts"]) < _CACHE_SECONDS:
         data = dict(cached["data"])
@@ -522,11 +628,43 @@ async def get_youtube(
             "pending" if cache_key in _synth_busy else
             "none"
         )
-        session_log.log("tool_result", {"endpoint": "/youtube", "source": "cache", "total": data["total"]})
+        session_log.log("tool_result", {"endpoint": "/youtube", "source": "memory_cache", "total": data["total"]})
+        return data
+
+    # ── Serve from disk cache if within 12-hour TTL ───────────────────────────
+    disk_key   = _disk_cache_key(channels, max_per_channel)
+    disk_cache = _load_disk_cache()
+    disk_entry = disk_cache.get(disk_key)
+    if disk_entry and (time.time() - disk_entry["ts"]) < _DISK_CACHE_TTL:
+        data = dict(disk_entry["data"])
+        data["cache_age"] = int(time.time() - disk_entry["ts"])
+        # Re-sort if the requested sort differs from what was cached
+        if sort != data.get("sort", "date"):
+            vids = data["videos"]
+            if sort == "views":
+                vids.sort(key=lambda v: v["views"], reverse=True)
+            elif sort == "channel":
+                vids.sort(key=lambda v: (v["channel"].lower(), -v["published_ts"]))
+            else:
+                vids.sort(key=lambda v: v["published_ts"], reverse=True)
+            data["sort"] = sort
+        # Warm up in-memory cache from disk
+        _raw_cache[cache_key] = {"ts": disk_entry["ts"], "data": disk_entry["data"]}
+        for ch_id, ch_name in (disk_entry["data"].get("channel_names") or {}).items():
+            _channel_name_map.setdefault(ch_id, ch_name)
+        synth_cached = _synth_cache.get(cache_key)
+        if _SYNTHESIS_ON and cache_key not in _synth_busy and not synth_cached:
+            background_tasks.add_task(_run_synthesis_bg, disk_entry["data"]["videos"], cache_key)
+        data["synthesis_status"] = (
+            "ready"   if _synth_cache.get(cache_key) else
+            "pending" if cache_key in _synth_busy else
+            "none"
+        )
+        session_log.log("tool_result", {"endpoint": "/youtube", "source": "disk_cache", "total": data["total"]})
         return data
 
     # Fresh fetch
-    all_videos, by_channel = await _fetch_all_channels_parallel(channels)
+    all_videos, by_channel = await _fetch_all_channels_parallel(channels, max_per_channel=max_per_channel)
 
     # Phase 2: enrich with durations if API key is configured
     if _API_CONFIGURED:
@@ -562,6 +700,10 @@ async def get_youtube(
 
     _raw_cache[cache_key] = {"ts": time.time(), "data": data}
 
+    # Persist to disk cache for cross-restart reuse (12-hour TTL)
+    disk_cache[disk_key] = {"ts": time.time(), "data": data}
+    _save_disk_cache(disk_cache)
+
     if _SYNTHESIS_ON and cache_key not in _synth_busy:
         _synth_cache.pop(cache_key, None)
         background_tasks.add_task(_run_synthesis_bg, all_videos, cache_key)
@@ -593,12 +735,13 @@ async def get_youtube_synthesised(channel: str = Query(None)):
 
 @router.delete("/youtube/cache")
 async def delete_youtube_cache():
-    """Clear all YouTube caches (forces fresh fetch on next request)."""
+    """Clear all YouTube caches — in-memory and on-disk — forcing a fresh fetch next request."""
     _raw_cache.clear()
     _synth_cache.clear()
     _synth_busy.clear()
     _channel_name_map.clear()
     _subs_cache.clear()
+    _save_disk_cache({})
     session_log.log("tool_call", {"endpoint": "DELETE /youtube/cache"})
     return {"status": "cleared"}
 
@@ -611,9 +754,23 @@ class ChannelAddRequest(BaseModel):
 
 @router.get("/youtube/channels")
 async def get_youtube_channels():
-    """Return the current list of followed channels with their resolved display names."""
-    channels = _load_channels()
-    return [{"id": ch, "name": _channel_name_map.get(ch)} for ch in channels]
+    """Return the full channel list — resolved and pending — with name, handle, and resolution status."""
+    objects = _load_channel_objects()
+    if not objects:
+        channels = _load_channels()
+        return [{"id": ch, "channel_id": ch, "name": _channel_name_map.get(ch), "handle": None, "resolved": True} for ch in channels]
+    result = []
+    for obj in objects:
+        cid = obj.get("channel_id")
+        resolved = bool(cid and _CHANNEL_ID_RE.match(cid))
+        result.append({
+            "id":         cid,
+            "channel_id": cid,
+            "name":       obj.get("name") or _channel_name_map.get(cid or ""),
+            "handle":     obj.get("handle"),
+            "resolved":   resolved,
+        })
+    return result
 
 
 @router.post("/youtube/channels")
@@ -629,6 +786,73 @@ async def post_youtube_channel(body: ChannelAddRequest):
     _raw_cache.clear()
     _synth_cache.clear()
     return {"status": "added", "channel_id": body.channel_id}
+
+
+@router.post("/youtube/channels/resolve-pending")
+async def resolve_pending_channels():
+    """
+    Attempt to resolve unresolved channels (those with a handle but no channel_id)
+    by scraping their YouTube handle pages.  No API key required.
+    Returns a summary of resolved / failed counts.
+    """
+    objects = _load_channel_objects()
+    if not objects:
+        return {"resolved": 0, "failed": 0, "already_resolved": 0, "total": 0}
+
+    resolved_count  = 0
+    failed_count    = 0
+    already_count   = 0
+    updated_objects = []
+
+    for obj in objects:
+        cid    = obj.get("channel_id")
+        handle = obj.get("handle")
+        name   = obj.get("name", handle or "?")
+
+        if cid and _CHANNEL_ID_RE.match(cid):
+            already_count += 1
+            updated_objects.append(obj)
+            continue
+
+        if not handle:
+            logger.info("No handle for channel %r — skipping", name)
+            failed_count += 1
+            updated_objects.append(obj)
+            continue
+
+        # Try API-based resolution first if configured
+        new_id = None
+        if _API_CONFIGURED:
+            new_id = await _resolve_handle_to_channel_id(handle)
+        if new_id is None:
+            new_id = await _resolve_handle_no_api(handle)
+
+        if new_id:
+            logger.info("Resolved %r -> %s", name, new_id)
+            _channel_name_map[new_id] = name
+            updated_objects.append({**obj, "channel_id": new_id})
+            resolved_count += 1
+        else:
+            logger.warning("Could not resolve handle %r for channel %r", handle, name)
+            updated_objects.append(obj)
+            failed_count += 1
+
+    try:
+        _CHANNELS_FILE.write_text(json.dumps(updated_objects, indent=2), encoding="utf-8")
+    except Exception as exc:
+        logger.error("Failed to save resolved channels: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to save resolved channels.")
+
+    _raw_cache.clear()
+    _synth_cache.clear()
+    session_log.log("tool_call", {"endpoint": "POST /youtube/channels/resolve-pending",
+                                   "resolved": resolved_count, "failed": failed_count})
+    return {
+        "resolved":         resolved_count,
+        "failed":           failed_count,
+        "already_resolved": already_count,
+        "total":            len(updated_objects),
+    }
 
 
 @router.delete("/youtube/channels/{channel_id}")

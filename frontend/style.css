@@ -2913,6 +2913,29 @@ a.news-story-source-title:hover {
   color: rgba(200, 200, 200, 0.9);
 }
 
+.yt-settings-channel-row--pending {
+  opacity: 0.55;
+}
+
+.yt-settings-pending-header {
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  color: rgba(200, 200, 200, 0.4);
+  padding: 10px 0 4px;
+  border-top: 1px solid rgba(200, 200, 200, 0.08);
+  margin-top: 6px;
+}
+
+.yt-settings-pending-badge {
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: rgba(200, 200, 200, 0.35);
+  border: 1px solid rgba(200, 200, 200, 0.15);
+  padding: 1px 5px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
 .yt-settings-add-row {
   display: flex;
   gap: 8px;
@@ -4210,16 +4233,55 @@ a.news-story-source-title:hover {
   color: rgba(10, 10, 10, 0.95);
 }
 
+/* ── Calendar-mode layout (mirrors weather-mode) ────────────────────────────── */
+.starling.cal-mode .col-left {
+  width: 37%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: 16px;
+  transform: none;
+  overflow: hidden;
+}
+.starling.cal-mode .col-left .ring-section {
+  width: auto;
+}
+.starling.cal-mode .ring-section {
+  transform: translateY(-10px);
+  transition: transform 0.5s ease;
+}
+.starling.cal-mode .col-left .chat-panel {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  max-height: none;
+  opacity: 0.85;
+}
+.starling.cal-mode .col-left .msg {
+  font-size: 10px;
+  line-height: 1.45;
+  padding: 4px 0;
+}
+.starling.cal-mode .cal-panel {
+  width: 58%;
+  margin-left: 1%;
+  animation: weatherFadeIn 0.35s ease;
+}
+
 /* ── Calendar Panel ──────────────────────────────────────────────────────────── */
 
 .cal-panel {
-  width: 100%;
+  flex-shrink: 0;
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
-  padding: 16px 20px 14px;
-  margin-top: 12px;
-  animation: weatherFadeIn 0.35s ease;
+  padding: 18px 22px 16px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
 }
 
 .cal-panel.hidden {
@@ -4233,6 +4295,8 @@ a.news-story-source-title:hover {
   margin-bottom: 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   padding-bottom: 8px;
+  padding-right: 32px;
+  position: relative;
 }
 
 .cal-today-label {
@@ -4248,6 +4312,23 @@ a.news-story-source-title:hover {
   color: #555;
   letter-spacing: 0.08em;
 }
+
+.cal-close-btn {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 4px;
+  color: #666;
+  cursor: pointer;
+  font-size: 0.7rem;
+  line-height: 1;
+  padding: 2px 7px;
+  transition: border-color 0.15s, color 0.15s;
+  flex-shrink: 0;
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+.cal-close-btn:hover { border-color: rgba(255,255,255,0.35); color: #ccc; }
 
 .cal-section-title {
   font-size: 0.6rem;
@@ -4287,46 +4368,46 @@ a.news-story-source-title:hover {
 
 .cal-event {
   display: grid;
-  grid-template-columns: 80px 1fr;
-  column-gap: 12px;
+  grid-template-columns: 90px 1fr;
+  column-gap: 14px;
   align-items: start;
-  padding: 7px 10px;
-  background: rgba(255, 255, 255, 0.025);
-  border-radius: 6px;
-  border-left: 2px solid rgba(255, 255, 255, 0.1);
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 7px;
+  border-left: 2px solid rgba(255, 255, 255, 0.12);
 }
 
 .cal-event-time {
   font-family: 'Share Tech Mono', monospace;
-  font-size: 0.7rem;
-  color: #888;
+  font-size: 0.75rem;
+  color: #999;
   white-space: nowrap;
+  padding-top: 1px;
 }
 
 .cal-event-title {
-  font-size: 0.78rem;
-  color: #ddd;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 0.85rem;
+  color: #e0e0e0;
+  line-height: 1.4;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .cal-event-location {
-  font-size: 0.65rem;
-  color: #555;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 0.72rem;
+  color: #666;
+  margin-top: 3px;
+  word-break: break-word;
   grid-column: 2;
 }
 
 .cal-event-day-label {
-  font-size: 0.6rem;
-  color: #555;
-  letter-spacing: 0.1em;
+  font-size: 0.65rem;
+  color: #666;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  margin-top: 8px;
-  margin-bottom: 2px;
+  margin-top: 10px;
+  margin-bottom: 3px;
   padding-left: 2px;
 }
 

@@ -67,6 +67,12 @@ LLAMA_GPU_LAYERS = _cfg("LLAMA_GPU_LAYERS", "999")
 LLAMA_CTX_SIZE   = _cfg("LLAMA_CTX_SIZE",   "4096")
 BACKEND_PORT     = _cfg("BACKEND_PORT",     "8000")
 
+# How long to wait for llama-server to print its ready marker before starting the backend.
+# Keeps Python's CUDA/ONNX module-level init (stt.py, tts.py) from racing with
+# llama-server's GPU model load, which can cause an indefinite CUDA stall.
+_LLAMA_READY_MARKER  = "server is listening"
+_LLAMA_READY_TIMEOUT = int(_cfg("LLAMA_READY_TIMEOUT", "120"))  # seconds
+
 # ── Terminal colours (ANSI) ───────────────────────────────────────────────────
 
 _R    = "\033[0m"       # reset
@@ -209,6 +215,40 @@ def start_backend() -> "subprocess.Popen[bytes]":
     )
 
 
+def _wait_for_llama_ready(proc: "subprocess.Popen[bytes]") -> bool:
+    """
+    Read llama-server stdout line-by-line, echoing each line, until the server
+    prints its ready marker or the timeout expires.
+
+    This keeps the FastAPI backend from starting (and triggering CUDA/ONNX
+    module-level initialisation) while llama-server is still loading its model
+    onto the GPU — the overlap is what causes the intermittent CUDA stall.
+
+    Returns True when the marker is found, False on timeout or early process exit.
+    """
+    deadline = time.time() + _LLAMA_READY_TIMEOUT
+    while time.time() < deadline:
+        if proc.poll() is not None:
+            _err("llama-server exited before becoming ready.")
+            return False
+        raw = proc.stdout.readline()  # type: ignore[union-attr]
+        if not raw:
+            time.sleep(0.05)
+            continue
+        try:
+            line = raw.decode("utf-8", errors="replace").rstrip()
+        except Exception:
+            continue
+        print(f"{_CYAN}[llama]{_R} {line}", flush=True)
+        if _LLAMA_READY_MARKER in line:
+            return True
+    _err(
+        f"llama-server did not print '{_LLAMA_READY_MARKER}' within {_LLAMA_READY_TIMEOUT}s "
+        "— starting backend anyway."
+    )
+    return False
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -220,6 +260,14 @@ def main() -> None:
         signal.signal(signal.SIGTERM, shutdown_handler)
 
     _llama_proc   = start_llama()
+
+    # Wait for llama-server to finish loading its model before starting the backend.
+    # The backend imports stt.py and tts.py at module level, both of which trigger
+    # CUDA/ONNX device queries.  Running those queries while llama-server is still
+    # allocating VRAM can cause an indefinite CUDA context stall.
+    _info(f"Waiting for llama-server (ready marker: '{_LLAMA_READY_MARKER}')…")
+    _wait_for_llama_ready(_llama_proc)
+
     _backend_proc = start_backend()
 
     _write_pid_file()

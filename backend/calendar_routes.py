@@ -4,9 +4,11 @@ Calendar data fetching via CalDAV (iCloud, Nextcloud, Fastmail, etc.).
 Exposes GET /calendar and DELETE /calendar/cache endpoints.
 """
 
+import json
 import os
 import time
 from datetime import datetime, timedelta, time as dt_time
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException
@@ -14,16 +16,39 @@ from fastapi import APIRouter, HTTPException
 router = APIRouter()
 
 # ── Config ────────────────────────────────────────────────────────────────────
+_BASE_DIR      = Path(__file__).parent
+
 _TZ_NAME       = os.getenv("CALENDAR_TIMEZONE", "America/New_York")
 _LOOKAHEAD     = int(os.getenv("CALENDAR_LOOKAHEAD_DAYS", "7"))
-_CACHE_SECONDS = int(os.getenv("CALENDAR_CACHE_SECONDS", "300"))
+_CACHE_SECONDS = int(os.getenv("CALENDAR_CACHE_SECONDS", "3600"))  # 1 hour default
+_CACHE_FILE    = _BASE_DIR / os.getenv("CALENDAR_CACHE_FILE", "memory/calendar_cache.json")
 
 _CALDAV_URL  = os.getenv("CALDAV_URL", "")
 _CALDAV_USER = os.getenv("CALDAV_USERNAME", "")
 _CALDAV_PASS = os.getenv("CALDAV_PASSWORD", "")
 
-# ── In-memory cache ───────────────────────────────────────────────────────────
-_cache: dict = {}
+# ── Ensure cache directory exists ─────────────────────────────────────────────
+_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+if not _CACHE_FILE.exists():
+    _CACHE_FILE.write_text("{}", encoding="utf-8")
+
+# ── In-memory hot cache (avoids disk read on every request) ───────────────────
+_mem_cache: dict = {}
+
+
+# ── File I/O helpers ──────────────────────────────────────────────────────────
+
+def _load_cache() -> dict:
+    try:
+        return json.loads(_CACHE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _save_cache(data: dict) -> None:
+    tmp = _CACHE_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, _CACHE_FILE)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -66,39 +91,44 @@ def _today_label(tz: ZoneInfo) -> str:
 def _build_llm_context(events_today: list, events_week: list, label: str) -> str:
     tz  = _tz()
     now = datetime.now(tz)
+    time_str = now.strftime("%I:%M %p").lstrip("0")
 
-    if not events_today:
-        today_summary = f"You have no events scheduled for today, {label}."
-    else:
-        parts = []
+    lines = [f"[CALENDAR DATA — {label} at {time_str} {_TZ_NAME}]", ""]
+
+    # ── Today ─────────────────────────────────────────────────────────────────
+    lines.append(f"TODAY ({label}):")
+    if events_today:
         for e in events_today:
-            t = e["time"] if e["time"] != "All day" else "all day"
-            entry = f"{t}: {e['title']}"
-            if e.get("location"):
-                entry += f" at {e['location']}"
-            parts.append(entry)
-        today_summary = (
-            f"Today is {label}. You have {len(events_today)} event"
-            f"{'s' if len(events_today) != 1 else ''} scheduled: "
-            + "; ".join(parts) + "."
-        )
+            t = e["time"] if e["time"] != "All day" else "All day"
+            loc = f"  [at {e['location']}]" if e.get("location") else ""
+            lines.append(f"  - {t}: {e['title']}{loc}")
+    else:
+        lines.append("  (no events today)")
 
-    upcoming = [e for e in events_week if e["date"] != datetime.now(tz).strftime("%Y-%m-%d")]
+    lines.append("")
+
+    # ── Upcoming ─────────────────────────────────────────────────────────────
+    today_date = now.strftime("%Y-%m-%d")
+    upcoming   = [e for e in events_week if e["date"] != today_date]
+
+    lines.append("UPCOMING:")
     if upcoming:
         by_day: dict = {}
         for e in upcoming:
-            by_day.setdefault(e["day"], []).append(e["title"])
-        week_summary = "Later this week: " + "; ".join(
-            f"{day} — {', '.join(titles)}" for day, titles in list(by_day.items())[:5]
-        ) + "."
+            key = (e["date"], e["day"])
+            by_day.setdefault(key, []).append(e)
+        for (date_str, day_name), evts in sorted(by_day.items()):
+            # Human-readable date label, e.g. "Tuesday, June 3"
+            dt_obj = datetime.strptime(date_str, "%Y-%m-%d")
+            day_label = dt_obj.strftime("%A, %B %d").replace(" 0", " ")
+            for e in evts:
+                t   = e["time"] if e["time"] != "All day" else "All day"
+                loc = f"  [at {e['location']}]" if e.get("location") else ""
+                lines.append(f"  - {day_label}: {t}: {e['title']}{loc}")
     else:
-        week_summary = "Nothing else scheduled for the rest of the period."
+        lines.append("  (nothing scheduled this period)")
 
-    time_str = now.strftime("%I:%M %p").lstrip("0")
-    return (
-        f"[CALENDAR CONTEXT — {now.strftime('%A, %B %d').replace(' 0', ' ')} "
-        f"at {time_str} {_TZ_NAME}]\n{today_summary} {week_summary}"
-    )
+    return "\n".join(lines)
 
 
 # ── CalDAV fetch ──────────────────────────────────────────────────────────────
@@ -171,16 +201,25 @@ async def _fetch_caldav(start: datetime, end: datetime) -> list[dict]:
 async def get_calendar():
     """
     Return today's events plus a lookahead window.
-    Cached for CALENDAR_CACHE_SECONDS.
+    Served from disk cache for up to CALENDAR_CACHE_SECONDS (default 1 hour).
     """
     tz        = _tz()
     today_key = datetime.now(tz).strftime("%Y-%m-%d")
     cache_key = f"cal_{today_key}"
 
-    cached = _cache.get(cache_key)
+    # 1. Check hot in-memory cache first (fastest path)
+    cached = _mem_cache.get(cache_key)
     if cached and (time.time() - cached["ts"]) < _CACHE_SECONDS:
         return cached["data"]
 
+    # 2. Check disk cache (survives server restarts)
+    disk = _load_cache()
+    entry = disk.get(cache_key)
+    if entry and (time.time() - entry["ts"]) < _CACHE_SECONDS:
+        _mem_cache[cache_key] = entry  # warm memory cache
+        return entry["data"]
+
+    # 3. Fetch from iCloud
     today_start, today_end = _day_window(0)
     week_start,  week_end  = _week_window()
 
@@ -204,12 +243,18 @@ async def get_calendar():
         "backend":     "caldav",
     }
 
-    _cache[cache_key] = {"ts": time.time(), "data": data}
+    new_entry = {"ts": time.time(), "data": data}
+    _mem_cache[cache_key] = new_entry
+
+    # Persist to disk (keep only the latest key to avoid unbounded growth)
+    _save_cache({cache_key: new_entry})
+
     return data
 
 
 @router.delete("/calendar/cache")
 async def bust_calendar_cache():
-    """Force-clear the calendar cache — useful after creating a new event."""
-    _cache.clear()
+    """Force-clear both the in-memory and disk calendar cache."""
+    _mem_cache.clear()
+    _save_cache({})
     return {"status": "cleared"}

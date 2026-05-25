@@ -99,10 +99,17 @@ async def startup_event():
     _log = logging.getLogger(__name__)
     session_log.log_session_start(llm_backend=LLM_BACKEND, pid=os.getpid())
     try:
-        # Run blocking model load in a thread so it doesn't block the event loop
+        # Run blocking model load in a thread so it doesn't block the event loop.
+        # The 30-second timeout ensures the server always finishes starting even if
+        # ChromaDB has a stale lock or any other blocking condition occurs.
         loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, _wiki_load_index)
+        await asyncio.wait_for(
+            loop.run_in_executor(None, _wiki_load_index),
+            timeout=30.0,
+        )
         _log.info("Wikipedia: startup warm-up complete")
+    except asyncio.TimeoutError:
+        _log.warning("Wikipedia: startup warm-up timed out (30s) — server starting without warm index")
     except Exception as exc:
         _log.warning(f"Wikipedia: startup warm-up failed (non-fatal) — {exc}")
 

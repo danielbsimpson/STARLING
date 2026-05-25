@@ -4,6 +4,7 @@
 import { BACKEND_BASE } from './config.js';
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
+const _starlingEl    = document.querySelector('.starling');
 const calPanel       = document.getElementById('cal-panel');
 const calTodayLabel  = document.getElementById('cal-today-label');
 const calTz          = document.getElementById('cal-tz');
@@ -12,6 +13,10 @@ const calWeekList    = document.getElementById('cal-week-list');
 const calWeekToggle  = document.getElementById('cal-week-toggle');
 const calWeekChevron = document.getElementById('cal-week-chevron');
 const ftrCal         = document.getElementById('ftr-cal-backend');
+const calCloseBtn    = document.getElementById('cal-close-btn');
+
+// ── Close button ──────────────────────────────────────────────────────────────
+calCloseBtn?.addEventListener('click', closeCalendarPanel);
 
 // ── Collapsible week section ──────────────────────────────────────────────────
 calWeekToggle?.addEventListener('click', () => {
@@ -62,6 +67,7 @@ export async function openCalendarPanel(forceRefresh = false) {
 
   _renderPanel(data);
   if (ftrCal) ftrCal.textContent = data.backend?.toUpperCase() ?? 'CAL';
+  _starlingEl?.classList.add('cal-mode');
   calPanel?.classList.remove('hidden');
   calPanel?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
@@ -69,6 +75,7 @@ export async function openCalendarPanel(forceRefresh = false) {
 }
 
 export function closeCalendarPanel() {
+  _starlingEl?.classList.remove('cal-mode');
   calPanel?.classList.add('hidden');
 }
 
@@ -94,24 +101,33 @@ function _renderPanel(data) {
     }
   }
 
-  // Week events grouped by day, excluding today
+  // Default UPCOMING section to open
+  if (calWeekList)   calWeekList.classList.remove('hidden');
+  if (calWeekChevron) calWeekChevron.textContent = '▾';
+
+  // Week events grouped by date, excluding today
   if (calWeekList) {
     calWeekList.innerHTML = '';
     const todayDates = new Set(today.map(e => e.date));
-    const byDay = new Map();
+    const byDate = new Map();
     for (const e of week) {
       if (todayDates.has(e.date)) continue;
-      if (!byDay.has(e.day)) byDay.set(e.day, []);
-      byDay.get(e.day).push(e);
+      if (!byDate.has(e.date)) byDate.set(e.date, { day: e.day, events: [] });
+      byDate.get(e.date).events.push(e);
     }
 
-    if (!byDay.size) {
+    if (!byDate.size) {
       calWeekList.innerHTML = '<div class="cal-empty">Nothing else this period.</div>';
     } else {
-      for (const [day, events] of byDay) {
-        const dayLabel = document.createElement('div');
+      const _MONTHS = ['January','February','March','April','May','June',
+                       'July','August','September','October','November','December'];
+      for (const [dateStr, { day, events }] of [...byDate].sort()) {
+        const [, mm, dd] = dateStr.split('-');
+        const monthName  = _MONTHS[parseInt(mm, 10) - 1];
+        const dayNum     = parseInt(dd, 10);
+        const dayLabel   = document.createElement('div');
         dayLabel.className   = 'cal-event-day-label';
-        dayLabel.textContent = day.toUpperCase();
+        dayLabel.textContent = `${day}, ${monthName} ${dayNum}`.toUpperCase();
         calWeekList.appendChild(dayLabel);
         events.forEach(e => calWeekList.appendChild(_makeEventRow(e)));
       }

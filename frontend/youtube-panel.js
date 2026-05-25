@@ -190,8 +190,19 @@ async function _fetchAndRenderChannelList() {
     const channels = await res.json();
     if (ytSettingsChannelList) {
       ytSettingsChannelList.innerHTML = '';
-      for (const { id, name } of channels) {
-        ytSettingsChannelList.appendChild(_createChannelRow(id, name));
+      const resolved = channels.filter(ch => ch.resolved !== false);
+      const pending  = channels.filter(ch => ch.resolved === false);
+      for (const ch of resolved) {
+        ytSettingsChannelList.appendChild(_createChannelRow(ch.id || ch.channel_id, ch.name));
+      }
+      if (pending.length > 0) {
+        const header = document.createElement('div');
+        header.className = 'yt-settings-pending-header';
+        header.textContent = `${pending.length} CHANNEL${pending.length === 1 ? '' : 'S'} PENDING RESOLUTION`;
+        ytSettingsChannelList.appendChild(header);
+        for (const ch of pending) {
+          ytSettingsChannelList.appendChild(_createPendingChannelRow(ch.name, ch.handle));
+        }
       }
     }
   } catch (_) {
@@ -218,6 +229,23 @@ function _createChannelRow(channelId, displayName) {
     if (!ok) removeBtn.disabled = false;
   });
   row.appendChild(removeBtn);
+
+  return row;
+}
+
+function _createPendingChannelRow(displayName, handle) {
+  const row = document.createElement('div');
+  row.className = 'yt-settings-channel-row yt-settings-channel-row--pending';
+
+  const nameEl = document.createElement('div');
+  nameEl.className = 'yt-settings-channel-name';
+  nameEl.textContent = displayName || handle || '(unknown)';
+  row.appendChild(nameEl);
+
+  const badge = document.createElement('span');
+  badge.className = 'yt-settings-pending-badge';
+  badge.textContent = 'PENDING';
+  row.appendChild(badge);
 
   return row;
 }

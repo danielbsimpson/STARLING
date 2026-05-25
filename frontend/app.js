@@ -2224,14 +2224,17 @@ async function _routeInput(text) {
     const calContext = await openCalendarPanel(forceRefresh);
     if (calContext) {
       await sendToOllama(
-        'Give a concise spoken summary of the schedule shown. ' +
-        'Start with what is happening today, then briefly mention anything notable later this week. ' +
-        'Phrase times naturally — say "two-thirty PM" not "14:30". ' +
-        'Keep it to three or four sentences. Do not list every event robotically.',
+        'Deliver a natural spoken calendar briefing based only on the events listed in your context. ' +
+        'Do not invent, assume, or embellish any events. ' +
+        'Start with today, then mention upcoming events using accurate relative time (e.g. "next Tuesday", "in three weeks"). ' +
+        'Phrase times naturally — say "two-thirty" not "14:30". ' +
+        'If there is nothing today, say so, then move to upcoming. Keep it to three or four sentences.',
         {
           ephemeralMessages: [
-            { role: 'system', content: SYSTEM_PROMPT },
-            { role: 'system', content: calContext },
+            {
+              role: 'system',
+              content: SYSTEM_PROMPT + '\n\n' + calContext,
+            },
           ],
         }
       );

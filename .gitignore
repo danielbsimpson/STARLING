@@ -48,6 +48,13 @@ backend/memory/ideas.json
 # journal entries (personal data — do not commit)
 backend/memory/journal/
 
+# YouTube channel metadata cache
+backend/memory/youtube_cache.json
+backend/memory/youtube_channels.json
+
+# Calendar data cache
+backend/memory/calendar_cache.json
+
 # Images and Personal Files
 assets/dossier_descriptions/
 assets/dossier_images/
