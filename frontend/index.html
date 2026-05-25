@@ -190,6 +190,22 @@
         <div class="weather-forecast" id="weather-forecast"></div>
       </div>
 
+      <!-- Calendar Panel — hidden until calendar mode is active -->
+      <div class="cal-panel hidden" id="cal-panel">
+        <div class="cal-header">
+          <div class="cal-today-label" id="cal-today-label">—</div>
+          <div class="cal-tz" id="cal-tz">—</div>
+        </div>
+        <div class="cal-section-title">TODAY</div>
+        <div class="cal-event-list" id="cal-today-list">
+          <div class="cal-empty">No events scheduled.</div>
+        </div>
+        <div class="cal-section-title cal-week-toggle" id="cal-week-toggle">
+          THIS WEEK <span id="cal-week-chevron">▸</span>
+        </div>
+        <div class="cal-event-list cal-week-list hidden" id="cal-week-list"></div>
+      </div>
+
       <!-- Neon image panel — zero-width in normal mode -->
       <div class="pres-panel" id="pres-panel">
         <span class="edge edge-top"></span>
@@ -655,6 +671,7 @@ Press SUBMIT when finished dictating.</span>
       <div class="ftr-item">TTS <span id="ftr-tts">Kokoro (local)</span><span class="ftr-dev" id="ftr-kokoro-dev">—</span></div>
       <div class="ftr-item">WX <span id="ftr-wx-location">—</span></div>
       <div class="ftr-item">MKT <span id="ftr-mkt-status" class="ftr-dev">—</span></div>
+      <div class="ftr-item">CAL <span id="ftr-cal-backend">—</span></div>
       <div class="ftr-item">SPACE <span>push-to-talk</span></div>
     </footer>
 

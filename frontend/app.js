@@ -6,6 +6,7 @@ import { detectNewsTrigger, openNewsPanel, closeNewsPanel, initNewsPanel, isNews
 import { detectRedditTrigger, openRedditPanel, closeRedditPanel, initRedditPanel } from './reddit-panel.js';
 import { detectYouTubeTrigger, openYouTubePanel, closeYouTubePanel, initYouTubePanel } from './youtube-panel.js';
 import { detectMarketTrigger, openMarketPanel, closeMarketPanel, setSendToOllama as _setMktSendToOllama, setOnClose as _setMktOnClose } from './stocks-panel.js';
+import { detectCalendarTrigger, openCalendarPanel, closeCalendarPanel, isCalendarPanelOpen } from './calendar-panel.js';
 import { detectBrowserTrigger, detectBrowserClose, detectWikiSectionTrigger, isBrowserPanelOpen, openBrowserPanel, closeBrowserPanel, getBrowserPageText, ensureBrowserPageText, getBrowserPageUrl, getBrowserJsRendered } from './browser-panel.js';
 import { getInterruptPhrase } from './interrupt-phrases.js';
 import {
@@ -2208,6 +2209,36 @@ async function _routeInput(text) {
       _playbackChain.then(() => { /* panel stays open — user can ask follow-up questions */ });
     } else {
       await sendToOllama('Inform the user that weather data could not be retrieved right now. One sentence.');
+    }
+    fetchSystemStatus();
+    return;
+  }
+
+  // ── Calendar intercept ─────────────────────────────────────────────────────
+  if (detectCalendarTrigger(text)) {
+    logEvent('tool_dispatch', { tool: 'calendar', trigger_phrase: text });
+    closeBrowserPanel();
+    setState('thinking');
+    appendMessage('user', text);
+    const forceRefresh = /\b(?:refresh|update|sync)\b/i.test(text);
+    const calContext = await openCalendarPanel(forceRefresh);
+    if (calContext) {
+      await sendToOllama(
+        'Give a concise spoken summary of the schedule shown. ' +
+        'Start with what is happening today, then briefly mention anything notable later this week. ' +
+        'Phrase times naturally — say "two-thirty PM" not "14:30". ' +
+        'Keep it to three or four sentences. Do not list every event robotically.',
+        {
+          ephemeralMessages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'system', content: calContext },
+          ],
+        }
+      );
+    } else {
+      await sendToOllama(
+        'Inform the user that the calendar could not be reached right now. One sentence.'
+      );
     }
     fetchSystemStatus();
     return;

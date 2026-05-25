@@ -4210,6 +4210,126 @@ a.news-story-source-title:hover {
   color: rgba(10, 10, 10, 0.95);
 }
 
+/* ── Calendar Panel ──────────────────────────────────────────────────────────── */
+
+.cal-panel {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 16px 20px 14px;
+  margin-top: 12px;
+  animation: weatherFadeIn 0.35s ease;
+}
+
+.cal-panel.hidden {
+  display: none;
+}
+
+.cal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 8px;
+}
+
+.cal-today-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: clamp(0.75rem, 1.4vw, 0.95rem);
+  color: #e0e0e0;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.cal-tz {
+  font-size: 0.6rem;
+  color: #555;
+  letter-spacing: 0.08em;
+}
+
+.cal-section-title {
+  font-size: 0.6rem;
+  color: #555;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin: 12px 0 6px;
+}
+
+.cal-week-toggle {
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.cal-week-toggle:hover {
+  color: #888;
+}
+
+.cal-event-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cal-event-list.hidden {
+  display: none;
+}
+
+.cal-empty {
+  font-size: 0.7rem;
+  color: #444;
+  padding: 4px 0;
+}
+
+.cal-event {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  column-gap: 12px;
+  align-items: start;
+  padding: 7px 10px;
+  background: rgba(255, 255, 255, 0.025);
+  border-radius: 6px;
+  border-left: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.cal-event-time {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.7rem;
+  color: #888;
+  white-space: nowrap;
+}
+
+.cal-event-title {
+  font-size: 0.78rem;
+  color: #ddd;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cal-event-location {
+  font-size: 0.65rem;
+  color: #555;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  grid-column: 2;
+}
+
+.cal-event-day-label {
+  font-size: 0.6rem;
+  color: #555;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-top: 8px;
+  margin-bottom: 2px;
+  padding-left: 2px;
+}
+
 /* ── Menu sections (inside toolkit panel) ──────────────────────────────────── */
 .menu-section {
   margin-bottom: 24px;
