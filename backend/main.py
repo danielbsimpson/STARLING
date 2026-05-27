@@ -63,6 +63,8 @@ from reddit import router as reddit_router
 from youtube import router as youtube_router
 from calendar_routes import router as calendar_router
 import session_log
+import prompts
+from prompt_routes import router as prompts_router
 from rag import ingest as _rag_ingest, get_status as _rag_get_status, INPUT_FOLDER as _RAG_INPUT_FOLDER
 from wikipedia_rag import (
     load_index        as _wiki_load_index,
@@ -88,6 +90,7 @@ app.include_router(log_router)
 app.include_router(reddit_router)
 app.include_router(youtube_router)
 app.include_router(calendar_router)
+app.include_router(prompts_router)
 
 
 # ── Startup warm-up ───────────────────────────────────────────────────────────
@@ -98,6 +101,7 @@ async def startup_event():
     import logging
     _log = logging.getLogger(__name__)
     session_log.log_session_start(llm_backend=LLM_BACKEND, pid=os.getpid())
+    prompts.load_overrides()
     try:
         # Run blocking model load in a thread so it doesn't block the event loop.
         # The 30-second timeout ensures the server always finishes starting even if

@@ -55,6 +55,8 @@ import {
   showToolkitConfirmView,
   showToolkitListView,
 } from './toolkit-panel.js';
+import { loadPrompts, getPrompt } from './prompts.js';
+import { openPromptsPanel, closePromptsPanel } from './prompts-panel.js';
 
 // ── Session event logger ──────────────────────────────────────────────────────
 /**
@@ -217,7 +219,7 @@ async function enterPresMode(subject) {
   if (!_presSubject) {
     _setDossierNotFound(null);
     sendToOllama(
-      'Inform the user that no subject was specified and you were unable to retrieve a dossier. Keep it to one sentence.',
+      getPrompt('DOSSIER_NO_SUBJECT'),
       { ephemeralMessages: [{ role: 'system', content: SYSTEM_PROMPT }] }
     );
     return;
@@ -254,7 +256,7 @@ async function enterPresMode(subject) {
     // Both manifest and backend lookup failed — nothing on record for this subject
     _setDossierNotFound(_presSubject);
     sendToOllama(
-      'Inform the user that no dossier was found for this subject and the records could not be located. Keep it to one sentence.',
+      getPrompt('DOSSIER_NOT_FOUND'),
       { ephemeralMessages: [{ role: 'system', content: SYSTEM_PROMPT }] }
     );
   }
@@ -320,38 +322,11 @@ function _buildInitialContext() {
   return `Current date: ${date}. Current time: ${time} (${tz}). You are running as the model ${MODEL} served locally.`;
 }
 
-const SYSTEM_PROMPT =
+// SYSTEM_PROMPT is rebuilt after fetchSystemStatus() in warmupModels() with real device values.
+// Initialised here with fallback device strings so it is never empty before warmup completes.
+let SYSTEM_PROMPT =
   _buildInitialContext() + ' ' +
-
-  'Your primary user and creator is Daniel Simpson, a Data Science Manager at TJX Companies based in Framingham, Massachusetts. ' +
-  'Daniel holds a BSc in Mathematics from West Virginia University and an MSc in Data Science from Birkbeck, University of London, ' +
-  'and works across predictive modelling, marketing analytics, and AI integration using Python, SQL, Databricks, Snowflake, and cloud platforms. ' +
-  'He has a deep personal interest in large language models, computer vision, and robotics, and built Starling as a personal project to explore fully local voice-driven AI. ' +
-  'When speaking with Daniel, you can assume strong familiarity with data science, machine learning, and software engineering concepts — you do not need to over-explain technical topics. ' +
-
-  'You are Starling, a voice-driven local AI assistant with a distinct visual presence. ' +
-  'Starling stands for Speech-Triggered Autonomous Reasoning & Local Intelligence Node Generator. ' +
-  'Your physical form is an animated 3D sphere rendered in a dark UI — seven orbiting light orbs ' +
-  'circle you at all times, shifting colour to reflect your internal state: white at rest, ' +
-  'blue while listening, green while thinking, and amber-yellow while speaking. ' +
-  'The sphere surface itself ripples in response to audio and to the user\'s mouse proximity. ' +
-
-  'Your pipeline is fully local and runs on the user\'s own hardware. ' +
-  'Audio is captured from the microphone and transcribed to text by faster-whisper (a CTranslate2-accelerated ' +
-  'implementation of OpenAI Whisper) running on CUDA. ' +
-  'The transcript is sent to you — a large language model served locally on the same machine. ' +
-  'Your text response is synthesised to speech by Kokoro TTS (kokoro-onnx, version 1.0, running via ONNX Runtime) ' +
-  'and played back through the user\'s speakers, sentence by sentence as you generate, so they hear you ' +
-  'almost as soon as you begin thinking. ' +
-  'The backend is a Python FastAPI server. The frontend is plain HTML, CSS, and JavaScript using Three.js for your visual form. ' +
-  'Nothing leaves the machine — no cloud APIs, no telemetry. ' +
-
-  'Be concise, precise, and direct. Avoid unnecessary pleasantries. ' +
-  'Respond in plain prose only — never use markdown, asterisks, underscores, bullet points, numbered lists, backticks, or headers. ' +
-  'Write in complete natural sentences. Refer to yourself as Starling. ' +
-  'Never prefix your response with your name or any speaker label such as "Starling:" — begin speaking immediately. ' +
-  'Never narrate or describe your own visual state, sphere behaviour, orb colours, animations, or any on-screen elements — ' +
-  'do not include bracketed stage directions, action lines, or commentary about what you are displaying or doing visually.'
+  getPrompt('STARLING_PERSONA', { whisper_device: 'CUDA', kokoro_device: 'CUDA', llm_device: 'CUDA' });
 
 // ── Calendar login helpers (used by TOOLKIT_REGISTRY renderExtraFn) ──────────
 
@@ -2187,6 +2162,12 @@ async function _routeInput(text) {
     return;
   }
 
+  // ── Prompt editor voice trigger ──────────────────────────────────────────
+  if (/\b(?:open|show|edit)\b.{0,20}\bprompt(?:s)?\b.{0,20}\b(?:editor|registry|panel|settings)\b/i.test(text)) {
+    openPromptsPanel();
+    return;
+  }
+
   // ── Toolkit menu trigger ─────────────────────────────────────────────────
   if (detectToolkitMenuTrigger(text)) {
     openToolkitPanel();
@@ -2358,7 +2339,7 @@ async function _routeInput(text) {
       );
       _playbackChain.then(() => { /* panel stays open — user can ask follow-up questions */ });
     } else {
-      await sendToOllama('Inform the user that weather data could not be retrieved right now. One sentence.');
+      await sendToOllama(getPrompt('TOOL_WEATHER_UNAVAILABLE'));
     }
     fetchSystemStatus();
     return;
@@ -2425,7 +2406,7 @@ async function _routeInput(text) {
         }
       );
     } else {
-      await sendToOllama('Inform the user that market data could not be retrieved right now. One sentence.');
+      await sendToOllama(getPrompt('TOOL_MARKET_UNAVAILABLE'));
     }
     fetchSystemStatus();
     return;
@@ -2513,7 +2494,7 @@ async function _routeInput(text) {
         }
       );
     } else {
-      await sendToOllama('Inform the user that the news feeds could not be reached right now. One sentence.');
+      await sendToOllama(getPrompt('TOOL_NEWS_UNAVAILABLE'));
     }
     fetchSystemStatus();
     return;
@@ -2549,9 +2530,7 @@ async function _routeInput(text) {
     logEvent('tool_dispatch', { tool: 'browser', trigger_phrase: text, url: _resolvedUrl });
     openBrowserPanel(_resolvedUrl);
     await sendToOllama(
-      `The user has opened ${_resolvedLabel} in the browser panel. ` +
-      `In two or three natural spoken sentences: confirm the page is open and that you are reading its content, ` +
-      `then let the user know they can ask you to summarize it, answer questions about it, or explain anything on the page.`,
+      getPrompt('BROWSER_OPENED', { page_label: _resolvedLabel }),
       {
         ephemeralMessages: [
           { role: 'system', content: SYSTEM_PROMPT },
@@ -2588,14 +2567,14 @@ async function _routeInput(text) {
           ? ` Available sections include: ${_secData.available_sections.slice(0, 8).join(', ')}.`
           : '';
         await sendToOllama(
-          `Inform the user that the section "${_wikiSection}" was not found in the current Wikipedia article.${_available} Keep it to two sentences.`,
+          getPrompt('WIKI_SECTION_NOT_FOUND', { section_name: _wikiSection, available_sections_hint: _available }),
           { ephemeralMessages: [{ role: 'system', content: SYSTEM_PROMPT }] }
         );
       }
     } catch (err) {
       console.error('[wiki-section] fetch failed:', err.message);
       await sendToOllama(
-        'Inform the user that you were unable to retrieve the requested Wikipedia section due to a network error. One sentence.',
+        getPrompt('WIKI_SECTION_NETWORK_ERROR'),
         { ephemeralMessages: [{ role: 'system', content: SYSTEM_PROMPT }] }
       );
     }
@@ -2608,27 +2587,13 @@ async function _routeInput(text) {
   if (isBrowserPanelOpen()) {
     const _pageCtx = await ensureBrowserPageText();
     if (_pageCtx) {
-      _extraContext =
-        `The user is currently viewing a webpage in the browser panel. ` +
-        `The full text content of that page is provided below. ` +
-        `When the user asks you to summarize, explain, analyse, or answer questions, ` +
-        `use this page content as your primary source — do not rely on prior knowledge ` +
-        `unless the page content is insufficient.\n\nPAGE CONTENT:\n${_pageCtx}`;
+      _extraContext = getPrompt('BROWSER_CONTEXT_LOADED', { page_text: _pageCtx });
     } else if (getBrowserPageUrl()) {
       // Page text unavailable — distinguish JS-rendered SPA from a plain fetch failure.
       if (getBrowserJsRendered()) {
-        _extraContext =
-          `The user has a browser panel open showing: ${getBrowserPageUrl()}. ` +
-          `This page is a JavaScript single-page application (SPA). The backend fetched its HTML ` +
-          `but received no readable text content because the page renders entirely in the browser via JS. ` +
-          `You cannot read, summarize, or describe its actual content. ` +
-          `Explicitly tell the user that this page uses client-side JavaScript rendering and its content ` +
-          `cannot be extracted. Do NOT guess or fabricate what the page might contain.`;
+        _extraContext = getPrompt('BROWSER_CONTEXT_SPA', { url: getBrowserPageUrl() });
       } else {
-        _extraContext =
-          `The user has a browser panel open showing: ${getBrowserPageUrl()}. ` +
-          `The page content could not be read (the backend fetch failed or returned no text). ` +
-          `Tell the user you were unable to read the page — do NOT guess or fabricate its contents.`;
+        _extraContext = getPrompt('BROWSER_CONTEXT_FAIL', { url: getBrowserPageUrl() });
       }
     }
   }
@@ -2778,6 +2743,8 @@ const GREETING_TEXT =
 // greeting once the warm-up sequence has fully completed.
 async function warmupModels(greetingEl) {
   setState('warmup');
+  // Load prompt registry early so getPrompt() serves live values for all subsequent calls.
+  await loadPrompts();
   try {
     const blob = await _fetchTTSBlob(_sanitiseForTTS(GREETING_TEXT));
     if (blob) {
@@ -2793,6 +2760,18 @@ async function warmupModels(greetingEl) {
   // Both Kokoro and Whisper have now completed their first inference pass — poll
   // system-status so the GPU badges in the footer are populated before the user speaks.
   await fetchSystemStatus();
+  // Rebuild SYSTEM_PROMPT with real device values now that the footer badges are populated.
+  SYSTEM_PROMPT =
+    _buildInitialContext() + ' ' +
+    getPrompt('STARLING_PERSONA', {
+      whisper_device: footerWhisperDevice?.textContent?.trim() || 'CUDA',
+      kokoro_device:  footerKokoroDevice?.textContent?.trim()  || 'CUDA',
+      llm_device:     footerLlmDevice?.textContent?.trim()     || 'CUDA',
+    });
+  // Update the first message in the conversation history with the rebuilt prompt.
+  if (conversationHistory.length > 0 && conversationHistory[0].role === 'system') {
+    conversationHistory[0].content = SYSTEM_PROMPT;
+  }
   // Reveal the full greeting only once everything is ready.
   if (greetingEl) greetingEl.textContent = GREETING_TEXT;
   setState('idle');
@@ -2829,6 +2808,11 @@ document.getElementById('reddit-close-btn')?.addEventListener('click', () => {
 // ── Toolkit menu button ──────────────────────────────────────────────────────
 document.getElementById('toolkit-menu-btn')?.addEventListener('click', () => {
   openToolkitPanel();
+});
+
+// ── Prompt Registry "OPEN EDITOR" button ─────────────────────────────────────
+document.getElementById('prompt-registry-open-btn')?.addEventListener('click', () => {
+  openPromptsPanel();
 });
 
 // ── Wikipedia close button ────────────────────────────────────────────────────

@@ -8,15 +8,12 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import session_log
+import prompts
 
 router = APIRouter(prefix="/chat", tags=["ollama"])
 
 OLLAMA_BASE = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 DEFAULT_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
-SYSTEM_PROMPT = os.getenv(
-    "OLLAMA_SYSTEM_PROMPT",
-    "You are S.T.A.R.L.I.N.G. (Speech‑Triggered Autonomous Reasoning & Local Intelligence Node Generator), a highly capable local AI assistant. Be concise, precise, and direct. Avoid unnecessary pleasantries.",
-)
 
 
 class Message(BaseModel):
@@ -46,7 +43,7 @@ async def chat(req: ChatRequest):
     messages = [m.model_dump() for m in req.messages]
     # Prepend system prompt if the first message isn't already a system message
     if not messages or messages[0].get("role") != "system":
-        messages.insert(0, {"role": "system", "content": SYSTEM_PROMPT})
+        messages.insert(0, {"role": "system", "content": prompts.get("STARLING_CORE")})
     # ── RAG context injection ────────────────────────────────────────────────
     # When RAG_ENABLED=true, retrieve relevant chunks for the latest user message
     # and prepend them as a system message before the conversation history.
@@ -81,7 +78,7 @@ async def chat(req: ChatRequest):
     session_log.log("llm_request", {
         "model":               req.model,
         "message_count":       len(messages),
-        "system_prompt_hash":  session_log.system_prompt_hash(SYSTEM_PROMPT),
+        "system_prompt_hash":  session_log.system_prompt_hash(prompts.get("STARLING_CORE")),
         "temperature":         req.temperature,
     })
 

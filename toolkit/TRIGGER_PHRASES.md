@@ -34,7 +34,8 @@ The first matching tool wins; unmatched input falls through to the LLM.
 | 23 | Reddit social feed | Requires **"reddit social"** — checked before News |
 | 24 | News | |
 | 25 | Browser — open | Requires **"browser"** keyword; Wikipedia lookup also requires **"browser"** |
-| 26 | LLM fallback | Anything unmatched |
+| 26 | Prompt Registry editor | Opens the prompt editor sub-view inside the menu panel |
+| 27 | LLM fallback | Anything unmatched |
 
 ---
 
@@ -631,3 +632,26 @@ frontend file. Add patterns to the appropriate array and update this document.
 | Ideas Vault | `frontend/ideas-panel.js` | `detectIdeaCaptureTrigger()` / `detectIdeaReadTrigger()` |
 | Voice Journal | `frontend/journal-panel.js` | `detectJournalStartTrigger()` / `detectJournalReadTrigger()` |
 | Wikipedia RAG | `frontend/wiki-panel.js` | `detectWikiTrigger()` / `detectWikiExitTrigger()` |
+| Prompt Editor | `frontend/app.js` | inline regex in `_routeInput()` |
+
+---
+
+## 26 · Prompt Registry Editor
+
+Opens the Prompt Registry editor sub-view inside the menu panel.
+All registered LLM prompt strings can be viewed, edited, and reset here.
+
+### Open
+
+Regex: `/\b(?:open|show|edit)\b.{0,20}\bprompt(?:s)?\b.{0,20}\b(?:editor|registry|panel|settings)\b/i`
+
+| Example phrase |
+|----------------|
+| `open prompt editor` |
+| `show prompt registry` |
+| `edit prompts` / `edit prompt settings` |
+| `open prompts panel` |
+
+### Also accessible via
+
+- The **MENU** panel → **PROMPT REGISTRY** section → **OPEN EDITOR** button

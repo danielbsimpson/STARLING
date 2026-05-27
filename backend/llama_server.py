@@ -14,16 +14,12 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import session_log
+import prompts
 
 router = APIRouter(prefix="/chat", tags=["llama"])
 
 LLAMA_BASE    = os.getenv("LLAMA_SERVER_URL", "http://localhost:8080")
 DEFAULT_MODEL = os.getenv("LLAMA_MODEL", "llama3.1-8b")
-SYSTEM_PROMPT = os.getenv(
-    "LLAMA_SYSTEM_PROMPT",
-    "You are S.T.A.R.L.I.N.G. (Speech\u2011Triggered Autonomous Reasoning & Local Intelligence Node Generator), "
-    "a highly capable local AI assistant. Be concise, precise, and direct. Avoid unnecessary pleasantries.",
-)
 
 
 class Message(BaseModel):
@@ -122,7 +118,7 @@ async def context_limit():
 async def chat(req: ChatRequest):
     messages = [m.model_dump() for m in req.messages]
     if not messages or messages[0].get("role") != "system":
-        messages.insert(0, {"role": "system", "content": SYSTEM_PROMPT})
+        messages.insert(0, {"role": "system", "content": prompts.get("STARLING_CORE")})
 
     # ── RAG context injection ────────────────────────────────────────────────
     # When RAG_ENABLED=true, retrieve relevant chunks for the latest user message
@@ -159,7 +155,7 @@ async def chat(req: ChatRequest):
     session_log.log("llm_request", {
         "model":               req.model,
         "message_count":       len(messages),
-        "system_prompt_hash":  session_log.system_prompt_hash(SYSTEM_PROMPT),
+        "system_prompt_hash":  session_log.system_prompt_hash(prompts.get("STARLING_CORE")),
         "temperature":         req.temperature,
     })
 

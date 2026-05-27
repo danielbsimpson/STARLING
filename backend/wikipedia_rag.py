@@ -27,6 +27,7 @@ from collections import Counter
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional
+import prompts
 
 logger = logging.getLogger(__name__)
 
@@ -233,39 +234,8 @@ def retrieve_chunks(query: str, top_k: int = TOP_K_DEFAULT) -> list[str]:
 
 
 # ── System prompt ──────────────────────────────────────────────────────────────
-
-_WIKI_SYSTEM_PROMPT_TEMPLATE = """\
-You are S.T.A.R.L.I.N.G., operating in Wikipedia Article Mode.
-
-ARTICLE IN CONTEXT: "{title}"
-
-You have been given excerpts from the Wikipedia article above. Your behaviour \
-in this mode is strictly governed by the following rules:
-
-RULES:
-1. You MUST only answer questions using information present in the provided \
-article excerpts below.
-2. If the answer to a question is not found in the excerpts, say clearly: \
-"That detail is not covered in this article." Do not guess, infer, or \
-supplement with outside knowledge.
-3. Do not present any information as fact unless it appears directly in the excerpts.
-4. Do not reference other Wikipedia articles, external sources, or your own \
-training data.
-5. Keep answers concise and suitable for spoken audio — two to four sentences \
-unless more is needed for accuracy.
-6. After each answer, invite the user to ask another question about the article \
-with a brief prompt such as "What else would you like to know?"
-7. Respond in plain prose only — never use markdown, asterisks, bullet points, \
-numbered lists, backticks, or headers.
-8. Never prefix your response with your name or any speaker label — begin \
-speaking immediately.
-
-ARTICLE EXCERPTS:
-{excerpts}
-
-This is the first turn of the session. Greet the user briefly, confirm which \
-article has been loaded, and ask what they would like to learn from it.\
-"""
+# The wiki system prompt is now stored in the prompts registry as WIKI_ARTICLE_MODE.
+# See backend/prompts.py for the default template and pipeline documentation.
 
 
 def build_wiki_system_prompt(excerpts: list[str]) -> str:
@@ -279,10 +249,7 @@ def build_wiki_system_prompt(excerpts: list[str]) -> str:
         if excerpts
         else "(No excerpts could be retrieved for this article.)"
     )
-    return _WIKI_SYSTEM_PROMPT_TEMPLATE.format(
-        title=session.article_title,
-        excerpts=excerpts_text,
-    )
+    return prompts.get("WIKI_ARTICLE_MODE", title=session.article_title, excerpts=excerpts_text)
 
 
 # ── Status ─────────────────────────────────────────────────────────────────────

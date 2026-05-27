@@ -86,6 +86,12 @@
             <div class="toolkit-cards" id="toolkit-cards"></div>
           </div>
 
+          <!-- Prompt Registry section -->
+          <div class="menu-section">
+            <div class="menu-section-label">PROMPT REGISTRY</div>
+            <button class="prompt-registry-open-btn" id="prompt-registry-open-btn">OPEN EDITOR</button>
+          </div>
+
           <!-- System / Shutdown section -->
           <div class="menu-section">
             <div class="menu-section-label">SYSTEM</div>
@@ -101,7 +107,17 @@
             <button class="toolkit-btn-no" id="toolkit-btn-no">NO — BACK</button>
           </div>
         </div>
-      </div>
+        <!-- Prompt Registry editor sub-view -->
+        <div id="prompts-editor-view" class="toolkit-prompts-view hidden">
+          <div class="prompts-editor-header">
+            <div class="prompts-editor-title">PROMPT REGISTRY</div>
+            <div class="prompts-editor-controls">
+              <button id="prompts-reload-btn" class="prompts-reload-btn">RELOAD FROM DISK</button>
+              <button id="prompts-editor-back-btn" class="prompts-editor-back-btn">&larr; BACK</button>
+            </div>
+          </div>
+          <div id="prompts-editor-content" class="prompts-editor-content"></div>
+        </div>      </div>
 
       <!-- Left column: sphere + waveform + chat (repositions below sphere in pres-mode) -->
       <div class="col-left">

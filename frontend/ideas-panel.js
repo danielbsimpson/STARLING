@@ -2,6 +2,7 @@
 // Ideas tracker: trigger detection, single-press capture mode, save, list, search.
 
 import { BACKEND_BASE } from './config.js';
+import { getPrompt } from './prompts.js';
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const ideasPanel        = document.getElementById('ideas-panel');
@@ -129,12 +130,7 @@ export async function processIdea(transcript, sendToOllamaFn, systemPrompt) {
   if (!rawText) return { spoken: 'No idea text captured. Please try again.' };
 
   // LLM call — generate a short title and tags in one request (ephemeral, no history)
-  const prompt =
-    `Generate a concise 4-8 word title and 2-4 relevant tags for the following idea. ` +
-    `Respond on exactly two lines:\n` +
-    `TITLE: <title here>\n` +
-    `TAGS: <tag1>, <tag2>, <tag3>\n\n` +
-    `IDEA: ${rawText}`;
+  const prompt = getPrompt('IDEAS_TITLE_TAGS', { raw_text: rawText });
 
   let title = rawText.slice(0, 60);   // fallback: truncated raw text
   let tags  = [];

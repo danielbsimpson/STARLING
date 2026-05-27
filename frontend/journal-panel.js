@@ -3,6 +3,7 @@
 // app.js only calls the exported functions and checks the exported journalMode flag.
 
 import { BACKEND_BASE } from './config.js';
+import { getPrompt } from './prompts.js';
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const journalPanel        = document.getElementById('journal-panel');
@@ -264,16 +265,11 @@ export async function submitJournalEntry(callLLMFn, systemPrompt) {
   journalSummaryEl.textContent = 'Summarising…';
   journalTagsRow.innerHTML = '';
 
-  const prompt =
-    `The following is a personal journal entry dictated by voice on ${dateLine} at ${timeLine}. ` +
-    `Write a detailed summary that preserves ALL specific details from the entry — ` +
-    `including exactly what the person ate or drank, how they were feeling emotionally and physically, ` +
-    `specific people mentioned, places visited, tasks completed, decisions made, and any numbers or quantities. ` +
-    `Do not generalise or omit specifics. ` +
-    `Write in first person, past tense, in three to six sentences. ` +
-    `Then, on a new line beginning with "TAGS:", list three to six single-word or short-phrase ` +
-    `tags that describe the topics covered (e.g. "TAGS: food, mood, work, exercise"). ` +
-    `Do not add any other commentary.\n\nJOURNAL ENTRY:\n${rawTranscript}`;
+  const prompt = getPrompt('JOURNAL_SUMMARIZE', {
+    date_line:      dateLine,
+    time_line:      timeLine,
+    raw_transcript: rawTranscript,
+  });
 
   let summaryRaw = '';
   try {
@@ -447,28 +443,13 @@ export function wireJournalButtons({ onSubmit, onConfirm, onRerecord, onDiscard,
 // ── Private helpers ────────────────────────────────────────────────────────────
 
 async function _generateNextQuestion(callLLMFn, systemPrompt) {
-  const interviewSystemPrompt =
-    `You are a warm, curious personal journal interviewer. ` +
-    `Your job is to build a COMPLETE picture of the person's day by covering many different areas — ` +
-    `never dwelling on a single topic.\n\n` +
-    `DOMAINS TO WORK THROUGH (cover each before revisiting any):\n` +
-    `  1. Food & drink — what they ate and drank throughout the day\n` +
-    `  2. Physical & emotional state — energy, mood, any illness or discomfort\n` +
-    `  3. Work or tasks — what they worked on, completed, or struggled with\n` +
-    `  4. People — who they talked to, met, or spent time with\n` +
-    `  5. Movement or exercise — any physical activity\n` +
-    `  6. Highlights or low points — anything that went especially well or badly\n` +
-    `  7. Plans or decisions — anything decided, planned, or left unresolved\n\n` +
-    `STRICT RULES — follow these exactly:\n` +
-    `  - After each answer, move to a DIFFERENT domain. Do not ask a follow-up on the same topic unless the person gave an unsolicited rich answer that clearly invites one.\n` +
-    `  - If the person says anything was uneventful, not significant, brief, or unimportant, ACCEPT it immediately and move to a completely different domain. Never probe further on something they have already dismissed.\n` +
-    `  - Probe for specifics (exact foods, exact feelings, names, times, quantities) ONLY on topics the person actively engages with and expands on.\n` +
-    `  - Each new question must address a domain not yet meaningfully covered.\n\n` +
-    `This is question ${_interviewQACount + 1} of up to ${MAX_INTERVIEW_QUESTIONS}.\n` +
-    (_interviewQACount >= MIN_INTERVIEW_QUESTIONS
-      ? `If you have gathered at least one substantive answer across three or more different domains, respond with exactly the single word DONE. Otherwise ask one question on the most important uncovered domain.\n`
-      : '') +
-    `Return ONLY the question text (or DONE). No preamble, no quotation marks.`;
+  const interviewSystemPrompt = getPrompt('JOURNAL_INTERVIEWER', {
+    question_number: String(_interviewQACount + 1),
+    max_questions:   String(MAX_INTERVIEW_QUESTIONS),
+    min_questions_reached_instruction: _interviewQACount >= MIN_INTERVIEW_QUESTIONS
+      ? 'If you have gathered at least one substantive answer across three or more different domains, respond with exactly the single word DONE. Otherwise ask one question on the most important uncovered domain.\n'
+      : '',
+  });
 
   const priorMessages = [
     { role: 'system', content: systemPrompt },
