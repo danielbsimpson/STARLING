@@ -67,6 +67,10 @@ LLAMA_GPU_LAYERS = _cfg("LLAMA_GPU_LAYERS", "999")
 LLAMA_CTX_SIZE   = _cfg("LLAMA_CTX_SIZE",   "4096")
 BACKEND_PORT     = _cfg("BACKEND_PORT",     "8000")
 
+# Dream state timeout — backend is given this much time to complete dream state
+# before being force-killed on shutdown. Mirrors dream.py's DREAM_TIMEOUT_S.
+_DREAM_TIMEOUT_S = int(_cfg("DREAM_TIMEOUT_S", "300"))
+
 # How long to wait for llama-server to print its ready marker before starting the backend.
 # Keeps Python's CUDA/ONNX module-level init (stt.py, tts.py) from racing with
 # llama-server's GPU model load, which can cause an indefinite CUDA stall.
@@ -137,9 +141,6 @@ def _terminate(proc: "subprocess.Popen[bytes] | None", name: str, timeout: int =
     _info(f"Stopping {name} (pid {proc.pid})…")
     try:
         if os.name == "nt":
-            # Use taskkill /T to kill the full process tree — proc.terminate() on
-            # Windows only kills the root PID and leaves child processes (e.g.
-            # uvicorn --reload workers, llama-server children) alive.
             subprocess.run(
                 ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
                 capture_output=True,
@@ -156,6 +157,59 @@ def _terminate(proc: "subprocess.Popen[bytes] | None", name: str, timeout: int =
             pass
 
 
+def _terminate_backend_gracefully(
+    proc: "subprocess.Popen[bytes] | None",
+    timeout: int = _DREAM_TIMEOUT_S + 30,
+) -> None:
+    """Stop the backend, waiting for the dream state pipeline to complete first.
+
+    On Windows: sends an HTTP shutdown request (which starts the dream thread
+    inside FastAPI) then polls the process until it self-terminates.
+    On non-Windows: sends SIGTERM (uvicorn runs the shutdown hook / dream state)
+    then waits the extended timeout before force-killing.
+    """
+    if proc is None or proc.poll() is not None:
+        return
+    pid = proc.pid
+    _info(f"Requesting graceful backend shutdown — dream state will run (pid {pid})…")
+
+    if os.name == "nt":
+        # Windows: HTTP shutdown triggers the dream thread inside the backend.
+        try:
+            import urllib.request as _urlreq
+            port = _cfg("BACKEND_PORT", "8000")
+            _urlreq.urlopen(
+                f"http://localhost:{port}/system/shutdown",
+                data=b"{}",
+                timeout=5,
+            )
+        except Exception:
+            pass  # Backend starts dream thread and may close the connection early
+
+        _info(f"Waiting up to {timeout}s for dream state to complete…")
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            time.sleep(2)
+            if proc.poll() is not None:
+                _info("Dream state complete — backend stopped.")
+                return
+        _err(f"Dream state timed out ({timeout}s) — force-killing backend…")
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
+    else:
+        # Non-Windows: SIGTERM triggers uvicorn's shutdown hook which runs dream state.
+        proc.terminate()
+        try:
+            proc.wait(timeout=timeout)
+            _info("Dream state complete — backend stopped.")
+        except subprocess.TimeoutExpired:
+            _err(f"Dream state timed out ({timeout}s) — force-killing backend")
+            proc.kill()
+
+
 def shutdown_handler(signum=None, frame=None, *, exit_code: int = 0) -> None:
     global _shutting_down
     if _shutting_down:
@@ -163,7 +217,7 @@ def shutdown_handler(signum=None, frame=None, *, exit_code: int = 0) -> None:
     _shutting_down = True
     print(flush=True)  # newline after ^C
     _info("Shutting down…")
-    _terminate(_backend_proc, "backend")
+    _terminate_backend_gracefully(_backend_proc)  # waits for dream state
     _terminate(_llama_proc,   "llama-server")
     _delete_pid_file()
     _info("All processes stopped.")

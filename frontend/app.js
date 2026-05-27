@@ -1,5 +1,5 @@
 // ── Imports ───────────────────────────────────────────────────────────────────
-import { BACKEND_BASE } from './config.js';
+import { BACKEND_BASE, BOOT_ANIMATION_MS, SHUTDOWN_ANIMATION_MS } from './config.js';
 import { detectTimerTrigger, handleTimerTrigger, initTimerPanel, dismissTimerPanel } from './timer-panel.js';
 import { detectWeatherTrigger, openWeatherPanel, closeWeatherPanel, initWeatherPanel, isWeatherPanelOpen, getWeatherContext } from './weather-panel.js';
 import { detectNewsTrigger, openNewsPanel, closeNewsPanel, initNewsPanel, isNewsPanelOpen, getActiveArticleContext } from './news-panel.js';
@@ -595,10 +595,15 @@ const clearBtn    = document.getElementById('clear-btn');
 const powerBtn    = document.getElementById('power-btn');
 
 // ── Power / shutdown ──────────────────────────────────────────────────────────
-// _sphereAnimPhase is read by the power button guard and will be set to
-// 'booting' or 'shutting_down' by feature-boot-shutdown-animation when that
-// feature is implemented.  For now it is always 'none'.
+// _sphereAnimPhase mirrors the animation state inside initSphere().
+// 'booting' | 'shutting_down' | 'none'
 let _sphereAnimPhase = 'none';
+
+// Filled in by initSphere() once the Three.js scene is ready.
+// Falls back to calling _triggerSystemShutdown() directly if sphere is unavailable.
+let _startShutdownAnim = function () {
+  _triggerSystemShutdown();
+};
 
 /**
  * Final step of the shutdown sequence: POST to the backend and show the
@@ -614,14 +619,14 @@ function _triggerSystemShutdown() {
 
 /**
  * Entry point for the shutdown flow.  Click the power button → this runs.
- * When feature-boot-shutdown-animation is added, replace the body of this
- * function with the sphere-retreat animation; call _triggerSystemShutdown()
- * from _onShutdownAnimationComplete() at the end of that animation.
+ * Disables controls, resets sphere state, then kicks off the retreat animation.
+ * If the sphere is unavailable, _startShutdownAnim() falls back to calling
+ * _triggerSystemShutdown() directly.
  */
 function startShutdown() {
-  // Disable all interactive controls so nothing fires during shutdown
   [micBtn, sendBtn, textInput, powerBtn].forEach(el => el && (el.disabled = true));
-  _triggerSystemShutdown();
+  setState('idle');
+  _startShutdownAnim();
 }
 
 // Two-click confirmation: first click arms the button (label → ✕), second
@@ -1070,7 +1075,35 @@ function initSphere() {
   const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
   camera.position.z = 6.2;
 
-  // Very dim ambient — keeps the sphere face close to black
+  // ── Boot / shutdown animation state ───────────────────────────────────────
+  // Camera starts far away for the boot approach; _animPhase drives the animate() block.
+  let _animPhase = 'booting';
+  let _animStart = Date.now();
+  _sphereAnimPhase = 'booting';
+  camera.position.z = 80;   // override — boot animation will travel to 6.2
+
+  // Allow startShutdown() (outside this closure) to trigger the retreat animation.
+  _startShutdownAnim = function () {
+    _animPhase       = 'shutting_down';
+    _animStart       = Date.now();
+    _sphereAnimPhase = 'shutting_down';
+  };
+
+  /** Called once the boot animation finishes. Re-enables all interactive controls. */
+  function _onBootAnimationComplete() {
+    _animPhase       = 'none';
+    _sphereAnimPhase = 'none';
+    camera.position.set(0, 0, 6.2);
+    setState('idle');
+    [micBtn, sendBtn, textInput, powerBtn].forEach(el => el && (el.disabled = false));
+  }
+
+  /** Called once the shutdown animation finishes. Fires the backend shutdown call. */
+  function _onShutdownAnimationComplete() {
+    _animPhase       = 'done';
+    _sphereAnimPhase = 'none';
+    _triggerSystemShutdown();
+  }
   scene.add(new THREE.AmbientLight(0xffffff, 0.025));
 
   // ── 5 orbiting light orbs ──────────────────────────────────────────────────
@@ -1157,6 +1190,36 @@ function initSphere() {
     const isListening  = state === 'listening';
     const isThinking   = state === 'thinking' || state === 'transcribing';
     const isSpeaking   = state === 'speaking';
+
+    // ── Boot animation — sphere approaches from deep space ───────────────────
+    if (_animPhase === 'booting') {
+      const p = Math.min((Date.now() - _animStart) / BOOT_ANIMATION_MS, 1);
+      const eased = 1 - Math.pow(1 - p, 3);                   // ease-out cubic
+      camera.position.z = 80 + (6.2 - 80) * eased;
+      const amp = (1 - eased) * 2.8;
+      camera.position.x = amp * Math.sin(p * Math.PI * 6);
+      camera.position.y = amp * 0.45 * Math.cos(p * Math.PI * 4.7 + 0.9);
+      if (p >= 1) _onBootAnimationComplete();
+      renderer.render(scene, camera);
+      return;  // skip normal per-frame logic while booting
+    }
+
+    // ── Shutdown animation — sphere retreats off into space ──────────────────
+    if (_animPhase === 'shutting_down') {
+      const p = Math.min((Date.now() - _animStart) / SHUTDOWN_ANIMATION_MS, 1);
+      const eased = Math.pow(p, 3);                            // ease-in cubic
+      camera.position.z = 6.2 + (80 - 6.2) * eased;
+      camera.position.x = 2.4 * Math.sin(p * Math.PI * 5);
+      camera.position.y = 0;
+      if (p > 0.75) {
+        const tail = (p - 0.75) / 0.25;
+        camera.position.x += tail * 18;
+        camera.position.y  = tail * 10;
+      }
+      if (p >= 1) _onShutdownAnimationComplete();
+      renderer.render(scene, camera);
+      return;  // skip normal per-frame logic while shutting down
+    }
 
     // ── Mouse proximity computation (once per frame) ─────────────────────────
     const rect           = renderer.domElement.getBoundingClientRect();
@@ -2791,7 +2854,15 @@ initRedditPanel({ enqueueSpeak, sendToOllama, interruptSpeech });
 initYouTubePanel({ enqueueSpeak, sendToOllama, interruptSpeech });
 initNewsPanel({ enqueueSpeak, sendToOllama, interruptSpeech, onClose: exitNewsMode });
 initToolkitPanel(TOOLKIT_REGISTRY);
+// Disable interactive controls during boot animation.
+// _onBootAnimationComplete() (called from animate()) re-enables them.
+// If Three.js fails to init, _sphereAnimPhase stays 'none' and we re-enable immediately below.
+[micBtn, sendBtn, textInput, powerBtn].forEach(el => el && (el.disabled = true));
 initSphere();
+// If sphere didn't start a boot animation (Three.js unavailable), enable controls now.
+if (_sphereAnimPhase === 'none') {
+  [micBtn, sendBtn, textInput, powerBtn].forEach(el => el && (el.disabled = false));
+}
 statModel.textContent = MODEL;
 _applyTtsMode();
 loadVoices();

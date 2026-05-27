@@ -58,6 +58,9 @@ backend/memory/calendar_cache.json
 # Soul archive history (SOUL.md tracked; archived snapshots excluded)
 backend/memory/soul/SOUL_*.md
 
+# Dream state output (runtime — session summaries, facts, and thoughts; not tracked)
+backend/memory/dream/
+
 # Images and Personal Files
 assets/dossier_descriptions/
 assets/dossier_images/

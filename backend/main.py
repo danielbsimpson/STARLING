@@ -65,8 +65,10 @@ from calendar_routes import router as calendar_router
 import session_log
 import prompts
 import soul as _soul
+import dream as _dream
 from prompt_routes import router as prompts_router
 from soul_routes import router as soul_router
+from dream_routes import router as dream_router
 from rag import ingest as _rag_ingest, get_status as _rag_get_status, INPUT_FOLDER as _RAG_INPUT_FOLDER
 from wikipedia_rag import (
     load_index        as _wiki_load_index,
@@ -94,6 +96,7 @@ app.include_router(youtube_router)
 app.include_router(calendar_router)
 app.include_router(prompts_router)
 app.include_router(soul_router)
+app.include_router(dream_router)
 
 
 # ── Startup warm-up ───────────────────────────────────────────────────────────
@@ -126,6 +129,21 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     session_log.log_session_end()
+    # Run dream state on SIGTERM-based shutdown (stop.py / launch.py on non-Windows).
+    # On Windows the /system/shutdown endpoint handles this via its own thread.
+    # The _running guard in dream.py prevents double execution if both paths fire.
+    try:
+        loop = asyncio.get_event_loop()
+        from_ts = _dream.read_checkpoint()
+        await asyncio.wait_for(
+            loop.run_in_executor(
+                None,
+                lambda: _dream.run_dream_state(session_log.get_session_id(), from_ts=from_ts),
+            ),
+            timeout=float(_dream.DREAM_TIMEOUT_S + 10),
+        )
+    except Exception:
+        pass
 
 
 @app.get("/health")
@@ -161,11 +179,8 @@ async def system_shutdown(request: Request):
     if request.client is None or request.client.host not in _LOCALHOST_HOSTS:
         raise HTTPException(status_code=403, detail="Forbidden")
     session_log.log_session_end()
-    # TODO: trigger dream state here (feature-dream-state-shutdown-pipeline-1)
 
-    # Read the PID file to find the reload manager and llama-server PIDs.
-    # Killing only os.getpid() (the uvicorn worker) is not enough — the reload
-    # manager parent process will immediately restart the worker.
+    # Read PIDs to kill after dream state completes.
     pids_to_kill: list[int] = []
     try:
         data = json.loads(_PID_FILE.read_text(encoding="utf-8"))
@@ -182,18 +197,23 @@ async def system_shutdown(request: Request):
     if not pids_to_kill:
         pids_to_kill = [os.getpid()]
 
-    def _do_kill() -> None:
+    def _dream_then_kill() -> None:
+        """Run dream state while the LLM is still alive, then terminate all processes."""
+        try:
+            from_ts = _dream.read_checkpoint()
+            _dream.run_dream_state(session_log.get_session_id(), from_ts=from_ts)
+        except Exception:
+            pass
         for pid in pids_to_kill:
             _kill_pid(pid)
-        # Also clean up the PID file
         try:
             _PID_FILE.unlink(missing_ok=True)
         except Exception:
             pass
 
-    loop = asyncio.get_running_loop()
-    loop.call_later(0.5, _do_kill)
-    return {"ok": True, "message": "Shutting down"}
+    import threading as _threading
+    _threading.Thread(target=_dream_then_kill, daemon=False, name="dream-shutdown").start()
+    return {"ok": True, "message": "Shutting down — dream state initiated"}
 
 
 # ── RAG endpoints ─────────────────────────────────────────────────────────────

@@ -463,18 +463,27 @@ _REGISTRY: list[dict] = [
         "description": "System prompt for dream state Pass 1 — session summarizer.",
         "category": "dream",
         "default": (
-            "You are a concise session summarizer. Review the session transcript provided and produce "
-            "a clear, structured summary covering the main topics discussed, any decisions made, and "
-            "key information exchanged. Write in third person. Be thorough but avoid repetition."
+            "You are a session summarizer. Review the conversation transcript provided and produce "
+            "a structured Markdown summary. Your output must contain exactly these four sections:\n\n"
+            "## Session Overview\n"
+            "A brief description of the session: approximate duration and overall purpose.\n\n"
+            "## Topics Discussed\n"
+            "Bullet points listing the main topics covered in the conversation.\n\n"
+            "## Tools Invoked\n"
+            "List any external tools used (weather, stocks, news, Wikipedia, dossier, etc.). "
+            "If no tools were invoked, write 'None'.\n\n"
+            "## Notable Outcomes\n"
+            "Any decisions made, information delivered, tasks completed, or questions left unresolved.\n\n"
+            "Be thorough but avoid repetition. Write in third person."
         ),
-        "source_file": "backend/dream.py (planned — not yet implemented)",
+        "source_file": "backend/dream.py",
         "template_vars": [],
         "risk_level": "caution",
         "pipeline_note": (
-            "Used by the dream state pipeline (Pass 1) when the system enters dream mode after shutdown. "
-            "This is a placeholder — the dream state pipeline (feature-dream-state-shutdown-pipeline-1.md) "
-            "has not yet been implemented. Once dream.py is created, it will read this via "
-            "prompts.get('DREAM_SUMMARIZER')."
+            "Used by the dream state pipeline (Pass 1) during shutdown or sleep. "
+            "The session transcript is provided as user input. "
+            "Output is saved to memory/dream/{session_id}_summary.md. "
+            "Passes 3 and 4 consume this summary as input."
         ),
     },
 
@@ -483,18 +492,28 @@ _REGISTRY: list[dict] = [
         "description": "System prompt for dream state Pass 2 — user and world fact extractor.",
         "category": "dream",
         "default": (
-            "You are a precise fact extractor. Review the session transcript and extract structured "
-            "facts about the user and the world. Focus on: the user's preferences, interests, habits, "
-            "and personal details they revealed; any factual claims about external events, people, or "
-            "topics. Output as a structured list of facts, one per line, prefixed with the category "
-            "(USER: or WORLD:)."
+            "You are a precise fact extractor. Review the session transcript and extract discrete, "
+            "verifiable facts as a Markdown bullet list. Organise your output under exactly two sections:\n\n"
+            "## About the User\n"
+            "Facts about the user's preferences, interests, habits, goals, personal details, or opinions "
+            "they explicitly stated or clearly implied.\n\n"
+            "## About the World\n"
+            "Facts about external events, people, places, or topics referenced in the session "
+            "(news items, data points, factual claims, etc.).\n\n"
+            "Rules:\n"
+            "- One fact per bullet point\n"
+            "- Only include facts clearly supported by the transcript\n"
+            "- If no facts were found for a section, write '- (none identified)'\n"
+            "- Do not infer or speculate — only record what was explicitly stated"
         ),
-        "source_file": "backend/dream.py (planned — not yet implemented)",
+        "source_file": "backend/dream.py",
         "template_vars": [],
         "risk_level": "caution",
         "pipeline_note": (
-            "Used by the dream state pipeline (Pass 2). "
-            "This is a placeholder — the dream state pipeline has not yet been implemented."
+            "Used by the dream state pipeline (Pass 2) during shutdown or sleep. "
+            "Output is saved to memory/input/facts_{session_id}.md — the RAG input folder — "
+            "so it is ingested on the next 'make rag-ingest'. "
+            "Pass 4 (Soul Evolution) also consumes these facts."
         ),
     },
 
@@ -503,17 +522,68 @@ _REGISTRY: list[dict] = [
         "description": "System prompt for dream state Pass 3 — first-person session reflection writer.",
         "category": "dream",
         "default": (
-            "You are writing a first-person reflective summary of a completed session. "
-            "Using the session summary provided, write a brief, introspective paragraph from "
-            "Starling's perspective — as if Starling is quietly reflecting on the conversation "
-            "and what was learned. Write in first person, present tense. Keep it to three to five sentences."
+            "You are STARLING, writing a private first-person reflective journal entry about this session. "
+            "You have been given a session summary and extracted facts. Write a reflective entry that covers:\n\n"
+            "- What was interesting or unexpected in this conversation\n"
+            "- What you learned about the user\n"
+            "- Any patterns you noticed\n"
+            "- Anything you would do differently next time\n\n"
+            "Rules:\n"
+            "- Write in first person as STARLING\n"
+            "- Use plain prose — no bullet points, no headers\n"
+            "- Keep it to three to six sentences — introspective, not exhaustive\n"
+            "- Do not repeat the facts verbatim; synthesise them into genuine reflection\n"
+            "- The output will be appended to thoughts.md under a dated heading; do not add a heading"
         ),
-        "source_file": "backend/dream.py (planned — not yet implemented)",
+        "source_file": "backend/dream.py",
         "template_vars": [],
         "risk_level": "caution",
         "pipeline_note": (
-            "Used by the dream state pipeline (Pass 3). "
-            "This is a placeholder — the dream state pipeline has not yet been implemented."
+            "Used by the dream state pipeline (Pass 3) during shutdown or sleep. "
+            "The soul content is injected into the system prompt so the reflection is grounded "
+            "in STARLING's current identity. "
+            "Output is appended to memory/dream/thoughts.md under a dated heading added by the code. "
+            "Pass 4 (Soul Evolution) consumes this reflection text."
+        ),
+    },
+
+    {
+        "key": "DREAM_SOUL_EVOLUTION",
+        "description": (
+            "System prompt for dream state Pass 4 — soul evolution synthesiser. "
+            "Receives current SOUL.md, session reflection, and extracted facts, "
+            "and outputs an updated SOUL.md."
+        ),
+        "category": "dream",
+        "default": (
+            "You are STARLING's soul archivist. You receive the current SOUL.md and the latest "
+            "session reflection and extracted facts. Produce an UPDATED SOUL.md.\n\n"
+            "RULES:\n"
+            "1. Preserve all existing sections exactly — headings, tone, voice, and content\n"
+            "2. Add new bullet points or sentences ONLY where the session reveals new recurring "
+            "patterns, preferences, or insights about the user or about STARLING\n"
+            "3. Do NOT remove existing content unless it directly contradicts new information\n"
+            "4. Update '## Interests & Recurring Patterns' and '## Notes' most freely — "
+            "these sections accumulate over time\n"
+            "5. Update '## Personal Philosophy' only if the reflection reveals a meaningful new insight\n"
+            "6. Update '## Identity' or '## Relationship with Daniel' only if a clear factual "
+            "correction or significant new understanding is warranted\n"
+            "7. Keep additions concise — one to two sentences or bullet points per new insight\n"
+            "8. If the session contained nothing new, return the current SOUL.md unchanged\n\n"
+            "OUTPUT RULES:\n"
+            "- Output ONLY the complete updated SOUL.md content\n"
+            "- Begin with exactly: '# STARLING — Soul File'\n"
+            "- Do not include any preamble, explanation, or markdown code fences"
+        ),
+        "source_file": "backend/dream.py",
+        "template_vars": [],
+        "risk_level": "critical",
+        "pipeline_note": (
+            "Used by the dream state pipeline (Pass 4) during shutdown or sleep. "
+            "The LLM receives the current soul, session reflection, and extracted facts as user input. "
+            "Output is validated (must be >200 chars and contain ## headers) before being written "
+            "via soul.update() which archives the current soul first. "
+            "This is the mechanism by which STARLING's soul evolves over time through sessions."
         ),
     },
 ]
