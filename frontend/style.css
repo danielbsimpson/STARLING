@@ -4233,6 +4233,111 @@ a.news-story-source-title:hover {
   color: rgba(10, 10, 10, 0.95);
 }
 
+/* ── Toolkit detail extra section ────────────────────────────────────────────── */
+.toolkit-detail-extra:empty { display: none; }
+.toolkit-detail-extra {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ── Calendar login status badge ─────────────────────────────────────────────── */
+.cal-login-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  color: rgba(200, 200, 200, 0.55);
+  text-transform: uppercase;
+  padding: 4px 0 2px;
+}
+.cal-login-btn {
+  align-self: flex-start;
+  min-width: 160px;
+}
+
+.cal-login-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(120, 220, 120, 0.75);
+  box-shadow: 0 0 4px rgba(120, 220, 120, 0.5);
+  flex-shrink: 0;
+}
+.cal-login-user {
+  color: var(--c);
+  letter-spacing: 1px;
+}
+
+/* ── Calendar login form ─────────────────────────────────────────────────────── */
+.cal-login-form-title {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 3px;
+  color: rgba(200, 200, 200, 0.5);
+  text-transform: uppercase;
+  padding-top: 2px;
+}
+.cal-login-hint {
+  font-size: 10px;
+  color: rgba(200, 200, 200, 0.38);
+  line-height: 1.5;
+  margin: 0;
+}
+.cal-login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.cal-login-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 8px;
+  letter-spacing: 2px;
+  color: rgba(200, 200, 200, 0.4);
+  text-transform: uppercase;
+}
+.cal-login-input {
+  height: 26px;
+  padding: 0 8px;
+  background: rgba(200, 200, 200, 0.04);
+  border: 0.5px solid rgba(200, 200, 200, 0.2);
+  border-radius: 3px;
+  color: rgba(200, 200, 200, 0.85);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.cal-login-input:focus {
+  border-color: rgba(200, 200, 200, 0.5);
+}
+.cal-login-input::placeholder {
+  color: rgba(200, 200, 200, 0.2);
+}
+.cal-login-btn-row {
+  display: flex;
+  gap: 8px;
+  padding-top: 2px;
+}
+.cal-login-error {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: rgba(240, 100, 100, 0.8);
+}
+.cal-login-error.hidden { display: none; }
+.cal-login-warning {
+  padding: 6px 0;
+}
+.cal-login-warning-msg {
+  font-size: 11px;
+  color: rgba(200, 200, 200, 0.6);
+  line-height: 1.55;
+  margin: 0;
+}
+
 /* ── Calendar-mode layout (mirrors weather-mode) ────────────────────────────── */
 .starling.cal-mode .col-left {
   width: 37%;

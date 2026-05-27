@@ -90,6 +90,9 @@ export function initToolkitPanel(registry) {
   const detailPhrases = document.createElement('div');
   detailPhrases.className = 'toolkit-detail-phrases';
 
+  const detailExtra = document.createElement('div');
+  detailExtra.className = 'toolkit-detail-extra';
+
   const detailActions = document.createElement('div');
   detailActions.className = 'toolkit-detail-actions';
 
@@ -106,7 +109,7 @@ export function initToolkitPanel(registry) {
   });
 
   detailActions.append(activateBtn, backBtn);
-  detail.append(detailName, detailDesc, detailPhrases, detailActions);
+  detail.append(detailName, detailDesc, detailPhrases, detailExtra, detailActions);
   _cardContainer.append(picker, detail);
 
   function _populateDetail(entry) {
@@ -119,6 +122,10 @@ export function initToolkitPanel(registry) {
       tag.textContent = _escapeHtml(p);
       detailPhrases.appendChild(tag);
     });
+    detailExtra.innerHTML = '';
+    if (typeof entry.renderExtraFn === 'function') {
+      entry.renderExtraFn(detailExtra);
+    }
     activateBtn.onclick = e => {
       e.stopPropagation();
       closeToolkitPanel();

@@ -353,6 +353,147 @@ const SYSTEM_PROMPT =
   'Never narrate or describe your own visual state, sphere behaviour, orb colours, animations, or any on-screen elements — ' +
   'do not include bracketed stage directions, action lines, or commentary about what you are displaying or doing visually.'
 
+// ── Calendar login helpers (used by TOOLKIT_REGISTRY renderExtraFn) ──────────
+
+async function _renderCalendarLogin(container) {
+  container.innerHTML = '';
+  let cred = { linked: false, username: null };
+  try {
+    const res = await fetch(`${BACKEND_BASE}/calendar/credentials`);
+    if (res.ok) cred = await res.json();
+  } catch (_) { /* offline — render as unlinked */ }
+
+  if (cred.linked) {
+    const badge = document.createElement('div');
+    badge.className = 'cal-login-status';
+    const dot  = document.createElement('span'); dot.className  = 'cal-login-dot';
+    const label = document.createElement('span'); label.className = 'cal-login-label-text'; label.textContent = 'LOGGED IN AS ';
+    const user = document.createElement('span'); user.className  = 'cal-login-user'; user.textContent = cred.username;
+    badge.append(dot, label, user);
+    container.appendChild(badge);
+  }
+
+  const loginBtn = document.createElement('button');
+  loginBtn.className = 'toolkit-activate-btn cal-login-btn';
+  loginBtn.textContent = cred.linked ? 'CHANGE LOGIN' : 'LOGIN';
+  loginBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    if (cred.linked) {
+      _showCalendarLoginConfirm(container, cred.username);
+    } else {
+      _showCalendarLoginForm(container);
+    }
+  });
+  container.appendChild(loginBtn);
+}
+
+function _showCalendarLoginConfirm(container, currentUsername) {
+  container.innerHTML = '';
+
+  const warning = document.createElement('div');
+  warning.className = 'cal-login-warning';
+  const msg = document.createElement('p');
+  msg.className = 'cal-login-warning-msg';
+  msg.textContent = `This will remove the current login for ${currentUsername}. The new account will become the saved default.`;
+  warning.appendChild(msg);
+  container.appendChild(warning);
+
+  const btnRow = document.createElement('div');
+  btnRow.className = 'cal-login-btn-row';
+
+  const yesBtn = document.createElement('button');
+  yesBtn.className = 'toolkit-activate-btn';
+  yesBtn.textContent = 'YES, CONTINUE';
+
+  const noBtn = document.createElement('button');
+  noBtn.className = 'toolkit-back-btn';
+  noBtn.textContent = '\u2190 CANCEL';
+
+  noBtn.addEventListener('click', e => { e.stopPropagation(); _renderCalendarLogin(container); });
+  yesBtn.addEventListener('click', e => { e.stopPropagation(); _showCalendarLoginForm(container); });
+
+  btnRow.append(yesBtn, noBtn);
+  container.appendChild(btnRow);
+}
+
+function _showCalendarLoginForm(container) {
+  container.innerHTML = '';
+
+  const title = document.createElement('div');
+  title.className = 'cal-login-form-title';
+  title.textContent = 'APPLE CALENDAR LOGIN';
+  container.appendChild(title);
+
+  const hint = document.createElement('p');
+  hint.className = 'cal-login-hint';
+  hint.textContent = 'Enter your Apple ID and an App-Specific Password from appleid.apple.com';
+  container.appendChild(hint);
+
+  const userWrap = document.createElement('div'); userWrap.className = 'cal-login-field';
+  const userLabel = document.createElement('label'); userLabel.className = 'cal-login-label'; userLabel.textContent = 'APPLE ID';
+  const userInput = document.createElement('input');
+  userInput.type = 'email'; userInput.className = 'cal-login-input'; userInput.placeholder = 'your@apple.id';
+  userWrap.append(userLabel, userInput);
+  container.appendChild(userWrap);
+
+  const passWrap = document.createElement('div'); passWrap.className = 'cal-login-field';
+  const passLabel = document.createElement('label'); passLabel.className = 'cal-login-label'; passLabel.textContent = 'APP PASSWORD';
+  const passInput = document.createElement('input');
+  passInput.type = 'password'; passInput.className = 'cal-login-input'; passInput.placeholder = 'xxxx-xxxx-xxxx-xxxx';
+  passWrap.append(passLabel, passInput);
+  container.appendChild(passWrap);
+
+  const errMsg = document.createElement('div');
+  errMsg.className = 'cal-login-error hidden';
+  container.appendChild(errMsg);
+
+  const btnRow = document.createElement('div');
+  btnRow.className = 'cal-login-btn-row';
+
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'toolkit-activate-btn';
+  saveBtn.textContent = 'SAVE';
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'toolkit-back-btn';
+  cancelBtn.textContent = '\u2190 CANCEL';
+
+  cancelBtn.addEventListener('click', e => { e.stopPropagation(); _renderCalendarLogin(container); });
+
+  saveBtn.addEventListener('click', async e => {
+    e.stopPropagation();
+    const username = userInput.value.trim();
+    const password = passInput.value;
+    if (!username || !password) {
+      errMsg.textContent = 'Both Apple ID and App Password are required.';
+      errMsg.classList.remove('hidden');
+      return;
+    }
+    saveBtn.textContent = 'SAVING...';
+    saveBtn.disabled = true;
+    try {
+      const res = await fetch(`${BACKEND_BASE}/calendar/credentials`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      if (!res.ok) {
+        const detail = await res.json().catch(() => ({}));
+        throw new Error(detail.detail || `HTTP ${res.status}`);
+      }
+      await _renderCalendarLogin(container);
+    } catch (err) {
+      errMsg.textContent = `Save failed: ${err.message}`;
+      errMsg.classList.remove('hidden');
+      saveBtn.textContent = 'SAVE';
+      saveBtn.disabled = false;
+    }
+  });
+
+  btnRow.append(saveBtn, cancelBtn);
+  container.appendChild(btnRow);
+}
+
 // ── Toolkit registry ─────────────────────────────────────────────────────────
 // One entry per active tool. openFn is a zero-argument closure that activates
 // the tool; it is called by the toolkit:confirm handler in app.js.
@@ -444,6 +585,15 @@ const TOOLKIT_REGISTRY = [
     ttsScript: 'Wikipedia RAG searches a locally-embedded Wikipedia index and answers questions entirely offline. Say: search local Wikipedia for, followed by your topic.',
     phrases: ['search local Wikipedia for', 'local wiki article on', 'offline Wikipedia search', 'look up offline'],
     openFn: () => enqueueSpeak('Wikipedia RAG ready. Ask me to look up any topic offline, for example: search Wikipedia for Albert Einstein.'),
+  },
+  {
+    id: 'calendar',
+    name: 'Calendar',
+    description: 'Fetches and displays your iCloud calendar events for today and the coming week via CalDAV. Requires an Apple ID and App-Specific Password.',
+    ttsScript: 'The Calendar tool fetches your iCloud events for today and the coming week. Say: show my calendar.',
+    phrases: ['show my calendar', 'what is on my schedule', 'check my calendar', 'any meetings today', 'open calendar'],
+    openFn: () => openCalendarPanel(),
+    renderExtraFn: (container) => _renderCalendarLogin(container),
   },
 ];
 

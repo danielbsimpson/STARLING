@@ -12,6 +12,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 router = APIRouter()
 
@@ -22,6 +23,7 @@ _TZ_NAME       = os.getenv("CALENDAR_TIMEZONE", "America/New_York")
 _LOOKAHEAD     = int(os.getenv("CALENDAR_LOOKAHEAD_DAYS", "7"))
 _CACHE_SECONDS = int(os.getenv("CALENDAR_CACHE_SECONDS", "3600"))  # 1 hour default
 _CACHE_FILE    = _BASE_DIR / os.getenv("CALENDAR_CACHE_FILE", "memory/calendar_cache.json")
+_CRED_FILE     = _BASE_DIR / "memory" / "calendar_credentials.json"
 
 _CALDAV_URL  = os.getenv("CALDAV_URL", "")
 _CALDAV_USER = os.getenv("CALDAV_USERNAME", "")
@@ -34,6 +36,32 @@ if not _CACHE_FILE.exists():
 
 # ── In-memory hot cache (avoids disk read on every request) ───────────────────
 _mem_cache: dict = {}
+
+
+# ── Credential helpers ────────────────────────────────────────────────────────
+
+def _load_stored_credentials() -> dict:
+    """Load CalDAV credentials from the local JSON store."""
+    try:
+        if _CRED_FILE.exists():
+            return json.loads(_CRED_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return {}
+
+
+def _apply_credentials(creds: dict) -> None:
+    """Update the module-level CalDAV globals from a credentials dict."""
+    global _CALDAV_URL, _CALDAV_USER, _CALDAV_PASS
+    _CALDAV_URL  = creds.get("url",      os.getenv("CALDAV_URL",      ""))
+    _CALDAV_USER = creds.get("username", os.getenv("CALDAV_USERNAME", ""))
+    _CALDAV_PASS = creds.get("password", os.getenv("CALDAV_PASSWORD", ""))
+
+
+# Apply any saved credentials at import time (overrides .env if a file exists)
+_stored_creds = _load_stored_credentials()
+if _stored_creds:
+    _apply_credentials(_stored_creds)
 
 
 # ── File I/O helpers ──────────────────────────────────────────────────────────
@@ -258,3 +286,53 @@ async def bust_calendar_cache():
     _mem_cache.clear()
     _save_cache({})
     return {"status": "cleared"}
+
+
+# ── Credential endpoints ──────────────────────────────────────────────────────
+
+@router.get("/calendar/credentials")
+async def get_calendar_credentials():
+    """Return current login status (username only — password never returned)."""
+    creds = _load_stored_credentials()
+    username = creds.get("username") or _CALDAV_USER
+    if username:
+        return {"linked": True, "username": username}
+    return {"linked": False, "username": None}
+
+
+class _CalendarCredentials(BaseModel):
+    username: str
+    password: str
+
+
+@router.post("/calendar/credentials")
+async def save_calendar_credentials(body: _CalendarCredentials):
+    """Save Apple iCloud CalDAV credentials and reload module globals."""
+    username = body.username.strip()
+    if not username or not body.password:
+        raise HTTPException(status_code=422, detail="username and password are required")
+
+    creds = {
+        "url":      "https://caldav.icloud.com",
+        "username": username,
+        "password": body.password,
+    }
+    tmp = _CRED_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(creds, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, _CRED_FILE)
+    _apply_credentials(creds)
+    # Bust calendar cache so next fetch uses the new credentials
+    _mem_cache.clear()
+    _save_cache({})
+    return {"status": "saved", "username": username}
+
+
+@router.delete("/calendar/credentials")
+async def delete_calendar_credentials():
+    """Remove stored credentials and revert to .env values."""
+    if _CRED_FILE.exists():
+        _CRED_FILE.unlink()
+    _apply_credentials({})
+    _mem_cache.clear()
+    _save_cache({})
+    return {"status": "removed"}
