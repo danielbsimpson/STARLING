@@ -64,7 +64,9 @@ from youtube import router as youtube_router
 from calendar_routes import router as calendar_router
 import session_log
 import prompts
+import soul as _soul
 from prompt_routes import router as prompts_router
+from soul_routes import router as soul_router
 from rag import ingest as _rag_ingest, get_status as _rag_get_status, INPUT_FOLDER as _RAG_INPUT_FOLDER
 from wikipedia_rag import (
     load_index        as _wiki_load_index,
@@ -91,6 +93,7 @@ app.include_router(reddit_router)
 app.include_router(youtube_router)
 app.include_router(calendar_router)
 app.include_router(prompts_router)
+app.include_router(soul_router)
 
 
 # ── Startup warm-up ───────────────────────────────────────────────────────────
@@ -102,6 +105,8 @@ async def startup_event():
     _log = logging.getLogger(__name__)
     session_log.log_session_start(llm_backend=LLM_BACKEND, pid=os.getpid())
     prompts.load_overrides()
+    _soul._ensure_default()
+    _log.info(f"Soul loaded: {len(_soul.get())} chars")
     try:
         # Run blocking model load in a thread so it doesn't block the event loop.
         # The 30-second timeout ensures the server always finishes starting even if

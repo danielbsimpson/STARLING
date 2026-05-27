@@ -15,6 +15,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import session_log
 import prompts
+import soul
 
 router = APIRouter(prefix="/chat", tags=["llama"])
 
@@ -118,7 +119,7 @@ async def context_limit():
 async def chat(req: ChatRequest):
     messages = [m.model_dump() for m in req.messages]
     if not messages or messages[0].get("role") != "system":
-        messages.insert(0, {"role": "system", "content": prompts.get("STARLING_CORE")})
+        messages.insert(0, {"role": "system", "content": soul.inject(prompts.get("STARLING_CORE"))})
 
     # ── RAG context injection ────────────────────────────────────────────────
     # When RAG_ENABLED=true, retrieve relevant chunks for the latest user message

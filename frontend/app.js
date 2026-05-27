@@ -57,6 +57,7 @@ import {
 } from './toolkit-panel.js';
 import { loadPrompts, getPrompt } from './prompts.js';
 import { openPromptsPanel, closePromptsPanel } from './prompts-panel.js';
+import { openSoulPanel, closeSoulPanel } from './soul-panel.js';
 
 // ── Session event logger ──────────────────────────────────────────────────────
 /**
@@ -2162,6 +2163,12 @@ async function _routeInput(text) {
     return;
   }
 
+  // ── Soul editor voice trigger ────────────────────────────────────────────
+  if (/\b(?:open|show|view|edit)\b.{0,20}\b(?:soul|soul\s+file|soul\s+editor)\b/i.test(text)) {
+    openSoulPanel();
+    return;
+  }
+
   // ── Prompt editor voice trigger ──────────────────────────────────────────
   if (/\b(?:open|show|edit)\b.{0,20}\bprompt(?:s)?\b.{0,20}\b(?:editor|registry|panel|settings)\b/i.test(text)) {
     openPromptsPanel();
@@ -2813,6 +2820,22 @@ document.getElementById('toolkit-menu-btn')?.addEventListener('click', () => {
 // ── Prompt Registry "OPEN EDITOR" button ─────────────────────────────────────
 document.getElementById('prompt-registry-open-btn')?.addEventListener('click', () => {
   openPromptsPanel();
+});
+
+// ── Soul "VIEW / EDIT SOUL" button ────────────────────────────────────────────
+document.getElementById('soul-open-btn')?.addEventListener('click', () => {
+  openSoulPanel();
+});
+
+// ── Soul verbal protests (fired by soul-panel.js via CustomEvent) ─────────────
+window.addEventListener('soul:open-protest', (e) => {
+  const protest = e.detail?.protest;
+  if (protest && ttsMode !== 'off') enqueueSpeak(protest);
+});
+
+window.addEventListener('soul:save-protest', (e) => {
+  const protest = e.detail?.protest;
+  if (protest && ttsMode !== 'off') enqueueSpeak(protest);
 });
 
 // ── Wikipedia close button ────────────────────────────────────────────────────

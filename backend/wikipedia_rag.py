@@ -28,6 +28,7 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional
 import prompts
+import soul
 
 logger = logging.getLogger(__name__)
 
@@ -249,7 +250,7 @@ def build_wiki_system_prompt(excerpts: list[str]) -> str:
         if excerpts
         else "(No excerpts could be retrieved for this article.)"
     )
-    return prompts.get("WIKI_ARTICLE_MODE", title=session.article_title, excerpts=excerpts_text)
+    return soul.inject(prompts.get("WIKI_ARTICLE_MODE", title=session.article_title, excerpts=excerpts_text))
 
 
 # ── Status ─────────────────────────────────────────────────────────────────────

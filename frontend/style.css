@@ -5371,4 +5371,308 @@ a.news-story-source-title:hover {
 .prompt-card-status--ok  { color: rgba(120,220,120,0.85); }
 .prompt-card-status--err { color: rgba(255,100,100,0.85); }
 
+/* ============================================================
+   STARLING SOUL EDITOR PANEL
+   ============================================================ */
+
+/* Soul menu description text */
+.soul-menu-desc {
+  font-size: 0.65rem;
+  color: rgba(255,255,255,0.35);
+  line-height: 1.4;
+  margin-bottom: 8px;
+}
+
+/* Open button (matches prompt registry style) */
+.soul-open-btn {
+  width: 100%;
+  padding: 7px 12px;
+  background: rgba(140,80,220,0.12);
+  border: 1px solid rgba(140,80,220,0.3);
+  border-radius: 4px;
+  color: rgba(180,130,255,0.9);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  text-align: left;
+}
+.soul-open-btn:hover {
+  background: rgba(140,80,220,0.22);
+  border-color: rgba(140,80,220,0.55);
+}
+
+/* Soul editor title tint */
+.soul-editor-title {
+  color: rgba(180,130,255,0.9);
+}
+
+/* Warning banner inside the panel */
+.soul-editor-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 14px;
+  background: rgba(255,180,40,0.07);
+  border-bottom: 1px solid rgba(255,180,40,0.18);
+  font-size: 0.63rem;
+  color: rgba(255,200,80,0.75);
+  line-height: 1.5;
+  flex-shrink: 0;
+}
+.soul-editor-warning-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+  opacity: 0.8;
+}
+
+/* Status message (top of content area) */
+.soul-status-msg {
+  padding: 6px 12px;
+  margin-bottom: 8px;
+  border-radius: 3px;
+  font-size: 0.65rem;
+  font-family: 'Share Tech Mono', monospace;
+  background: rgba(100,200,120,0.1);
+  border: 1px solid rgba(100,200,120,0.25);
+  color: rgba(140,230,140,0.9);
+}
+.soul-status-msg.soul-status-error {
+  background: rgba(255,80,80,0.1);
+  border-color: rgba(255,80,80,0.25);
+  color: rgba(255,130,130,0.9);
+}
+.soul-status-msg.hidden { display: none; }
+
+/* Read-view: formatted markdown display */
+.soul-view-content {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.68rem;
+  color: rgba(220,235,255,0.75);
+  line-height: 1.65;
+  padding: 4px 2px;
+  overflow-y: auto;
+  flex: 1;
+}
+.soul-view-content.hidden { display: none; }
+
+/* Edit view wrapper */
+#soul-edit-view { display: flex; flex-direction: column; gap: 8px; flex: 1; }
+#soul-edit-view.hidden { display: none; }
+
+/* Textarea for editing */
+.soul-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 380px;
+  flex: 1;
+  resize: vertical;
+  background: rgba(10,15,30,0.7);
+  border: 1px solid rgba(140,80,220,0.3);
+  border-radius: 4px;
+  color: rgba(220,235,255,0.85);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.68rem;
+  line-height: 1.6;
+  padding: 10px 12px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.soul-textarea:focus {
+  border-color: rgba(140,80,220,0.55);
+}
+
+/* Edit action buttons (save / cancel row) */
+.soul-edit-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding-top: 4px;
+}
+
+/* Save button */
+.soul-save-btn {
+  padding: 7px 18px;
+  background: rgba(140,80,220,0.18);
+  border: 1px solid rgba(140,80,220,0.45);
+  border-radius: 4px;
+  color: rgba(200,160,255,0.95);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.soul-save-btn:hover {
+  background: rgba(140,80,220,0.32);
+  border-color: rgba(180,120,255,0.6);
+}
+
+/* Edit trigger button (footer) */
+.soul-footer-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 14px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  flex-shrink: 0;
+}
+.soul-edit-btn {
+  padding: 6px 16px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 4px;
+  color: rgba(200,200,200,0.7);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.soul-edit-btn:hover {
+  background: rgba(140,80,220,0.14);
+  border-color: rgba(140,80,220,0.35);
+  color: rgba(180,130,255,0.9);
+}
+
+/* History panel */
+.soul-history-view {
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  padding: 10px 0;
+  margin-bottom: 10px;
+}
+.soul-history-view.hidden { display: none; }
+.soul-history-title {
+  font-size: 0.6rem;
+  color: rgba(255,255,255,0.3);
+  letter-spacing: 0.1em;
+  margin-bottom: 8px;
+  padding: 0 2px;
+}
+.soul-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.soul-history-loading,
+.soul-history-empty {
+  font-size: 0.65rem;
+  color: rgba(255,255,255,0.25);
+  font-style: italic;
+  padding: 4px 2px;
+}
+.soul-history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 3px;
+}
+.soul-history-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.soul-history-id {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.6rem;
+  color: rgba(180,130,255,0.7);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.soul-history-ts {
+  font-size: 0.58rem;
+  color: rgba(255,255,255,0.3);
+}
+.soul-history-actions {
+  display: flex;
+  gap: 5px;
+  flex-shrink: 0;
+}
+.soul-history-diff-btn,
+.soul-history-restore-btn {
+  padding: 3px 9px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.6rem;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.soul-history-diff-btn {
+  background: rgba(100,160,255,0.08);
+  border: 1px solid rgba(100,160,255,0.2);
+  color: rgba(140,190,255,0.8);
+}
+.soul-history-diff-btn:hover {
+  background: rgba(100,160,255,0.18);
+}
+.soul-history-restore-btn {
+  background: rgba(255,130,60,0.08);
+  border: 1px solid rgba(255,130,60,0.25);
+  color: rgba(255,160,100,0.85);
+}
+.soul-history-restore-btn:hover {
+  background: rgba(255,130,60,0.18);
+}
+
+/* Diff overlay */
+.soul-diff-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(8,12,25,0.97);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  border-radius: inherit;
+  overflow: hidden;
+}
+.soul-diff-overlay.hidden { display: none; }
+.soul-diff-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  flex-shrink: 0;
+}
+.soul-diff-title {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.65rem;
+  color: rgba(180,130,255,0.8);
+  letter-spacing: 0.08em;
+}
+.soul-diff-close {
+  padding: 3px 10px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 3px;
+  color: rgba(255,255,255,0.5);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.62rem;
+  cursor: pointer;
+}
+.soul-diff-close:hover { background: rgba(255,255,255,0.1); }
+.soul-diff-pre {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 14px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.64rem;
+  line-height: 1.6;
+  white-space: pre;
+  color: rgba(200,210,230,0.7);
+}
+.soul-diff-pre .diff-add  { color: rgba(100,220,120,0.9); }
+.soul-diff-pre .diff-del  { color: rgba(255,100,100,0.85); }
+.soul-diff-pre .diff-meta { color: rgba(120,160,220,0.6); }
 

@@ -92,6 +92,13 @@
             <button class="prompt-registry-open-btn" id="prompt-registry-open-btn">OPEN EDITOR</button>
           </div>
 
+          <!-- STARLING Soul section -->
+          <div class="menu-section">
+            <div class="menu-section-label">STARLING SOUL</div>
+            <div class="soul-menu-desc">STARLING's persistent personality file. Evolves through session reflections.</div>
+            <button class="soul-open-btn" id="soul-open-btn">VIEW / EDIT SOUL</button>
+          </div>
+
           <!-- System / Shutdown section -->
           <div class="menu-section">
             <div class="menu-section-label">SYSTEM</div>
@@ -117,6 +124,42 @@
             </div>
           </div>
           <div id="prompts-editor-content" class="prompts-editor-content"></div>
+        </div>
+
+        <!-- Soul editor sub-view -->
+        <div id="soul-editor-view" class="toolkit-prompts-view hidden">
+          <div class="prompts-editor-header">
+            <div class="prompts-editor-title soul-editor-title">STARLING SOUL</div>
+            <div class="prompts-editor-controls">
+              <button id="soul-history-btn" class="prompts-reload-btn">HISTORY</button>
+              <button id="soul-reload-btn" class="prompts-reload-btn">RELOAD</button>
+              <button id="soul-editor-back-btn" class="prompts-editor-back-btn">&larr; BACK</button>
+            </div>
+          </div>
+          <div class="soul-editor-warning">
+            <span class="soul-editor-warning-icon">&#9888;</span>
+            Editing this file directly modifies STARLING's identity. STARLING will object. Proceed with discretion.
+          </div>
+          <div id="soul-status-msg" class="soul-status-msg hidden"></div>
+          <div id="soul-history-view" class="soul-history-view hidden">
+            <div class="soul-history-title">VERSION HISTORY</div>
+            <div id="soul-history-list" class="soul-history-list"></div>
+          </div>
+          <div class="prompts-editor-content" id="soul-editor-content">
+            <!-- Read view -->
+            <div id="soul-view-content" class="soul-view-content"></div>
+            <!-- Edit view (hidden until EDIT is clicked) -->
+            <div id="soul-edit-view" class="hidden">
+              <textarea id="soul-textarea" class="soul-textarea" spellcheck="false"></textarea>
+              <div class="soul-edit-actions">
+                <button id="soul-save-btn" class="soul-save-btn">SAVE CHANGES</button>
+                <button id="soul-cancel-edit-btn" class="prompts-editor-back-btn">CANCEL</button>
+              </div>
+            </div>
+          </div>
+          <div class="soul-footer-actions">
+            <button id="soul-edit-btn" class="soul-edit-btn">EDIT SOUL</button>
+          </div>
         </div>      </div>
 
       <!-- Left column: sphere + waveform + chat (repositions below sphere in pres-mode) -->
