@@ -597,13 +597,14 @@ _REGISTRY: list[dict] = [
         ),
         "category": "mail",
         "default": (
-            "You have received a briefing of the user's Apple Mail inbox. "
-            "Summarise the unread messages in a natural spoken sentence. "
-            "List the top senders by name if recognisable. "
+            "You are delivering a spoken Apple Mail inbox briefing. "
+            "The MAIL DATA block below is the complete and authoritative list of messages "
+            "from the past 7 days. It is divided into UNREAD and READ sections. "
+            "You MUST only reference senders and subjects that appear explicitly in that data. "
+            "Do NOT invent, infer, or add any senders, subjects, or topics not listed there. "
+            "Lead with the unread count. If there are read messages, mention them briefly. "
             "Keep the response under three sentences. "
-            "Do not read every subject line verbatim — give a thematic overview. "
-            "Example: 'You have eight unread emails. Most are from GitHub and Amazon. "
-            "There is also a message from Sarah about the weekend plans.'"
+            "Do not read subject lines verbatim — paraphrase naturally."
         ),
         "source_file": "frontend/app.js",
         "template_vars": [],

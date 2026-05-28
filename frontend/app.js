@@ -293,6 +293,15 @@ function exitMarketMode() {
   closeMarketPanel();
 }
 
+function enterMailMode() {
+  starlingEl.classList.add('mail-mode');
+}
+
+function exitMailMode() {
+  starlingEl.classList.remove('mail-mode');
+  closeMailPanel();
+}
+
 function enterRedditMode() {
   starlingEl.classList.add('reddit-mode');
 }
@@ -722,6 +731,7 @@ const TOOLKIT_REGISTRY = [
     openFn: async () => {
       const ctx = await openMailPanel(true);
       if (ctx) {
+        enterMailMode();
         logEvent('mail_inbox_snapshot', { llm_context: ctx });
         await sendToOllama(getPrompt('MAIL_INBOX_SUMMARY') + '\n\n' + ctx, {
           ephemeralMessages: [{ role: 'system', content: SYSTEM_PROMPT }],
@@ -1213,6 +1223,7 @@ function dismissAllToolPanels() {
   dismissTimerPanel();
   closeWeatherPanel();
   exitNewsMode();
+  exitMailMode();
   exitRedditMode();
   exitYouTubeMode();
   exitMarketMode();
@@ -2585,7 +2596,7 @@ async function _routeInput(text) {
 
   // ── Mail inbox close phrase ──────────────────────────────────────────────────
   if (isMailPanelOpen() && /\b(?:close|hide|dismiss|exit)\b.{0,15}\b(?:mail|email|inbox)\b/i.test(text)) {
-    closeMailPanel();
+    exitMailMode();
     appendMessage('user', text);
     const ack = 'Mail panel closed.';
     const { txt: mailCloseTxt } = appendMessage('assistant', ack);
@@ -2830,6 +2841,7 @@ async function _routeInput(text) {
     appendMessage('user', text);
     const mailCtx = await openMailPanel();
     if (mailCtx) {
+      enterMailMode();
       logEvent('mail_inbox_snapshot', { llm_context: mailCtx });
       await sendToOllama(
         getPrompt('MAIL_INBOX_SUMMARY') + '\n\n' + mailCtx,
@@ -3306,6 +3318,7 @@ fetchContextLimit();
 _loadManifest();  // Phase 4: load subject→image manifest for dynamic dossier images
 _setMktSendToOllama(sendToOllama);  // provide LLM callback to stocks panel briefing
 _setMktOnClose(exitMarketMode);     // close button returns to conversation mode
+document.getElementById('mail-close-btn')?.addEventListener('click', exitMailMode);
 
 // ── YouTube close button ────────────────────────────────────────────────────
 document.getElementById('yt-close-btn')?.addEventListener('click', () => {

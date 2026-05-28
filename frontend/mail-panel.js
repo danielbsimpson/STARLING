@@ -33,7 +33,11 @@ export function detectMailTrigger(transcript) {
 
 // ── Render ────────────────────────────────────────────────────────────────────
 function _renderPanel(data) {
-  if (mailCountBadge) mailCountBadge.textContent = data.unread_count;
+  // Badge: show unread count; tooltip shows total in last 7 days
+  if (mailCountBadge) {
+    mailCountBadge.textContent = data.unread_count ?? 0;
+    mailCountBadge.title = `${data.total_count ?? 0} message(s) in the past 7 days`;
+  }
   if (!mailList) return;
 
   mailList.innerHTML = '';
@@ -41,14 +45,14 @@ function _renderPanel(data) {
   if (!data.messages || data.messages.length === 0) {
     const empty = document.createElement('div');
     empty.className   = 'mail-empty';
-    empty.textContent = 'Inbox is empty.';
+    empty.textContent = 'No messages in the past 7 days.';
     mailList.appendChild(empty);
     return;
   }
 
   data.messages.forEach(msg => {
     const card = document.createElement('div');
-    card.className = 'mail-card';
+    card.className = msg.read ? 'mail-card mail-card--read' : 'mail-card mail-card--unread';
 
     const fromEl = document.createElement('div');
     fromEl.className   = 'mail-from';

@@ -1,9 +1,14 @@
 """backend/mail_routes.py
 Apple Mail inbox reader via IMAP (stdlib only — no new pip packages).
 
+Fetches all messages from the past 7 days (read + unread) from INBOX.
+Results are persisted to a disk-based JSON cache with a 5-minute TTL —
+identical in approach to weather.py and stocks.py — so IMAP is only
+contacted at most once every MAIL_CACHE_SECONDS seconds.
+
 Endpoints:
-  GET    /mail/unread        — fetch unread messages + llm_context string
-  DELETE /mail/cache         — clear in-memory cache
+  GET    /mail/unread        — fetch inbox messages + llm_context string
+  DELETE /mail/cache         — clear disk cache
   GET    /mail/credentials   — return credential status (password masked)
   POST   /mail/credentials   — save dedicated IMAP credentials (localhost only)
   DELETE /mail/credentials   — remove dedicated credentials (localhost only)
@@ -18,6 +23,7 @@ import json
 import os
 import ssl
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
@@ -28,20 +34,54 @@ import session_log
 router = APIRouter()
 
 # ── Config ────────────────────────────────────────────────────────────────────
-_BASE_DIR       = Path(__file__).parent
-_MAIL_CRED_FILE = _BASE_DIR / "memory" / "mail_credentials.json"
-_CAL_CRED_FILE  = _BASE_DIR / "memory" / "calendar_credentials.json"
+_BASE_DIR        = Path(__file__).parent
+_MAIL_CRED_FILE  = _BASE_DIR / "memory" / "mail_credentials.json"
+_CAL_CRED_FILE   = _BASE_DIR / "memory" / "calendar_credentials.json"
+_CACHE_FILE      = _BASE_DIR / "memory" / "mail_cache.json"
 
-_MAX_UNREAD = int(os.getenv("MAIL_MAX_UNREAD",    "20"))
-_CACHE_SECS = int(os.getenv("MAIL_CACHE_SECONDS", "300"))
+_MAX_MESSAGES    = int(os.getenv("MAIL_MAX_MESSAGES", "50"))   # total cap across all messages
+_CACHE_SECS      = int(os.getenv("MAIL_CACHE_SECONDS", "300")) # 5 minutes
+_LOOKBACK_DAYS   = int(os.getenv("MAIL_LOOKBACK_DAYS", "7"))   # how far back to search
 
-# ── In-memory cache ───────────────────────────────────────────────────────────
-_cache: dict = {"ts": 0.0, "data": None}
+# ── Startup: ensure cache file exists ────────────────────────────────────────
+_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+if not _CACHE_FILE.exists():
+    _CACHE_FILE.write_text("{}", encoding="utf-8")
+
+# ── Disk-cache helpers ────────────────────────────────────────────────────────
+
+def _load_cache() -> dict:
+    """Load the on-disk JSON cache. Returns {} on read/parse error."""
+    try:
+        return json.loads(_CACHE_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _save_cache(data: dict) -> None:
+    """Write cache atomically: write to .tmp then os.replace."""
+    payload = {"ts": time.time(), "data": data}
+    tmp = _CACHE_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp, _CACHE_FILE)
 
 
 def _invalidate_cache() -> None:
-    _cache["ts"]   = 0.0
-    _cache["data"] = None
+    """Wipe the disk cache so the next request hits IMAP."""
+    try:
+        _CACHE_FILE.write_text("{}", encoding="utf-8")
+    except OSError:
+        pass
+
+
+def _cache_hit() -> dict | None:
+    """Return cached data if it is still within TTL, otherwise None."""
+    raw = _load_cache()
+    if not raw or "ts" not in raw or "data" not in raw:
+        return None
+    if (time.time() - raw["ts"]) >= _CACHE_SECS:
+        return None
+    return raw["data"]
 
 
 # ── Credential helpers ────────────────────────────────────────────────────────
@@ -56,7 +96,6 @@ def _load_credentials() -> dict:
     password = os.getenv("IMAP_PASSWORD", "")
 
     if _MAIL_CRED_FILE.exists():
-        # Dedicated mail credentials take priority over everything
         try:
             stored   = json.loads(_MAIL_CRED_FILE.read_text(encoding="utf-8"))
             username = stored.get("username", username)
@@ -64,7 +103,6 @@ def _load_credentials() -> dict:
         except Exception:
             pass
     elif _CAL_CRED_FILE.exists():
-        # Fall back to calendar credentials only when no env var overrides are set
         try:
             stored = json.loads(_CAL_CRED_FILE.read_text(encoding="utf-8"))
             if not username:
@@ -79,44 +117,65 @@ def _load_credentials() -> dict:
 
 # ── IMAP fetch (blocking — run inside executor) ───────────────────────────────
 
-def _fetch_unread_sync(
-    host: str, port: int, username: str, password: str, max_count: int
+def _fetch_inbox_sync(
+    host: str, port: int, username: str, password: str,
+    max_messages: int, lookback_days: int,
 ) -> list[dict]:
-    """Open an IMAP4_SSL connection, fetch unseen message headers, and return them.
+    """Open an IMAP4_SSL connection and fetch all messages from the past
+    `lookback_days` days (both read and unread).
 
-    Always closed in the finally block. Only FROM, SUBJECT, DATE headers are
-    retrieved — no body content is ever fetched (CON-003).
+    Each returned dict contains:
+        from_address, subject, date, read (bool)
+
+    Only FROM, SUBJECT, DATE, FLAGS are retrieved — no body content.
+    Connection is always closed in the finally block.
     """
+    since_date = (datetime.now(timezone.utc) - timedelta(days=lookback_days))
+    # IMAP SINCE format: DD-Mon-YYYY  e.g. "21-May-2026"
+    since_str  = since_date.strftime("%d-%b-%Y")
+
     ctx  = ssl.create_default_context()
     mail = imaplib.IMAP4_SSL(host, port, ssl_context=ctx)
     try:
         mail.login(username, password)
         mail.select("INBOX", readonly=True)
 
-        status, data = mail.search(None, "(UNSEEN)")
+        # Fetch all messages since the lookback date (read + unread)
+        status, data = mail.search(None, f"(SINCE {since_str})")
         if status != "OK" or not data or not data[0]:
             return []
 
         uid_list = data[0].split()
-        # Most recent first; cap at max_count
-        uid_list = list(reversed(uid_list))[:max_count]
+        # Most recent first; cap total
+        uid_list = list(reversed(uid_list))[:max_messages]
 
         messages: list[dict] = []
         for uid in uid_list:
             fetch_status, msg_data = mail.fetch(
-                uid, "(BODY[HEADER.FIELDS (FROM SUBJECT DATE)])"
+                uid, "(FLAGS BODY[HEADER.FIELDS (FROM SUBJECT DATE)])"
             )
-            if fetch_status != "OK" or not msg_data or not msg_data[0]:
+            if fetch_status != "OK" or not msg_data:
                 continue
 
-            raw = msg_data[0][1] if isinstance(msg_data[0], tuple) else b""
-            if not raw:
+            # FLAGS are in the first part of a multi-part response
+            flags_str = ""
+            raw_headers = b""
+            for part in msg_data:
+                if isinstance(part, tuple):
+                    # part[0] contains the metadata line including flags
+                    meta = part[0].decode(errors="replace") if isinstance(part[0], bytes) else str(part[0])
+                    flags_str += meta
+                    raw_headers = part[1] if isinstance(part[1], bytes) else b""
+
+            if not raw_headers:
                 continue
 
-            msg = email.message_from_bytes(raw)
+            read = "\\Seen" in flags_str or r"\Seen" in flags_str
 
-            from_addr    = msg.get("From", "")
-            raw_subject  = msg.get("Subject", "")
+            msg = email.message_from_bytes(raw_headers)
+
+            from_addr   = msg.get("From", "")
+            raw_subject = msg.get("Subject", "")
             try:
                 subject = str(
                     email.header.make_header(
@@ -131,6 +190,7 @@ def _fetch_unread_sync(
                     "from_address": from_addr,
                     "subject":      subject,
                     "date":         msg.get("Date", ""),
+                    "read":         read,
                 }
             )
 
@@ -142,23 +202,41 @@ def _fetch_unread_sync(
             pass
 
 
-def _build_llm_context(messages: list[dict], unread_count: int) -> str:
-    if unread_count == 0:
-        return "[MAIL DATA — Inbox is empty. No unread messages.]"
-    lines = [f"[MAIL DATA — {unread_count} unread message(s)]"]
-    for m in messages:
-        lines.append(f"- From: {m['from_address']} | Subject: {m['subject']}")
+def _build_llm_context(messages: list[dict]) -> str:
+    total   = len(messages)
+    unread  = [m for m in messages if not m["read"]]
+    read    = [m for m in messages if m["read"]]
+
+    if total == 0:
+        return "[MAIL DATA — No messages in the past 7 days.]"
+
+    lines = [
+        f"[MAIL DATA — {total} message(s) in the past 7 days: "
+        f"{len(unread)} unread, {len(read)} read]"
+    ]
+
+    if unread:
+        lines.append("UNREAD:")
+        for m in unread:
+            lines.append(f"  - From: {m['from_address']} | Subject: {m['subject']}")
+
+    if read:
+        lines.append("READ:")
+        for m in read:
+            lines.append(f"  - From: {m['from_address']} | Subject: {m['subject']}")
+
     return "\n".join(lines)
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/mail/unread")
-async def get_mail_unread():
-    """Fetch unread emails from IMAP.
+async def get_mail_inbox():
+    """Fetch inbox messages (read + unread) from the past 7 days via IMAP.
 
-    Returns: { unread_count, messages, llm_context }
-    Served from in-memory cache for up to MAIL_CACHE_SECONDS (default 5 min).
+    Returns: { unread_count, total_count, messages, llm_context }
+    Results are persisted to disk and served from cache for up to
+    MAIL_CACHE_SECONDS (default 5 min) to avoid hammering IMAP.
     """
     import asyncio
 
@@ -169,42 +247,44 @@ async def get_mail_unread():
             detail="Mail credentials not configured.",
         )
 
-    # Return cache hit if still valid
-    if _cache["data"] is not None and (time.time() - _cache["ts"]) < _CACHE_SECS:
-        return _cache["data"]
+    # Serve from disk cache if still fresh
+    cached = _cache_hit()
+    if cached is not None:
+        return cached
 
     try:
         loop     = asyncio.get_event_loop()
         messages = await loop.run_in_executor(
             None,
-            _fetch_unread_sync,
+            _fetch_inbox_sync,
             creds["host"],
             creds["port"],
             creds["username"],
             creds["password"],
-            _MAX_UNREAD,
+            _MAX_MESSAGES,
+            _LOOKBACK_DAYS,
         )
     except imaplib.IMAP4.error as exc:
         raise HTTPException(status_code=502, detail=f"IMAP error: {exc}") from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Mail fetch failed: {exc}") from exc
 
-    unread_count = len(messages)
-    llm_context  = _build_llm_context(messages, unread_count)
+    unread_count = sum(1 for m in messages if not m["read"])
+    llm_context  = _build_llm_context(messages)
 
     data = {
         "unread_count": unread_count,
+        "total_count":  len(messages),
         "messages":     messages,
         "llm_context":  llm_context,
     }
-    _cache["ts"]   = time.time()
-    _cache["data"] = data
+    _save_cache(data)
     return data
 
 
 @router.delete("/mail/cache")
 async def bust_mail_cache():
-    """Clear the in-memory mail cache so the next fetch hits IMAP directly."""
+    """Clear the disk cache so the next fetch hits IMAP directly."""
     _invalidate_cache()
     return {"status": "cleared"}
 
@@ -255,3 +335,4 @@ async def delete_mail_credentials(request: Request):
         _MAIL_CRED_FILE.unlink()
     _invalidate_cache()
     return {"status": "removed"}
+
