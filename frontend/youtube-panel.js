@@ -2,7 +2,7 @@
 // YouTube feed panel: trigger detection, channel RSS fetch, tile-grid rendering,
 // type/channel/sort filtering, background synthesis polling, and spoken briefing.
 
-const BACKEND_BASE_YT = 'http://localhost:8000';
+import { BACKEND_BASE } from './config.js';
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const ytPanel           = document.getElementById('yt-panel');
@@ -80,7 +80,7 @@ export async function openYouTubePanel(options = {}) {
 
   let data;
   try {
-    const res = await fetch(`${BACKEND_BASE_YT}/youtube${query}`);
+    const res = await fetch(`${BACKEND_BASE}/youtube${query}`);
     if (!res.ok) throw new Error(`YouTube API ${res.status}`);
     data = await res.json();
   } catch (err) {
@@ -150,7 +150,7 @@ export function initYouTubePanel({ enqueueSpeak, sendToOllama, interruptSpeech }
 // ── Internal rendering ────────────────────────────────────────────────────────
 
 async function _hardRefresh() {
-  await fetch(`${BACKEND_BASE_YT}/youtube/cache`, { method: 'DELETE' }).catch(() => {});
+  await fetch(`${BACKEND_BASE}/youtube/cache`, { method: 'DELETE' }).catch(() => {});
   await openYouTubePanel({ sort: _activeSort, silent: true });
 }
 
@@ -182,7 +182,7 @@ function _hideSettingsView() {
 async function _fetchAndRenderChannelList() {
   if (ytSettingsChannelList) ytSettingsChannelList.innerHTML = '<div class="yt-settings-loading">LOADING\u2026</div>';
   try {
-    const res = await fetch(`${BACKEND_BASE_YT}/youtube/channels`);
+    const res = await fetch(`${BACKEND_BASE}/youtube/channels`);
     if (!res.ok) {
       if (ytSettingsChannelList) ytSettingsChannelList.innerHTML = '<div class="yt-settings-error-inline">Failed to load channels.</div>';
       return;
@@ -252,7 +252,7 @@ function _createPendingChannelRow(displayName, handle) {
 
 async function _removeChannel(channelId) {
   try {
-    const res = await fetch(`${BACKEND_BASE_YT}/youtube/channels/${encodeURIComponent(channelId)}`, { method: 'DELETE' });
+    const res = await fetch(`${BACKEND_BASE}/youtube/channels/${encodeURIComponent(channelId)}`, { method: 'DELETE' });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       _showSettingsError(body.detail || 'Failed to remove channel.');
@@ -275,7 +275,7 @@ async function _addChannel(rawValue) {
   }
   if (ytSettingsAddBtn) ytSettingsAddBtn.disabled = true;
   try {
-    const res = await fetch(`${BACKEND_BASE_YT}/youtube/channels`, {
+    const res = await fetch(`${BACKEND_BASE}/youtube/channels`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ channel_id: channelId }),
@@ -623,7 +623,7 @@ function _startSynthesisPolling(channels, rawCount) {
     }
 
     try {
-      const res  = await fetch(`${BACKEND_BASE_YT}/youtube/synthesised`);
+      const res  = await fetch(`${BACKEND_BASE}/youtube/synthesised`);
       const body = await res.json();
 
       if (body.status === 'ready' && body.result) {

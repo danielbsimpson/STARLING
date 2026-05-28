@@ -81,10 +81,9 @@ def _load_cache() -> dict:
 
 
 def _save_cache(cache: dict) -> None:
-    """Write cache atomically: write to .tmp then os.replace."""
-    tmp = _CACHE_FILE.with_suffix(".tmp")
-    tmp.write_text(json.dumps(cache, indent=2), encoding="utf-8")
-    os.replace(tmp, _CACHE_FILE)
+    """Write cache atomically via the shared file_utils helper."""
+    from file_utils import atomic_write_json
+    atomic_write_json(_CACHE_FILE, cache)
 
 
 def _loc_key(lat: float, lon: float) -> str:

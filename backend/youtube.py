@@ -166,7 +166,7 @@ def _save_channels(channels: list[str]) -> None:
                     if isinstance(item, dict) and item.get("channel_id"):
                         existing[item["channel_id"]] = item
             except Exception:
-                pass
+                pass  # best-effort: corrupt channels.json → start with empty existing map
         objects = [
             existing.get(cid, {"name": _channel_name_map.get(cid), "channel_id": cid, "handle": None})
             for cid in channels

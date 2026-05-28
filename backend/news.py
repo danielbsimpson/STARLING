@@ -350,7 +350,7 @@ def _parse_feed(url: str) -> list[dict]:
             today  = datetime.now(timezone.utc).date()
             pub    = pub_dt.strftime("%H:%M") if pub_dt.date() == today else pub_dt.strftime("%b %-d")
         except Exception:
-            pass
+            pass  # best-effort: malformed pubDate → leave pub/pub_ts empty
 
         dedup_key = hashlib.md5(title.lower().encode()).hexdigest()[:8]
 

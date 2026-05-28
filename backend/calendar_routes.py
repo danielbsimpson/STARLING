@@ -46,7 +46,7 @@ def _load_stored_credentials() -> dict:
         if _CRED_FILE.exists():
             return json.loads(_CRED_FILE.read_text(encoding="utf-8"))
     except Exception:
-        pass
+        pass  # best-effort: missing/corrupt creds file → fall back to env vars
     return {}
 
 

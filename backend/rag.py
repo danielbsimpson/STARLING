@@ -515,7 +515,7 @@ def ingest_memory_catchup() -> int:
                 if existing and existing.get("ids") and len(existing["ids"]) > 0:
                     continue
             except Exception:
-                pass
+                pass  # best-effort: chroma query failure → reingest the file anyway
             total += ingest_facts(facts_file, session_id)
         return total
     except Exception:

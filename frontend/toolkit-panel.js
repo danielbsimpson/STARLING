@@ -1,6 +1,9 @@
 // frontend/toolkit-panel.js
-// Self-contained toolkit menu panel. Zero imports.
+// Self-contained toolkit menu panel.
 // Communicates with app.js exclusively through CustomEvents dispatched on window.
+// Only dependency: shared HTML-escape helper from utils.js.
+
+import { escapeHtml } from './utils.js';
 
 // ── Module-level DOM refs ──────────────────────────────────────────────────────
 const _panel           = document.getElementById('toolkit-panel');
@@ -119,7 +122,7 @@ export function initToolkitPanel(registry) {
     entry.phrases.forEach(p => {
       const tag = document.createElement('code');
       tag.className   = 'toolkit-phrase';
-      tag.textContent = _escapeHtml(p);
+      tag.textContent = escapeHtml(p);
       detailPhrases.appendChild(tag);
     });
     detailExtra.innerHTML = '';
@@ -192,11 +195,3 @@ export function showToolkitListView() {
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
-/** Minimal HTML escaping to prevent XSS when injecting registry strings. */
-function _escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}

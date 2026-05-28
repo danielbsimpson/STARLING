@@ -21,10 +21,10 @@ All implementation plans live in [`plan/`](./plan/). Completed feature guides ha
 |---|---|---|---|
 | Toolkit Menu | [`plan/feature-toolkit-menu-1.md`](./plan/feature-toolkit-menu-1.md) | ✅ Done | Voice- and button-triggered overlay panel listing every active Starling tool; click any tool for a spoken LLM briefing, then confirm by voice or click to activate it directly |
 | RAG Memory Manager | [`plan/feature-rag-memory-manager-1.md`](./plan/feature-rag-memory-manager-1.md) | 🔲 Pending | Voice-triggered panel to upload `.txt`/`.md` files into ChromaDB, view all ingested sources, preview chunks per document, and delete sources by name |
-| Wake Word & Interrupt | [`plan/WAKE_WORD.md`](./plan/WAKE_WORD.md) | 🔲 Pending | "Hey Starling" always-on listener triggers the mic without a button press; speaking while Starling is talking immediately stops playback and starts listening |
-| Google Calendar | [`plan/CALENDAR.md`](./plan/CALENDAR.md) | 🔲 Pending | Voice-triggered calendar panel; reads Google Calendar via OAuth2; daily and weekly event views; LLM spoken briefing ("what's on my schedule today?") |
-| Gmail | [`plan/GMAIL.md`](./plan/GMAIL.md) | 🔲 Pending | Voice-triggered inbox panel; fetches unread messages via Gmail API; spoken summary ("you have 5 unread emails from…"); open any message for a full-text LLM summary |
-| Tool Awareness & Fuzzy Recovery | [`plan/TOOL_AWARENESS.md`](./plan/TOOL_AWARENESS.md) | 🔲 Pending | Injects a structured tool manifest into the system prompt so Starling can describe her own capabilities; fuzzy-intent layer at the tail of the intercept chain catches near-miss transcripts and asks for confirmation before opening a tool |
+| Wake Word & Interrupt | [`plan/feature-wake-word-1.md`](./plan/feature-wake-word-1.md) | 🔲 Pending | "Hey Starling" always-on listener triggers the mic without a button press; speaking while Starling is talking immediately stops playback and starts listening |
+| iCloud Calendar | [`assets/archived/complete/CALENDAR.md`](./assets/archived/complete/CALENDAR.md) | ✅ Done | CalDAV calendar panel sourced from iCloud; today's and the coming week's events; Apple ID + App-Specific Password auth; 1-hour disk cache |
+| Apple Mail Inbox | [`assets/archived/feature-apple-mail-inbox-1.md`](./assets/archived/feature-apple-mail-inbox-1.md) | ✅ Done | IMAP inbox panel showing recent unread messages (headers only, never body content); Apple ID + App-Specific Password auth; 5-minute in-memory cache |
+| Tool Awareness & Fuzzy Recovery | [`plan/feature-tool-awareness-1.md`](./plan/feature-tool-awareness-1.md) | 🔲 Pending | Injects a structured tool manifest into the system prompt so Starling can describe her own capabilities; fuzzy-intent layer at the tail of the intercept chain catches near-miss transcripts and asks for confirmation before opening a tool |
 
 ---
 

@@ -5,7 +5,7 @@
 # All commands assume the repo root as working directory.
 # ─────────────────────────────────────────────────────────────────────────────
 
-.PHONY: help install up down backend frontend llama test lint
+.PHONY: help install up down backend frontend llama test test-unit lint rag-ingest rag-status rag-clear
 
 # Detect OS for venv activation path
 ifeq ($(OS),Windows_NT)
@@ -29,8 +29,13 @@ help:
 	@echo "  make backend    Start FastAPI backend with hot-reload (port 8000)"
 	@echo "  make frontend   Serve frontend with live-server for hot-reload (port 8001)"
 	@echo "  make llama      Launch llama-server via start_llama_server.bat (Windows)"
-	@echo "  make test       Run integration tests against a running backend"
+	@echo "  make test       Run end-to-end integration tests against a running backend"
+	@echo "  make test-unit  Run offline unit / regression tests under tests/ (pytest)"
 	@echo "  make lint       Run ruff on the backend source"
+	@echo ""
+	@echo "  make rag-ingest Index .md/.txt files under memory/input/ into ChromaDB"
+	@echo "  make rag-status Print /rag/status (chunk count, model, collection)"
+	@echo "  make rag-clear  Delete the ChromaDB store (memory/chroma_db)"
 	@echo ""
 
 # ── Install ───────────────────────────────────────────────────────────────────
@@ -65,7 +70,10 @@ endif
 # ── Integration tests ─────────────────────────────────────────────────────────
 test:
 	$(PYTHON) scripts/test_integration.py
-
+# ── Unit / regression tests (offline) ────────────────────────────────────────
+test-unit:
+	$(PIP) install --quiet pytest
+	$(PYTHON) -m pytest tests/ -v
 # ── Lint ─────────────────────────────────────────────────────────────────────
 lint:
 	$(PIP) install --quiet ruff

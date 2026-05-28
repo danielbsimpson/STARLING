@@ -7,6 +7,7 @@
 // Requires the #prompts-editor-view element in index.html (inside #toolkit-panel).
 
 import { BACKEND_BASE } from './config.js';
+import { escapeHtml } from './utils.js';
 import { setPrompt, resetPrompt } from './prompts.js';
 import { openToolkitPanel, showToolkitListView } from './toolkit-panel.js';
 
@@ -70,7 +71,7 @@ export async function openPromptsPanel() {
     _render(catalog);
   } catch (err) {
     _editorContent.innerHTML =
-      `<div class="prompts-error">Failed to load prompts: ${_escapeHtml(err.message)}</div>`;
+      `<div class="prompts-error">Failed to load prompts: ${escapeHtml(err.message)}</div>`;
   }
 }
 
@@ -150,7 +151,7 @@ function _buildCard(entry) {
   if (riskCfg) {
     const warn = document.createElement('div');
     warn.className = `prompt-card-warning ${riskCfg.cls}`;
-    warn.innerHTML = `<strong>${_escapeHtml(riskCfg.label)}:</strong> ${_escapeHtml(riskCfg.message)}`;
+    warn.innerHTML = `<strong>${escapeHtml(riskCfg.label)}:</strong> ${escapeHtml(riskCfg.message)}`;
     card.appendChild(warn);
   }
 
@@ -341,11 +342,3 @@ async function _handleReload() {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function _escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}

@@ -10,19 +10,11 @@ import re as _re
 import site
 from pathlib import Path
 
-# ── Windows: register nvidia wheel DLL directories before importing onnxruntime ─
-# The nvidia-*-cu12 wheels install cuDNN, cuBLAS, etc. under
-#   site-packages/nvidia/*/bin/
-# which is not on the system PATH.  onnxruntime_providers_cuda.dll depends on
-# them; without this the CUDA provider silently falls back to CPU.
-if os.name == "nt":
-    for _pkg_root in site.getsitepackages():
-        _nvidia_root = Path(_pkg_root) / "nvidia"
-        if _nvidia_root.is_dir():
-            for _sub in _nvidia_root.iterdir():
-                _bin = _sub / "bin"
-                if _bin.is_dir():
-                    os.add_dll_directory(str(_bin))
+from gpu_init import register_nvidia_dll_dirs
+
+# Register nvidia wheel DLL dirs before onnxruntime is imported so the CUDA EP
+# can find cuDNN / cuBLAS / etc.; without this it silently falls back to CPU.
+register_nvidia_dll_dirs()
 
 import numpy as _np
 import onnxruntime as _ort

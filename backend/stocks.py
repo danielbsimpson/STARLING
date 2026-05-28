@@ -62,12 +62,7 @@ _DEFAULT_WATCHLIST = {
 
 
 # ── Helpers — atomic file I/O ─────────────────────────────────────────────────
-
-def _atomic_write(path: Path, data: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    os.replace(tmp, path)
+from file_utils import atomic_write_json as _atomic_write
 
 
 def _load_json(path: Path, default: dict) -> dict:

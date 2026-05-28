@@ -11,7 +11,7 @@
 //   a location other than home, a secondary label "SHOWING RESULTS FOR <X>" appears.
 //   An unknown location (HTTP 422) is surfaced as a spoken error without opening the panel.
 
-const BACKEND_BASE_WX = 'http://localhost:8000';
+import { BACKEND_BASE } from './config.js';
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const _starlingEl    = document.getElementById('starling');
@@ -32,9 +32,6 @@ const wxSunrise      = document.getElementById('weather-sunrise');
 const wxSunset       = document.getElementById('weather-sunset');
 const wxForecast     = document.getElementById('weather-forecast');
 const ftrWxBadge     = document.getElementById('ftr-wx-location');
-
-// ── Stored services (injected via initWeatherPanel) ───────────────────────────
-let _enqueueSpeak = null;
 
 // ── Last-opened location (for Refresh button) ─────────────────────────────────
 let _lastLocationOverride = null;
@@ -58,12 +55,10 @@ let _autoDismissTimer = null;
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 /**
- * Call once at startup to inject shared services from app.js.
- * @param {{ enqueueSpeak: Function }} services
+ * Call once at startup to wire panel controls (Refresh button, etc.).
+ * Reserved for future shared-service injection.
  */
-export function initWeatherPanel({ enqueueSpeak }) {
-  _enqueueSpeak = enqueueSpeak;
-
+export function initWeatherPanel() {
   // Refresh button — force-fetch live data for the last-used location
   if (wxRefreshBtn) {
     wxRefreshBtn.addEventListener('click', async () => {
@@ -139,7 +134,7 @@ export async function openWeatherPanel(locationOverride = null, force = false) {
   const params = new URLSearchParams();
   if (locationOverride) params.set('location', locationOverride);
   if (force)            params.set('force', 'true');
-  const url = `${BACKEND_BASE_WX}/weather${params.size ? '?' + params : ''}`;
+  const url = `${BACKEND_BASE}/weather${params.size ? '?' + params : ''}`;
 
   let data;
   try {

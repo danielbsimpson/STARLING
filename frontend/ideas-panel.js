@@ -2,6 +2,7 @@
 // Ideas tracker: trigger detection, single-press capture mode, save, list, search.
 
 import { BACKEND_BASE } from './config.js';
+import { escapeHtml } from './utils.js';
 import { getPrompt } from './prompts.js';
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
@@ -261,13 +262,13 @@ function _renderIdeasList(ideas, title) {
     card.innerHTML = `
       <div class="idea-index">${String(i + 1).padStart(2, '0')}</div>
       <div class="idea-body">
-        <div class="idea-title">${_esc(idea.title)}</div>
+        <div class="idea-title">${escapeHtml(idea.title)}</div>
         <div class="idea-meta">
-          <span class="idea-date">${_esc(dateStr)}</span>
-          ${(idea.tags || []).map(t => `<span class="idea-tag">${_esc(t)}</span>`).join('')}
+          <span class="idea-date">${escapeHtml(dateStr)}</span>
+          ${(idea.tags || []).map(t => `<span class="idea-tag">${escapeHtml(t)}</span>`).join('')}
         </div>
       </div>
-      <button class="idea-delete-btn" data-id="${_esc(idea.id)}" title="Discard this idea">✕</button>
+      <button class="idea-delete-btn" data-id="${escapeHtml(idea.id)}" title="Discard this idea">✕</button>
     `;
 
     // Per-card delete
@@ -296,9 +297,4 @@ ideasCloseBtn?.addEventListener('click',  () => ideasPanel.classList.add('hidden
 function _showView(which) {
   ideasCaptureView.classList.toggle('hidden', which !== 'capture');
   ideasListView.classList.toggle('hidden',    which !== 'list');
-}
-
-function _esc(s) {
-  return (s || '').toString()
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }

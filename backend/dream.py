@@ -89,10 +89,11 @@ def _iso_ts() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+from file_utils import atomic_write_text as _atomic_write_text
+
+
 def _atomic_write(path: Path, content: str) -> None:
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(content, encoding="utf-8")
-    tmp.replace(path)
+    _atomic_write_text(path, content)
 
 
 # ── LLM call ─────────────────────────────────────────────────────────────────
@@ -220,6 +221,14 @@ def _append_timeout_notice(session_id: str) -> None:
         )
 
 
+def _timed_out(t_start: float, pass_name: str, result: "DreamResult") -> bool:
+    """Record a timeout error on `result` and return True if the budget is spent."""
+    if time.monotonic() - t_start > DREAM_TIMEOUT_S:
+        result.errors.append(f"Timed out before {pass_name}")
+        return True
+    return False
+
+
 # ── Pass 1: Session Summary ───────────────────────────────────────────────────
 
 def _run_pass1_summary(transcript: str, session_id: str, model: str) -> Path:
@@ -319,7 +328,7 @@ def read_checkpoint() -> Optional[str]:
         if data.get("session_id") == _session_log.get_session_id():
             return data.get("last_dream_at")
     except Exception:
-        pass
+        pass  # best-effort: missing checkpoint or wrong session → return None
     return None
 
 
@@ -365,8 +374,7 @@ def _run_pipeline(session_id: str, from_ts: Optional[str] = None) -> DreamResult
         return result
 
     # ── Pass 1: Summary ───────────────────────────────────────────────────────
-    if time.monotonic() - t_start > DREAM_TIMEOUT_S:
-        result.errors.append("Timed out before Pass 1")
+    if _timed_out(t_start, "Pass 1", result):
         return result
 
     summary_text = ""
@@ -383,8 +391,7 @@ def _run_pipeline(session_id: str, from_ts: Optional[str] = None) -> DreamResult
         summary_text = err_path.read_text(encoding="utf-8")
 
     # ── Pass 2: Facts ─────────────────────────────────────────────────────────
-    if time.monotonic() - t_start > DREAM_TIMEOUT_S:
-        result.errors.append("Timed out before Pass 2")
+    if _timed_out(t_start, "Pass 2", result):
         _append_timeout_notice(session_id)
         return result
 
@@ -407,8 +414,7 @@ def _run_pipeline(session_id: str, from_ts: Optional[str] = None) -> DreamResult
         facts_text = err_path.read_text(encoding="utf-8")
 
     # ── Pass 3: Reflection ────────────────────────────────────────────────────
-    if time.monotonic() - t_start > DREAM_TIMEOUT_S:
-        result.errors.append("Timed out before Pass 3")
+    if _timed_out(t_start, "Pass 3", result):
         _append_timeout_notice(session_id)
         return result
 
@@ -424,8 +430,7 @@ def _run_pipeline(session_id: str, from_ts: Optional[str] = None) -> DreamResult
         reflection_text = ""
 
     # ── Pass 4: Soul Evolution ────────────────────────────────────────────────
-    if time.monotonic() - t_start > DREAM_TIMEOUT_S:
-        result.errors.append("Timed out before Pass 4")
+    if _timed_out(t_start, "Pass 4", result):
         return result
 
     try:

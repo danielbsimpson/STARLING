@@ -2,7 +2,7 @@
 // Reddit Social Feed panel — voice-triggered read-only Reddit integration.
 // Follows the same structure as news-panel.js (trigger / fetch / render / poll).
 
-const BACKEND_BASE_REDDIT = 'http://localhost:8000';
+import { BACKEND_BASE } from './config.js';
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const redditPanel          = document.getElementById('reddit-panel');
@@ -68,7 +68,7 @@ export async function openRedditPanel(options = {}) {
   const query = params.toString() ? `?${params.toString()}` : '';
 
   try {
-    const resp = await fetch(`${BACKEND_BASE_REDDIT}/reddit${query}`);
+    const resp = await fetch(`${BACKEND_BASE}/reddit${query}`);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
 
@@ -258,7 +258,7 @@ function _startSynthesisPolling(subreddits, rawCount, silent) {
     }
 
     try {
-      const res  = await fetch(`${BACKEND_BASE_REDDIT}/reddit/synthesised`);
+      const res  = await fetch(`${BACKEND_BASE}/reddit/synthesised`);
       const body = await res.json();
 
       if (body.status === 'ready' && body.result) {
@@ -296,7 +296,7 @@ function _speakBriefing(briefingText) {
 
 async function _hardRefresh() {
   try {
-    await fetch(`${BACKEND_BASE_REDDIT}/reddit/cache`, { method: 'DELETE' });
+    await fetch(`${BACKEND_BASE}/reddit/cache`, { method: 'DELETE' });
   } catch (_) { /* ignore cache-clear errors */ }
   await openRedditPanel({ silent: true });
 }
@@ -334,7 +334,7 @@ async function _fetchAndRenderSubList() {
   redditSettingsSubList.appendChild(loading);
 
   try {
-    const res = await fetch(`${BACKEND_BASE_REDDIT}/reddit/subreddits`);
+    const res = await fetch(`${BACKEND_BASE}/reddit/subreddits`);
     if (!res.ok) {
       redditSettingsSubList.innerHTML = '';
       const err = document.createElement('div');
@@ -381,7 +381,7 @@ function _createSubRow(name) {
 
 async function _removeSubreddit(name) {
   const res = await fetch(
-    `${BACKEND_BASE_REDDIT}/reddit/subreddits/${encodeURIComponent(name)}`,
+    `${BACKEND_BASE}/reddit/subreddits/${encodeURIComponent(name)}`,
     { method: 'DELETE' }
   );
   if (!res.ok) {
@@ -406,7 +406,7 @@ async function _addSubreddit(rawInput) {
   }
   if (redditSettingsAddBtn) redditSettingsAddBtn.disabled = true;
   try {
-    const res = await fetch(`${BACKEND_BASE_REDDIT}/reddit/subreddits`, {
+    const res = await fetch(`${BACKEND_BASE}/reddit/subreddits`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ subreddit: name }),

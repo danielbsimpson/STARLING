@@ -140,7 +140,7 @@ async def startup_event():
         )
         _log.info("Memory: startup catch-up complete")
     except Exception:
-        pass
+        pass  # best-effort: memory catch-up failure must never block startup
 
 
 @app.on_event("shutdown")
@@ -160,7 +160,7 @@ async def shutdown_event():
             timeout=float(_dream.DREAM_TIMEOUT_S + 10),
         )
     except Exception:
-        pass
+        pass  # best-effort: dream-state failure must never block shutdown
 
 
 @app.get("/health")
@@ -187,7 +187,7 @@ def _kill_pid(pid: int) -> None:
         else:
             os.kill(pid, signal.SIGTERM)
     except Exception:
-        pass
+        pass  # best-effort: PID kill failures during shutdown are not actionable
 
 
 @app.post("/system/shutdown")
@@ -208,7 +208,7 @@ async def system_shutdown(request: Request):
             if data.get(key):
                 pids_to_kill.append(int(data[key]))
     except Exception:
-        pass
+        pass  # best-effort: missing PID file → fall back to killing self
 
     # Fallback: at minimum kill the current process if PID file was unavailable
     if not pids_to_kill:
@@ -220,13 +220,13 @@ async def system_shutdown(request: Request):
             from_ts = _dream.read_checkpoint()
             _dream.run_dream_state(session_log.get_session_id(), from_ts=from_ts)
         except Exception:
-            pass
+            pass  # best-effort: dream-on-shutdown failure must not block process termination
         for pid in pids_to_kill:
             _kill_pid(pid)
         try:
             _PID_FILE.unlink(missing_ok=True)
         except Exception:
-            pass
+            pass  # best-effort: PID-file cleanup is idempotent
 
     import threading as _threading
     _threading.Thread(target=_dream_then_kill, daemon=False, name="dream-shutdown").start()

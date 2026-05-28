@@ -3,6 +3,7 @@
 // app.js only calls the exported functions and checks the exported journalMode flag.
 
 import { BACKEND_BASE } from './config.js';
+import { escapeHtml } from './utils.js';
 import { getPrompt } from './prompts.js';
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
@@ -158,7 +159,7 @@ export function appendJournalSegment(transcript) {
     line.style.cssText = 'margin-bottom:6px;';
     line.innerHTML =
       `<span style="color:#444;font-size:0.65em;margin-right:6px;">${String(i + 1).padStart(2, '0')}</span>` +
-      `<span>${_esc(seg)}</span>`;
+      `<span>${escapeHtml(seg)}</span>`;
     journalTranscript.appendChild(line);
   });
   journalTranscript.scrollTop = journalTranscript.scrollHeight;
@@ -475,14 +476,14 @@ function _renderInterviewTranscript(showSubmitHint = false) {
     qEl.style.cssText = 'margin-bottom:3px;';
     qEl.innerHTML =
       `<span style="color:rgba(180,160,255,0.65);font-size:0.62em;letter-spacing:0.06em;margin-right:5px;">Q</span>` +
-      `<span style="color:#999;">${_esc(q)}</span>`;
+      `<span style="color:#999;">${escapeHtml(q)}</span>`;
     journalTranscript.appendChild(qEl);
 
     const aEl = document.createElement('div');
     aEl.style.cssText = 'margin-bottom:9px;padding-left:14px;';
     aEl.innerHTML =
       `<span style="color:rgba(120,220,160,0.65);font-size:0.62em;letter-spacing:0.06em;margin-right:5px;">A</span>` +
-      `<span style="color:#ccc;">${_esc(a)}</span>`;
+      `<span style="color:#ccc;">${escapeHtml(a)}</span>`;
     journalTranscript.appendChild(aEl);
   });
 
@@ -491,7 +492,7 @@ function _renderInterviewTranscript(showSubmitHint = false) {
     pEl.style.cssText = 'margin-bottom:3px;';
     pEl.innerHTML =
       `<span style="color:rgba(180,160,255,0.65);font-size:0.62em;letter-spacing:0.06em;margin-right:5px;">Q</span>` +
-      `<span style="color:#ddd;">${_esc(_pendingQuestion)}</span>`;
+      `<span style="color:#ddd;">${escapeHtml(_pendingQuestion)}</span>`;
     journalTranscript.appendChild(pEl);
   }
 
@@ -542,18 +543,11 @@ function _renderEntriesView(titleLabel, entries) {
       hour: '2-digit', minute: '2-digit',
     });
     card.innerHTML =
-      `<div class="journal-entry-date">${_esc(dt.toUpperCase())}</div>` +
-      `<div class="journal-entry-summary">${_esc(e.summary)}</div>` +
+      `<div class="journal-entry-date">${escapeHtml(dt.toUpperCase())}</div>` +
+      `<div class="journal-entry-summary">${escapeHtml(e.summary)}</div>` +
       `<div class="journal-entry-tags">${
-        (e.tags || []).map(t => `<span class="journal-tag">${_esc(t)}</span>`).join('')
+        (e.tags || []).map(t => `<span class="journal-tag">${escapeHtml(t)}</span>`).join('')
       }</div>`;
     journalEntriesList.appendChild(card);
   });
-}
-
-function _esc(s) {
-  return (s || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
 }

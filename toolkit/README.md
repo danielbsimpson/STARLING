@@ -12,21 +12,21 @@ See [`TRIGGER_PHRASES.md`](./TRIGGER_PHRASES.md) for the full voice command refe
 
 | # | Tool | Guide | Backend | Status |
 |---|---|---|---|---|
-| 1 | Time & Date | [`markdown/complete/TIME.md`](../markdown/complete/TIME.md) | None | ✅ Done |
-| 2 | Timers | [`markdown/complete/TIMER.md`](../markdown/complete/TIMER.md) | None | ✅ Done |
-| 3 | Weather | [`markdown/complete/WEATHER.md`](../markdown/complete/WEATHER.md) | Open-Meteo (free, no key) | ✅ Done |
-| 4 | News Briefing | [`markdown/complete/NEWS.md`](../markdown/complete/NEWS.md) | RSS / feedparser (free) | ✅ Done |
-| 5 | Stocks & Crypto | [`markdown/STOCKS.md`](../markdown/STOCKS.md) | yfinance (unofficial) | ✅ Done |
-| 6 | Wake Word & Interrupt | [`markdown/WAKE_WORD.md`](../markdown/WAKE_WORD.md) | None | 🔲 Planned |
-| 7 | In-UI Browser Panel | [`markdown/WEBCALL.md`](../markdown/WEBCALL.md) | None | ✅ Done |
-| 8 | Ideas Vault | [`markdown/IDEAS_TRACKER.md`](../markdown/IDEAS_TRACKER.md) | Local JSON file | ✅ Done |
-| 9 | Voice Journal | [`markdown/JOURNAL.md`](../markdown/JOURNAL.md) | Local JSON files | ✅ Done |
-| 10 | Wikipedia RAG | [`markdown/WIKIPEDIA.md`](../markdown/WIKIPEDIA.md) | ChromaDB + fastembed | ✅ Done |
-| 11 | Reddit Social Feed | [`assets/archived/feature-reddit-social-1.md`](../assets/archived/feature-reddit-social-1.md) | Reddit JSON API (no auth) | ✅ Done |
-| 12 | YouTube Feed | [`assets/archived/feature-youtube-feed-1.md`](../assets/archived/feature-youtube-feed-1.md) | YouTube Atom RSS (no key) | ✅ Done |
-| 13 | Toolkit Menu | [`plan/feature-toolkit-menu-1.md`](../plan/feature-toolkit-menu-1.md) | None (frontend only) | ✅ Done |
-| 14 | iCloud Calendar | [`plan/feature-apple-mail-inbox-1.md`](../plan/feature-apple-mail-inbox-1.md) | CalDAV (stdlib only, Apple ID) | ✅ Done |
-| 15 | Apple Mail Inbox | [`plan/feature-apple-mail-inbox-1.md`](../plan/feature-apple-mail-inbox-1.md) | IMAP (stdlib only, Apple ID) | ✅ Done |
+| 1 | Time & Date | [`TIME.md`](../assets/archived/complete/TIME.md) | None | ✅ Done |
+| 2 | Timers | [`TIMER.md`](../assets/archived/complete/TIMER.md) | None | ✅ Done |
+| 3 | Weather | [`WEATHER.md`](../assets/archived/complete/WEATHER.md) | Open-Meteo (free, no key) | ✅ Done |
+| 4 | News Briefing | [`NEWS.md`](../assets/archived/complete/NEWS.md) | RSS / feedparser (free) | ✅ Done |
+| 5 | Stocks & Crypto | [`STOCKS.md`](../assets/archived/complete/STOCKS.md) | yfinance (unofficial) | ✅ Done |
+| 6 | Wake Word & Interrupt | [`feature-wake-word-1.md`](../plan/feature-wake-word-1.md) | None | 🔲 Planned |
+| 7 | In-UI Browser Panel | [`WEBCALL.md`](../assets/archived/complete/WEBCALL.md) | None | ✅ Done |
+| 8 | Ideas Vault | [`IDEAS_TRACKER.md`](../assets/archived/complete/IDEAS_TRACKER.md) | Local JSON file | ✅ Done |
+| 9 | Voice Journal | [`JOURNAL.md`](../assets/archived/complete/JOURNAL.md) | Local JSON files | ✅ Done |
+| 10 | Wikipedia RAG | [`WIKIPEDIA.md`](../assets/archived/complete/WIKIPEDIA.md) | ChromaDB + fastembed | ✅ Done |
+| 11 | Reddit Social Feed | [`feature-reddit-social-1.md`](../assets/archived/feature-reddit-social-1.md) | Reddit JSON API (no auth) | ✅ Done |
+| 12 | YouTube Feed | [`feature-youtube-feed-1.md`](../assets/archived/feature-youtube-feed-1.md) | YouTube Atom RSS (no key) | ✅ Done |
+| 13 | Toolkit Menu | [`feature-toolkit-menu-1.md`](../plan/feature-toolkit-menu-1.md) | None (frontend only) | ✅ Done |
+| 14 | iCloud Calendar | [`CALENDAR.md`](../assets/archived/complete/CALENDAR.md) | CalDAV (stdlib only, Apple ID) | ✅ Done |
+| 15 | Apple Mail Inbox | [`feature-apple-mail-inbox-1.md`](../assets/archived/feature-apple-mail-inbox-1.md) | IMAP (stdlib only, Apple ID) | ✅ Done |
 
 Tools dispatch in priority order — the first matching tool wins; unmatched input falls
 through to the LLM. See [`TRIGGER_PHRASES.md`](./TRIGGER_PHRASES.md) for the full ordering
@@ -85,7 +85,7 @@ and an automatic LLM-spoken briefing. Subject data is loaded from
 
 ![S.T.A.R.L.I.N.G. Presentation Mode](../assets/images/presentation_mode_example.png)
 
-Implementation guide: [`markdown/complete/RAG_IMPLEMENTATION.md`](../markdown/complete/RAG_IMPLEMENTATION.md)
+Implementation guide: [`RAG_IMPLEMENTATION.md`](../assets/archived/complete/RAG_IMPLEMENTATION.md)
 
 ---
 
@@ -102,7 +102,7 @@ no LLM involved.
 
 ![S.T.A.R.L.I.N.G. Clock Panel](../assets/images/clock_example.png)
 
-Implementation guide: [`markdown/complete/TIME.md`](../markdown/complete/TIME.md)
+Implementation guide: [`TIME.md`](../assets/archived/complete/TIME.md)
 
 ---
 
@@ -126,7 +126,7 @@ chime on completion.
 
 ![S.T.A.R.L.I.N.G. Timer Panel — complete](../assets/images/timer_example2.png)
 
-Implementation guide: [`markdown/complete/TIMER.md`](../markdown/complete/TIMER.md)
+Implementation guide: [`TIMER.md`](../assets/archived/complete/TIMER.md)
 
 ---
 
@@ -147,7 +147,7 @@ snapshots per location. The LLM delivers a spoken conditions summary.
 
 Configuration (`.env`): `WEATHER_LOCATION`, `WEATHER_UNITS`, `WEATHER_CACHE_FILE`, `WEATHER_DEFAULT_LABEL`
 
-Implementation guide: [`markdown/complete/WEATHER.md`](../markdown/complete/WEATHER.md)
+Implementation guide: [`WEATHER.md`](../assets/archived/complete/WEATHER.md)
 
 ---
 
@@ -182,7 +182,7 @@ a category keyword anywhere in the phrase.
 
 Configuration (`.env`): `NEWS_FEEDS`, `NEWS_MAX_ITEMS`, `NEWS_CACHE_SECONDS`
 
-Implementation guide: [`markdown/complete/NEWS.md`](../markdown/complete/NEWS.md)
+Implementation guide: [`NEWS.md`](../assets/archived/complete/NEWS.md)
 
 ---
 
@@ -203,7 +203,7 @@ require **both** `idea`/`ideas` **and** `vault` to appear in the phrase.
 **Discard / clear triggers:**  
 `"discard the last idea from the vault"` · `"clear the ideas vault"` · `"delete all ideas from the vault"`
 
-Implementation guide: [`markdown/IDEAS_TRACKER.md`](../markdown/IDEAS_TRACKER.md)
+Implementation guide: [`IDEAS_TRACKER.md`](../assets/archived/complete/IDEAS_TRACKER.md)
 
 ---
 
@@ -227,7 +227,7 @@ manual refresh. The LLM delivers a spoken briefing highlighting notable movers.
 
 Configuration (`.env`): `STOCKS_WATCHLIST`, `CRYPTO_WATCHLIST`, `STOCKS_CACHE_SECONDS`, `STOCKS_CURRENCY_SYMBOL`
 
-Implementation guide: [`markdown/STOCKS.md`](../markdown/STOCKS.md)
+Implementation guide: [`STOCKS.md`](../assets/archived/complete/STOCKS.md)
 
 ---
 
@@ -252,7 +252,7 @@ arbitrary URLs, and DuckDuckGo searches.
 
 ![S.T.A.R.L.I.N.G. Browser Panel](../assets/images/web_example.png)
 
-Implementation guide: [`markdown/WEBCALL.md`](../markdown/WEBCALL.md)
+Implementation guide: [`WEBCALL.md`](../assets/archived/complete/WEBCALL.md)
 
 ---
 
@@ -268,7 +268,7 @@ interviewer mode and read-back / keyword search of saved entries.
 
 **Search triggers:** `search journal for [topic]` · `what did I write about [topic]`
 
-Implementation guide: [`markdown/JOURNAL.md`](../markdown/JOURNAL.md)
+Implementation guide: [`JOURNAL.md`](../assets/archived/complete/JOURNAL.md)
 
 ---
 
@@ -284,7 +284,7 @@ the phrase** to avoid conflict with the browser-panel Wikipedia lookup (which re
 **Exit triggers:** `exit wikipedia` · `close wiki` · `back to chat` · `go back` · `never mind`
 
 Configuration: run `python scripts/ingest_wikipedia.py` once to build the index.  
-Implementation guide: [`markdown/WIKIPEDIA.md`](../markdown/WIKIPEDIA.md)
+Implementation guide: [`WIKIPEDIA.md`](../assets/archived/complete/WIKIPEDIA.md)
 
 ---
 
@@ -358,7 +358,7 @@ Calendar data is disk-cached with a 1-hour TTL.
 
 Configuration (`.env`): `CALDAV_URL`, `CALDAV_USERNAME`, `CALDAV_PASSWORD`, `CALENDAR_CACHE_SECONDS`
 
-Implementation guide: [`plan/feature-apple-mail-inbox-1.md`](../plan/feature-apple-mail-inbox-1.md)
+Implementation guide: [`CALENDAR.md`](../assets/archived/complete/CALENDAR.md)
 
 ---
 
@@ -378,7 +378,7 @@ Results are in-memory cached with a 5-minute TTL.
 
 Configuration (`.env`): `IMAP_HOST`, `IMAP_PORT`, `IMAP_USERNAME`, `IMAP_PASSWORD`, `MAIL_MAX_UNREAD`, `MAIL_CACHE_SECONDS`
 
-Implementation guide: [`plan/feature-apple-mail-inbox-1.md`](../plan/feature-apple-mail-inbox-1.md)
+Implementation guide: [`feature-apple-mail-inbox-1.md`](../assets/archived/feature-apple-mail-inbox-1.md)
 
 ---
 
@@ -386,4 +386,4 @@ Implementation guide: [`plan/feature-apple-mail-inbox-1.md`](../plan/feature-app
 
 | Tool | Guide | Notes |
 |------|-------|-------|
-| Wake Word & Interrupt | [`WAKE_WORD.md`](../markdown/WAKE_WORD.md) | Passive listener; say "Hey Starling" to activate without pressing mic |
+| Wake Word & Interrupt | [`feature-wake-word-1.md`](../plan/feature-wake-word-1.md) | Passive listener; say "Hey Starling" to activate without pressing mic |

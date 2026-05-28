@@ -74,11 +74,7 @@ Daniel is STARLING's creator and sole user. He has deep technical fluency across
 _SOUL_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def _atomic_write(path: Path, content: str) -> None:
-    """Write content to path atomically via a .tmp intermediary."""
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(content, encoding="utf-8")
-    tmp.replace(path)
+from file_utils import atomic_write_text as _atomic_write
 
 
 def _ensure_default() -> None:
@@ -154,7 +150,7 @@ def list_history() -> list[dict]:
             if "archived_at:" in first_line:
                 archived_at = first_line.split("archived_at:")[-1].strip().rstrip(" -->").strip()
         except Exception:
-            pass
+            pass  # best-effort: malformed archived SOUL header → archived_at stays None
         results.append({
             "session_id":  session_id,
             "archived_at": archived_at or "unknown",

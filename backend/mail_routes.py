@@ -106,7 +106,7 @@ def _load_credentials() -> dict:
             username = stored.get("username", username)
             password = stored.get("password", password)
         except Exception:
-            pass
+            pass  # best-effort: corrupt creds file → fall back to env vars
     elif _CAL_CRED_FILE.exists():
         try:
             stored = json.loads(_CAL_CRED_FILE.read_text(encoding="utf-8"))
@@ -115,7 +115,7 @@ def _load_credentials() -> dict:
             if not password:
                 password = stored.get("password", "")
         except Exception:
-            pass
+            pass  # best-effort: corrupt CalDAV creds → fall back to env vars
 
     return {"host": host, "port": port, "username": username, "password": password}
 
@@ -204,7 +204,7 @@ def _fetch_inbox_sync(
         try:
             mail.logout()
         except Exception:
-            pass
+            pass  # best-effort: IMAP logout is idempotent; ignore close errors
 
 
 def _build_llm_context(messages: list[dict]) -> str:

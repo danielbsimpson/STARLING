@@ -1,7 +1,8 @@
 // frontend/news-panel.js
 // News briefing panel: trigger detection, data fetch, render, and LLM context export.
 
-const BACKEND_BASE_NEWS = 'http://localhost:8000';
+import { BACKEND_BASE } from './config.js';
+import { escapeHtml } from './utils.js';
 
 // ── Category config ───────────────────────────────────────────────────────────
 const CATEGORIES = [
@@ -166,7 +167,7 @@ let _activeArticleData  = null;  // {title, summary} of the tapped card — for 
 newsRefreshBtn?.addEventListener('click', async () => {
   newsRefreshBtn.textContent = '↻ FETCHING…';
   newsRefreshBtn.disabled    = true;
-  await fetch(`${BACKEND_BASE_NEWS}/news/cache`, { method: 'DELETE' }).catch(() => {});
+  await fetch(`${BACKEND_BASE}/news/cache`, { method: 'DELETE' }).catch(() => {});
   await openNewsPanel(_activeCategory, true);
   newsRefreshBtn.textContent = '↻ REFRESH';
   newsRefreshBtn.disabled    = false;
@@ -269,7 +270,7 @@ export async function openNewsPanel(category = 'world', silent = false) {
 
   let data;
   try {
-    const res = await fetch(`${BACKEND_BASE_NEWS}/news?category=${encodeURIComponent(category)}`);
+    const res = await fetch(`${BACKEND_BASE}/news?category=${encodeURIComponent(category)}`);
     if (res.status === 400) {
       const body = await res.json().catch(() => ({}));
       const msg  = `I don't have a feed set up for ${category} news.`;
@@ -424,14 +425,14 @@ function _makeHeadlineCard(item) {
   const _pub       = item.pub || '—';
   card.innerHTML = `
     <div class="news-item-meta">
-      <span class="news-item-source">${_esc(item.source)}</span>
+      <span class="news-item-source">${escapeHtml(item.source)}</span>
       <span class="news-item-meta-sep">|</span>
-      <span class="news-item-region">${_esc(_regionLbl)}</span>
+      <span class="news-item-region">${escapeHtml(_regionLbl)}</span>
       <span class="news-item-meta-sep">|</span>
-      <span class="news-item-pub">${_esc(_pub)}</span>
+      <span class="news-item-pub">${escapeHtml(_pub)}</span>
     </div>
-    <div class="news-item-title">${_esc(item.title)}</div>
-    ${item.summary ? `<div class="news-item-summary">${_esc(item.summary)}</div>` : ''}
+    <div class="news-item-title">${escapeHtml(item.title)}</div>
+    ${item.summary ? `<div class="news-item-summary">${escapeHtml(item.summary)}</div>` : ''}
     ${item.link ? `<div class="news-item-actions"><button class="news-item-view-btn">VIEW ARTICLE</button></div>` : ''}
   `;
 
@@ -478,31 +479,31 @@ function _makeStoryCard(story) {
   // Pills row (compact — only a few, truncate rest in expanded section)
   const pillsHtml = sources.slice(0, 4).map(s =>
     s.link
-      ? `<a class="news-source-pill" href="${_esc(s.link)}" target="_blank" rel="noopener noreferrer">${_esc(s.name)}</a>`
-      : `<span class="news-source-pill">${_esc(s.name)}</span>`
+      ? `<a class="news-source-pill" href="${escapeHtml(s.link)}" target="_blank" rel="noopener noreferrer">${escapeHtml(s.name)}</a>`
+      : `<span class="news-source-pill">${escapeHtml(s.name)}</span>`
   ).join('');
 
   // Expanded source list (shown on card click)
   const expandedHtml = sources.map(s => `
     <div class="news-story-source-row">
-      <span class="news-story-source-name">${_esc(s.name)}</span>
+      <span class="news-story-source-name">${escapeHtml(s.name)}</span>
       <span class="news-story-source-sep">—</span>
       ${s.link
-        ? `<a class="news-story-source-title" href="${_esc(s.link)}" target="_blank" rel="noopener noreferrer">${_esc(s.title)}</a>`
-        : `<span class="news-story-source-title">${_esc(s.title)}</span>`
+        ? `<a class="news-story-source-title" href="${escapeHtml(s.link)}" target="_blank" rel="noopener noreferrer">${escapeHtml(s.title)}</a>`
+        : `<span class="news-story-source-title">${escapeHtml(s.title)}</span>`
       }
-      ${s.published ? `<span class="news-story-source-pub">${_esc(s.published)}</span>` : ''}
+      ${s.published ? `<span class="news-story-source-pub">${escapeHtml(s.published)}</span>` : ''}
     </div>
   `).join('');
 
   card.innerHTML = `
-    <div class="news-story-headline">${_esc(headline)}</div>
-    ${summary ? `<div class="news-story-summary">${_esc(summary)}</div>` : ''}
+    <div class="news-story-headline">${escapeHtml(headline)}</div>
+    ${summary ? `<div class="news-story-summary">${escapeHtml(summary)}</div>` : ''}
     <div class="news-story-meta-row">
       <div class="news-story-pills">${pillsHtml}</div>
       <div class="news-story-right">
         ${multiSrc ? `<span class="news-story-src-count">${sources.length} sources</span>` : ''}
-        ${pubLabel  ? `<span class="news-item-pub">${_esc(pubLabel)}</span>` : ''}
+        ${pubLabel  ? `<span class="news-item-pub">${escapeHtml(pubLabel)}</span>` : ''}
       </div>
     </div>
     <div class="news-story-expanded">
@@ -589,11 +590,4 @@ function _speakStory(story) {
       { ephemeralMessages: [{ role: 'system', content: sysPrompt }], existingElement: existingEl },
     );
   });
-}
-
-function _esc(str) {
-  return (str || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
 }

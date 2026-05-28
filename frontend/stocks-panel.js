@@ -1,7 +1,8 @@
 // frontend/stocks-panel.js
 // Market panel — chart dashboard, detail view, LLM briefing, watchlist groups.
 
-const BACKEND = 'http://localhost:8000';
+import { BACKEND_BASE } from './config.js';
+import { escapeHtml } from './utils.js';
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const mktPanel      = document.getElementById('mkt-panel');
@@ -50,7 +51,7 @@ export function setOnClose(fn)      { _onClose = fn; }
 mktRefreshBtn?.addEventListener('click', async () => {
   mktRefreshBtn.textContent = '↻ FETCHING…';
   mktRefreshBtn.disabled    = true;
-  await fetch(`${BACKEND}/stocks/cache`, { method: 'DELETE' }).catch(() => {});
+  await fetch(`${BACKEND_BASE}/stocks/cache`, { method: 'DELETE' }).catch(() => {});
   await _loadDashboard(true);
   mktRefreshBtn.textContent = '↻ REFRESH';
   mktRefreshBtn.disabled    = false;
@@ -178,7 +179,7 @@ async function _loadDashboard(force = false) {
 
   let data;
   try {
-    const res = await fetch(`${BACKEND}/stocks`);
+    const res = await fetch(`${BACKEND_BASE}/stocks`);
     if (!res.ok) throw new Error(`/stocks ${res.status}`);
     data = await res.json();
   } catch (err) {
@@ -277,7 +278,7 @@ function _populateSelectors(groups) {
 
   if (sel4 && equities.length) {
     sel4.innerHTML = equities.map(t =>
-      `<option value="${_esc(t.symbol)}">${_esc(t.symbol)} — ${_esc(t.name)}</option>`
+      `<option value="${escapeHtml(t.symbol)}">${escapeHtml(t.symbol)} — ${escapeHtml(t.name)}</option>`
     ).join('');
     tile4.dataset.symbol = equities[0].symbol;
   }
@@ -285,7 +286,7 @@ function _populateSelectors(groups) {
   if (sel5 && cryptos.length) {
     sel5.innerHTML = cryptos.map(t => {
       const label = t.symbol.replace('-USD','').replace('-USDT','');
-      return `<option value="${_esc(t.symbol)}">${_esc(label)}</option>`;
+      return `<option value="${escapeHtml(t.symbol)}">${escapeHtml(label)}</option>`;
     }).join('');
     tile5.dataset.symbol = cryptos[0].symbol;
   }
@@ -326,7 +327,7 @@ async function _loadAllTileHistories(force = false) {
   const tile5sym = document.getElementById('tile-5')?.dataset.symbol || '';
   const allSyms  = [...new Set(['^GSPC','^IXIC','^DJI','BTC-USD','ETH-USD', tile4sym, tile5sym].filter(Boolean))];
 
-  const url = `${BACKEND}/stocks/history/batch?tickers=${allSyms.join(',')}&window=1m${force ? '&force=true' : ''}`;
+  const url = `${BACKEND_BASE}/stocks/history/batch?tickers=${allSyms.join(',')}&window=1m${force ? '&force=true' : ''}`;
   let batch;
   try {
     const res = await fetch(url);
@@ -362,8 +363,8 @@ async function _loadAllTileHistories(force = false) {
 async function _loadTileHistory(tileIdx, win, force = false) {
   if (tileIdx === 3) {
     const [btcRes, ethRes] = await Promise.all([
-      fetch(`${BACKEND}/stocks/history?ticker=BTC-USD&window=${win}${force ? '&force=true' : ''}`).then(r => r.json()).catch(() => null),
-      fetch(`${BACKEND}/stocks/history?ticker=ETH-USD&window=${win}${force ? '&force=true' : ''}`).then(r => r.json()).catch(() => null),
+      fetch(`${BACKEND_BASE}/stocks/history?ticker=BTC-USD&window=${win}${force ? '&force=true' : ''}`).then(r => r.json()).catch(() => null),
+      fetch(`${BACKEND_BASE}/stocks/history?ticker=ETH-USD&window=${win}${force ? '&force=true' : ''}`).then(r => r.json()).catch(() => null),
     ]);
     const datasets = [];
     if (btcRes?.candles) datasets.push({data: _toXY(btcRes.candles), color: TILE_COLORS[3], label: 'BTC', yAxisID: 'yBTC'});
@@ -375,7 +376,7 @@ async function _loadTileHistory(tileIdx, win, force = false) {
   const sym = _getActiveTileSymbol(tileIdx);
   if (!sym) return;
   try {
-    const res  = await fetch(`${BACKEND}/stocks/history?ticker=${sym}&window=${win}${force ? '&force=true' : ''}`);
+    const res  = await fetch(`${BACKEND_BASE}/stocks/history?ticker=${sym}&window=${win}${force ? '&force=true' : ''}`);
     const item = await res.json();
     _renderTileChart(tileIdx, [{data: _toXY(item.candles), color: TILE_COLORS[tileIdx]}]);
   } catch (err) {
@@ -515,7 +516,7 @@ async function _loadDetailChart(symbol, win) {
 
   let item;
   try {
-    const res = await fetch(`${BACKEND}/stocks/history?ticker=${symbol}&window=${win}`);
+    const res = await fetch(`${BACKEND_BASE}/stocks/history?ticker=${symbol}&window=${win}`);
     if (!res.ok) throw new Error(`/history ${res.status}`);
     item = await res.json();
   } catch (err) {
@@ -610,7 +611,7 @@ async function _triggerBriefing(symbol, win) {
   mktHearBtn.textContent = '♪ LOADING…';
 
   try {
-    const res = await fetch(`${BACKEND}/stocks/briefing?ticker=${encodeURIComponent(symbol)}&window=${win}`);
+    const res = await fetch(`${BACKEND_BASE}/stocks/briefing?ticker=${encodeURIComponent(symbol)}&window=${win}`);
     if (!res.ok) throw new Error(`/briefing ${res.status}`);
     const data = await res.json();
 
@@ -666,9 +667,4 @@ function _hexAlpha(hex, alpha) {
 function _fmtDate(ts) {
   if (!ts) return '';
   return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
-function _esc(str) {
-  return (str || '').toString()
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }

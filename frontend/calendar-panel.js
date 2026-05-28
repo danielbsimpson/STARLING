@@ -2,6 +2,7 @@
 // Calendar panel: trigger detection, data fetch, render, and LLM context export.
 
 import { BACKEND_BASE } from './config.js';
+import { escapeHtml } from './utils.js';
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const _starlingEl    = document.querySelector('.starling');
@@ -139,16 +140,9 @@ function _makeEventRow(event) {
   const row = document.createElement('div');
   row.className = 'cal-event';
   row.innerHTML = `
-    <div class="cal-event-time">${_esc(event.time)}</div>
-    <div class="cal-event-title">${_esc(event.title)}</div>
-    ${event.location ? `<div class="cal-event-location">📍 ${_esc(event.location)}</div>` : ''}
+    <div class="cal-event-time">${escapeHtml(event.time)}</div>
+    <div class="cal-event-title">${escapeHtml(event.title)}</div>
+    ${event.location ? `<div class="cal-event-location">📍 ${escapeHtml(event.location)}</div>` : ''}
   `;
   return row;
-}
-
-function _esc(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
 }

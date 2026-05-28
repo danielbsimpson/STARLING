@@ -60,8 +60,8 @@ the core chat pipeline.
 | 11 | Reddit Social Feed | Reddit JSON API (no auth) | ✅ Done |
 | 12 | YouTube Feed | YouTube Atom RSS (no key) | ✅ Done |
 | 13 | Toolkit Menu | None (frontend only) | ✅ Done |
-| 14 | Google Calendar | Google Calendar API (OAuth2) | 🔲 Planned |
-| 15 | Gmail | Gmail API (OAuth2) | 🔲 Planned |
+| 14 | iCloud Calendar | CalDAV (stdlib only, Apple ID) | ✅ Done |
+| 15 | Apple Mail Inbox | IMAP (stdlib only, Apple ID) | ✅ Done |
 
 See [`toolkit/README.md`](./toolkit/README.md) for screenshots, trigger phrase reference,
 and per-tool documentation. Implementation plans for upcoming features are in [`plan/`](./plan/).
@@ -279,8 +279,8 @@ Each tool in the planned toolkit follows the same pattern. To add, say, Weather:
 3. Create `frontend/weather-panel.js` and add the intercept block to `app.js`
 4. Add the panel HTML and CSS to `index.html` / `style.css`
 
-See [`markdown/complete/WEATHER.md`](./markdown/complete/WEATHER.md) for the full step-by-step guide.
-Every other tool has its own equivalent guide in `markdown/`.
+See [`WEATHER.md`](./assets/archived/complete/WEATHER.md) for the full step-by-step guide.
+Every other tool has its own equivalent guide in [`assets/archived/complete/`](./assets/archived/complete/).
 
 ---
 
@@ -488,17 +488,20 @@ STOCKS_CURRENCY_SYMBOL=$
 # JOURNAL_DIR=memory/journal
 # JOURNAL_MAX_ENTRIES=500
 
-# Gmail (Tool 12)
-# GMAIL_CREDENTIALS_FILE=credentials/google_gmail_credentials.json
-# GMAIL_TOKEN_FILE=credentials/google_gmail_token.json
-# GMAIL_MAX_UNREAD=20
-# GMAIL_CACHE_SECONDS=120
+# iCloud Calendar — CalDAV (Tool 14)
+# Configure via the in-app toolkit login panel or set here directly.
+# CALDAV_URL=https://caldav.icloud.com
+# CALDAV_USERNAME=you@icloud.com
+# CALDAV_PASSWORD=xxxx-xxxx-xxxx-xxxx   # App-Specific Password
+# CALENDAR_CACHE_SECONDS=3600
 
-# Calendar (Tool 11)
-# CALENDAR_BACKEND=google
-# GOOGLE_CREDENTIALS_FILE=credentials/google_calendar_credentials.json
-# GOOGLE_TOKEN_FILE=credentials/google_token.json
-# CALENDAR_TIMEZONE=America/New_York
+# Apple Mail — IMAP (Tool 15)
+# IMAP_HOST=imap.mail.me.com
+# IMAP_PORT=993
+# IMAP_USERNAME=you@icloud.com
+# IMAP_PASSWORD=xxxx-xxxx-xxxx-xxxx     # App-Specific Password
+# MAIL_MAX_UNREAD=20
+# MAIL_CACHE_SECONDS=300
 ```
 
 ---
@@ -563,11 +566,12 @@ To use Whisper, set `STT_ENGINE=whisper` in `.env` and ensure the FastAPI backen
 | `/wiki/status` | GET | Wikipedia RAG — active session and index status |
 | `/wiki/clear` | POST | Wikipedia RAG — end the active session |
 | `/wiki/chat` | POST | Wikipedia RAG — guardrailed article Q&A (streams NDJSON) |
-| `/calendar/today` | GET | Today's Google Calendar events |
-| `/calendar/week` | GET | 7-day Google Calendar events |
-| `/gmail/unread` | GET | List unread Gmail messages |
-| `/gmail/message/{id}` | GET | Full plain-text body of one message |
-| `/gmail/trash/{id}` | POST | Move a message to Trash |
+| `/calendar` | GET | iCloud CalDAV events (today + week); optional `force` param |
+| `/calendar/cache` | DELETE | Bust the calendar cache for an immediate re-fetch |
+| `/calendar/credentials` | GET / POST / DELETE | Manage iCloud App-Specific Password for CalDAV |
+| `/mail/unread` | GET | Most recent unread Apple Mail IMAP messages (headers only) |
+| `/mail/cache` | DELETE | Bust the mail cache for an immediate re-fetch |
+| `/mail/credentials` | GET / POST / DELETE | Manage Apple Mail IMAP App-Specific Password |
 
 ### Example: stream a chat response
 
@@ -618,8 +622,8 @@ High-level milestones:
 - [x] **Voice-triggered dossier / presentation mode** — voice trigger intercept, neon border animation, four-zone layout reconfiguration, manifest-driven image + structured text loading, LLM auto-briefing via sentence-chunked TTS
 - [x] **RAG memory system** — ChromaDB + BM25/vector fusion; `make rag-ingest` indexes any `.md`/`.txt` files dropped into `memory/input/`
 - [x] **Voice tool kit (Tools 1–5, 7–10)** — Time & date, timers, weather (Open-Meteo), news briefing (RSS + LLM synthesis), stocks & crypto (Yahoo Finance / yfinance), in-UI browser panel, ideas vault, voice journal, Wikipedia RAG
-- [ ] **Wake word & interrupt** — "Hey Starling" always-on listener + mid-speech interrupt; see [`plan/WAKE_WORD.md`](./plan/WAKE_WORD.md)
-- [ ] **Google Calendar & Gmail** — OAuth2 integrations; see [`plan/CALENDAR.md`](./plan/CALENDAR.md) and [`plan/GMAIL.md`](./plan/GMAIL.md)
+- [ ] **Wake word & interrupt** — "Hey Starling" always-on listener + mid-speech interrupt; see [`plan/feature-wake-word-1.md`](./plan/feature-wake-word-1.md)
+- [x] **iCloud Calendar & Apple Mail** — CalDAV calendar panel and IMAP inbox panel (stdlib only, App-Specific Password auth)
 - [ ] **Electron desktop app** — standalone installer for Windows/macOS/Linux; see [`plan/feature-electron-packaging-1.md`](./plan/feature-electron-packaging-1.md)
 - [ ] **Dream state / soul / sleep mode** — session-end LLM reflection, persistent personality file, inactivity retreat; see [`plan/`](./plan/)
 - [ ] **Cross-platform & macOS Apple Silicon** — hardware auto-detect, CPU fallback, M4 Mac Mini support; see [`plan/`](./plan/)
