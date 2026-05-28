@@ -159,22 +159,7 @@ llm-speech-UI/
 │   └── archived/                   # Completed and archived implementation guides (git-ignored)
 │       └── complete/               # Guides for fully implemented features
 ├── plan/                   # Implementation plans for upcoming features
-│   ├── CALENDAR.md                         # Tool: Google Calendar integration
-│   ├── GMAIL.md                            # Tool: Gmail inbox & summarisation
-│   ├── TOOL_AWARENESS.md                   # Fuzzy tool detection & recovery
-│   ├── WAKE_WORD.md                        # Tool: wake word + interrupt
-│   ├── feature-boot-shutdown-animation-1.md
-│   ├── feature-cross-platform-auto-detect-1.md
-│   ├── feature-dream-state-shutdown-pipeline-1.md
-│   ├── feature-electron-packaging-1.md
-│   ├── feature-mac-m4-compatibility-1.md
-│   ├── feature-prompt-registry-1.md
-│   ├── feature-rag-memory-manager-1.md
-│   ├── feature-reddit-account-discovery-1.md
-│   ├── feature-sleep-mode-1.md
-│   ├── feature-starling-soul-personality-1.md
-│   ├── feature-toolkit-menu-1.md           # ✅ Implemented
-│   └── feature-youtube-channel-discovery-1.md
+│
 ├── toolkit/                # Voice trigger reference and tool documentation
 │   ├── README.md           # Per-tool screenshots, trigger phrases, and implementation notes
 │   └── TRIGGER_PHRASES.md  # Full voice command reference with dispatch priority order

@@ -75,3 +75,6 @@ assets/wikipedia/
 
 # Archived markdown files
 assets/archived/
+
+# Plan and Implementation guides for upcoming enhancements (not committed to repo)
+plan/
