@@ -4546,6 +4546,118 @@ a.news-story-source-title:hover {
   padding-left: 2px;
 }
 
+/* ── Mail Panel ──────────────────────────────────────────────────────────────── */
+
+.mail-panel {
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 18px 22px 16px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+}
+
+.mail-panel.hidden {
+  display: none;
+}
+
+.mail-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 8px;
+  padding-right: 32px;
+  position: relative;
+}
+
+.mail-panel-title {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: clamp(0.75rem, 1.4vw, 0.95rem);
+  color: #e0e0e0;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mail-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  background: rgba(120, 180, 255, 0.15);
+  border: 1px solid rgba(120, 180, 255, 0.3);
+  border-radius: 9px;
+  font-size: 0.65rem;
+  color: #88aadd;
+  letter-spacing: 0;
+}
+
+.mail-close-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  color: #666;
+  cursor: pointer;
+  font-size: 0.7rem;
+  line-height: 1;
+  padding: 2px 7px;
+  transition: border-color 0.15s, color 0.15s;
+  flex-shrink: 0;
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+.mail-close-btn:hover { border-color: rgba(255, 255, 255, 0.35); color: #ccc; }
+
+.mail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.mail-card {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+.mail-card:last-child { border-bottom: none; }
+
+.mail-from {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.68rem;
+  color: #777;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 2px;
+}
+
+.mail-subject {
+  font-size: 0.82rem;
+  color: #d0d0d0;
+  line-height: 1.4;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.mail-empty {
+  font-size: 0.7rem;
+  color: #444;
+  font-style: italic;
+  text-align: center;
+  padding: 16px 0;
+}
+
 /* ── Menu sections (inside toolkit panel) ──────────────────────────────────── */
 .menu-section {
   margin-bottom: 24px;

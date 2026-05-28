@@ -586,6 +586,34 @@ _REGISTRY: list[dict] = [
             "This is the mechanism by which STARLING's soul evolves over time through sessions."
         ),
     },
+
+    # ── Mail ───────────────────────────────────────────────────────────────────
+    {
+        "key": "MAIL_INBOX_SUMMARY",
+        "description": (
+            "Injected as a system prompt addendum when the mail panel opens and "
+            "the inbox llm_context is passed to the LLM. Instructs the LLM to give "
+            "a concise spoken briefing of the inbox."
+        ),
+        "category": "mail",
+        "default": (
+            "You have received a briefing of the user's Apple Mail inbox. "
+            "Summarise the unread messages in a natural spoken sentence. "
+            "List the top senders by name if recognisable. "
+            "Keep the response under three sentences. "
+            "Do not read every subject line verbatim — give a thematic overview. "
+            "Example: 'You have eight unread emails. Most are from GitHub and Amazon. "
+            "There is also a message from Sarah about the weekend plans.'"
+        ),
+        "source_file": "frontend/app.js",
+        "template_vars": [],
+        "risk_level": "safe",
+        "pipeline_note": (
+            "Injected as system prompt addendum when the mail panel opens and the "
+            "inbox context is passed to the LLM. The llm_context string (from "
+            "GET /mail/unread) is appended to this prompt before sending to the LLM."
+        ),
+    },
 ]
 
 # ── Index for O(1) key lookup ─────────────────────────────────────────────────

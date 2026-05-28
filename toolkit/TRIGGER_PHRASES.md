@@ -17,25 +17,28 @@ The first matching tool wins; unmatched input falls through to the LLM.
 | 6 | Weather — close | Only when weather panel is open |
 | 7 | YouTube — close | |
 | 8 | Reddit — close | |
-| 9 | Dossier — exit | |
-| 10 | Toolkit Menu — open | Checked before dossier open to avoid conflicts |
-| 11 | Dossier — open | |
-| 12 | Wikipedia RAG — open | Requires **"local"** or **"offline"** keyword |
-| 13 | Journal — start | |
-| 14 | Journal — read / search | |
-| 15 | Timer | Checked before Time to avoid "timer" matching time patterns |
-| 16 | Date | Checked before Time — date phrases are more specific |
-| 17 | Time | |
-| 18 | Ideas Vault — capture | Both "idea/ideas" **and** "vault" must appear |
-| 19 | Ideas Vault — read / manage | Both "idea/ideas" **and** "vault" must appear |
-| 20 | Weather | |
-| 21 | Market / Stocks / Crypto | Checked before News — more specific domain vocabulary |
-| 22 | YouTube feed | Requires **"youtube feed"** — checked before Reddit and News |
-| 23 | Reddit social feed | Requires **"reddit social"** — checked before News |
-| 24 | News | |
-| 25 | Browser — open | Requires **"browser"** keyword; Wikipedia lookup also requires **"browser"** |
-| 26 | Prompt Registry editor | Opens the prompt editor sub-view inside the menu panel |
-| 27 | LLM fallback | Anything unmatched |
+| 9 | Mail inbox — close | Only when mail panel is open |
+| 10 | Dossier — exit | |
+| 11 | Toolkit Menu — open | Checked before dossier open to avoid conflicts |
+| 12 | Dossier — open | |
+| 13 | Wikipedia RAG — open | Requires **"local"** or **"offline"** keyword |
+| 14 | Journal — start | |
+| 15 | Journal — read / search | |
+| 16 | Timer | Checked before Time to avoid "timer" matching time patterns |
+| 17 | Date | Checked before Time — date phrases are more specific |
+| 18 | Time | |
+| 19 | Ideas Vault — capture | Both "idea/ideas" **and** "vault" must appear |
+| 20 | Ideas Vault — read / manage | Both "idea/ideas" **and** "vault" must appear |
+| 21 | Weather | |
+| 22 | Calendar | iCloud CalDAV; checked before Mail |
+| 23 | Mail inbox | IMAP fetch from Apple Mail |
+| 24 | Market / Stocks / Crypto | Checked before News — more specific domain vocabulary |
+| 25 | YouTube feed | Requires **"youtube feed"** — checked before Reddit and News |
+| 26 | Reddit social feed | Requires **"reddit social"** — checked before News |
+| 27 | News | |
+| 28 | Browser — open | Requires **"browser"** keyword; Wikipedia lookup also requires **"browser"** |
+| 29 | Prompt Registry editor | Opens the prompt editor sub-view inside the menu panel |
+| 30 | LLM fallback | Anything unmatched |
 
 ---
 
@@ -632,7 +635,80 @@ frontend file. Add patterns to the appropriate array and update this document.
 | Ideas Vault | `frontend/ideas-panel.js` | `detectIdeaCaptureTrigger()` / `detectIdeaReadTrigger()` |
 | Voice Journal | `frontend/journal-panel.js` | `detectJournalStartTrigger()` / `detectJournalReadTrigger()` |
 | Wikipedia RAG | `frontend/wiki-panel.js` | `detectWikiTrigger()` / `detectWikiExitTrigger()` |
+| Calendar | `frontend/calendar-panel.js` | `detectCalendarTrigger()` |
+| Mail | `frontend/mail-panel.js` | `detectMailTrigger()` |
 | Prompt Editor | `frontend/app.js` | inline regex in `_routeInput()` |
+
+---
+
+## 15 · Calendar
+
+Opens the calendar panel and delivers a spoken briefing of today's and upcoming events.
+Fetches via CalDAV from iCloud. Requires an Apple ID and App-Specific Password
+(configured in the toolkit login form).
+
+### Open
+
+| Example phrase |
+|----------------|
+| `show my calendar` |
+| `what's on my schedule` |
+| `check my calendar` |
+| `any meetings today` |
+| `open calendar` |
+| `calendar for today` |
+| `what do I have on today` |
+| `sync my calendar` · `refresh my calendar` · `update my calendar` |
+
+---
+
+## 16 · Mail (Apple Mail Inbox)
+
+Opens the mail panel and delivers a spoken inbox briefing. Fetches unread IMAP
+messages via `imap.mail.me.com:993`. Only FROM, SUBJECT, and DATE headers are
+retrieved — no body content is ever accessed. Results are cached for 5 minutes.
+
+Requires an Apple ID and App-Specific Password configured in the toolkit login form.
+
+### Open
+
+| Example phrase |
+|----------------|
+| `check my email` |
+| `check mail` |
+| `view inbox` |
+| `show my inbox` |
+| `any new emails` |
+| `any new messages` |
+| `do I have any email` |
+| `do I have any unread mail` |
+| `what's in my inbox` |
+| `what's in my email` |
+| `emails this morning` |
+| `new mail today` |
+| `unread emails` |
+| `unread messages` |
+| `pull up my email` |
+| `open my email` |
+| `read my email` |
+
+### Close (priority 9 — checked before dossier exit)
+
+| Example phrase |
+|----------------|
+| `close mail` |
+| `close email` |
+| `close inbox` |
+| `hide mail` |
+| `dismiss mail` |
+| `exit mail` |
+| `exit email` |
+| `exit inbox` |
+
+> **Settings:** Configure Apple ID credentials in the toolkit Mail login form.
+> The server defaults to `imap.mail.me.com:993` (override via `IMAP_HOST` / `IMAP_PORT` env vars).
+> Cache duration: 5 minutes (override via `MAIL_CACHE_SECONDS` env var).
+> Max messages returned: 20 (override via `MAIL_MAX_UNREAD` env var).
 
 ---
 

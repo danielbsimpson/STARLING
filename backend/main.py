@@ -62,6 +62,7 @@ from log_routes import router as log_router
 from reddit import router as reddit_router
 from youtube import router as youtube_router
 from calendar_routes import router as calendar_router
+from mail_routes import router as mail_router
 import session_log
 import prompts
 import soul as _soul
@@ -94,6 +95,7 @@ app.include_router(log_router)
 app.include_router(reddit_router)
 app.include_router(youtube_router)
 app.include_router(calendar_router)
+app.include_router(mail_router)
 app.include_router(prompts_router)
 app.include_router(soul_router)
 app.include_router(dream_router)

@@ -54,6 +54,8 @@ backend/memory/youtube_channels.json
 
 # Calendar data cache
 backend/memory/calendar_cache.json
+backend/memory/calendar_credentials.json
+backend/memory/mail_credentials.json
 
 # Soul archive history (SOUL.md tracked; archived snapshots excluded)
 backend/memory/soul/SOUL_*.md

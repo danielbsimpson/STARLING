@@ -7,6 +7,7 @@ import { detectRedditTrigger, openRedditPanel, closeRedditPanel, initRedditPanel
 import { detectYouTubeTrigger, openYouTubePanel, closeYouTubePanel, initYouTubePanel } from './youtube-panel.js';
 import { detectMarketTrigger, openMarketPanel, closeMarketPanel, setSendToOllama as _setMktSendToOllama, setOnClose as _setMktOnClose } from './stocks-panel.js';
 import { detectCalendarTrigger, openCalendarPanel, closeCalendarPanel, isCalendarPanelOpen } from './calendar-panel.js';
+import { detectMailTrigger, openMailPanel, closeMailPanel, isMailPanelOpen } from './mail-panel.js';
 import { detectBrowserTrigger, detectBrowserClose, detectWikiSectionTrigger, isBrowserPanelOpen, openBrowserPanel, closeBrowserPanel, getBrowserPageText, ensureBrowserPageText, getBrowserPageUrl, getBrowserJsRendered } from './browser-panel.js';
 import { getInterruptPhrase } from './interrupt-phrases.js';
 import {
@@ -470,6 +471,147 @@ function _showCalendarLoginForm(container) {
   container.appendChild(btnRow);
 }
 
+// ── Mail login helpers ────────────────────────────────────────────────────────
+async function _renderMailLogin(container) {
+  container.innerHTML = '';
+
+  let cred = { configured: false, username: '' };
+  try {
+    const res = await fetch(`${BACKEND_BASE}/mail/credentials`);
+    if (res.ok) cred = await res.json();
+  } catch (_) { /* offline — render as unconfigured */ }
+
+  if (cred.configured) {
+    const badge = document.createElement('div');
+    badge.className = 'cal-login-status';
+    const dot   = document.createElement('span'); dot.className   = 'cal-login-dot';
+    const label = document.createElement('span'); label.className = 'cal-login-label-text'; label.textContent = 'LOGGED IN AS ';
+    const user  = document.createElement('span'); user.className  = 'cal-login-user'; user.textContent = cred.username;
+    badge.append(dot, label, user);
+    container.appendChild(badge);
+  }
+
+  const loginBtn = document.createElement('button');
+  loginBtn.className = 'toolkit-activate-btn cal-login-btn';
+  loginBtn.textContent = cred.configured ? 'CHANGE LOGIN' : 'LOGIN';
+  loginBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    if (cred.configured) {
+      _showMailLoginConfirm(container, cred.username);
+    } else {
+      _showMailLoginForm(container);
+    }
+  });
+  container.appendChild(loginBtn);
+}
+
+function _showMailLoginConfirm(container, currentUsername) {
+  container.innerHTML = '';
+
+  const warning = document.createElement('div');
+  warning.className = 'cal-login-warning';
+  const msg = document.createElement('p');
+  msg.className = 'cal-login-warning-msg';
+  msg.textContent = `This will remove the current login for ${currentUsername}. The new account will become the saved default.`;
+  warning.appendChild(msg);
+  container.appendChild(warning);
+
+  const btnRow = document.createElement('div');
+  btnRow.className = 'cal-login-btn-row';
+
+  const yesBtn = document.createElement('button');
+  yesBtn.className = 'toolkit-activate-btn';
+  yesBtn.textContent = 'YES, CONTINUE';
+
+  const noBtn = document.createElement('button');
+  noBtn.className = 'toolkit-back-btn';
+  noBtn.textContent = '\u2190 CANCEL';
+
+  noBtn.addEventListener('click', e => { e.stopPropagation(); _renderMailLogin(container); });
+  yesBtn.addEventListener('click', e => { e.stopPropagation(); _showMailLoginForm(container); });
+
+  btnRow.append(yesBtn, noBtn);
+  container.appendChild(btnRow);
+}
+
+function _showMailLoginForm(container) {
+  container.innerHTML = '';
+
+  const title = document.createElement('div');
+  title.className = 'cal-login-form-title';
+  title.textContent = 'APPLE MAIL LOGIN';
+  container.appendChild(title);
+
+  const hint = document.createElement('p');
+  hint.className = 'cal-login-hint';
+  hint.textContent = 'Enter your Apple ID and the App-Specific Password used for Apple Mail';
+  container.appendChild(hint);
+
+  const userWrap = document.createElement('div'); userWrap.className = 'cal-login-field';
+  const userLabel = document.createElement('label'); userLabel.className = 'cal-login-label'; userLabel.textContent = 'APPLE ID';
+  const userInput = document.createElement('input');
+  userInput.type = 'email'; userInput.className = 'cal-login-input'; userInput.placeholder = 'your@apple.id';
+  userWrap.append(userLabel, userInput);
+  container.appendChild(userWrap);
+
+  const passWrap = document.createElement('div'); passWrap.className = 'cal-login-field';
+  const passLabel = document.createElement('label'); passLabel.className = 'cal-login-label'; passLabel.textContent = 'APP PASSWORD';
+  const passInput = document.createElement('input');
+  passInput.type = 'password'; passInput.className = 'cal-login-input'; passInput.placeholder = 'xxxx-xxxx-xxxx-xxxx';
+  passWrap.append(passLabel, passInput);
+  container.appendChild(passWrap);
+
+  const errMsg = document.createElement('div');
+  errMsg.className = 'cal-login-error hidden';
+  container.appendChild(errMsg);
+
+  const btnRow = document.createElement('div');
+  btnRow.className = 'cal-login-btn-row';
+
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'toolkit-activate-btn';
+  saveBtn.textContent = 'SAVE';
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'toolkit-back-btn';
+  cancelBtn.textContent = '\u2190 CANCEL';
+
+  cancelBtn.addEventListener('click', e => { e.stopPropagation(); _renderMailLogin(container); });
+
+  saveBtn.addEventListener('click', async e => {
+    e.stopPropagation();
+    const username = userInput.value.trim();
+    const password = passInput.value;
+    if (!username || !password) {
+      errMsg.textContent = 'Both Apple ID and App Password are required.';
+      errMsg.classList.remove('hidden');
+      return;
+    }
+    saveBtn.textContent = 'SAVING...';
+    saveBtn.disabled = true;
+    try {
+      const res = await fetch(`${BACKEND_BASE}/mail/credentials`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      if (!res.ok) {
+        const detail = await res.json().catch(() => ({}));
+        throw new Error(detail.detail || `HTTP ${res.status}`);
+      }
+      await _renderMailLogin(container);
+    } catch (err) {
+      errMsg.textContent = `Save failed: ${err.message}`;
+      errMsg.classList.remove('hidden');
+      saveBtn.textContent = 'SAVE';
+      saveBtn.disabled = false;
+    }
+  });
+
+  btnRow.append(saveBtn, cancelBtn);
+  container.appendChild(btnRow);
+}
+
 // ── Toolkit registry ─────────────────────────────────────────────────────────
 // One entry per active tool. openFn is a zero-argument closure that activates
 // the tool; it is called by the toolkit:confirm handler in app.js.
@@ -570,6 +712,23 @@ const TOOLKIT_REGISTRY = [
     phrases: ['show my calendar', 'what is on my schedule', 'check my calendar', 'any meetings today', 'open calendar'],
     openFn: () => openCalendarPanel(),
     renderExtraFn: (container) => _renderCalendarLogin(container),
+  },
+  {
+    id: 'mail',
+    name: 'Mail',
+    description: 'Check Apple Mail inbox — view unread emails and get a spoken summary.',
+    ttsScript: 'The Mail tool fetches your unread Apple Mail messages via IMAP and delivers a spoken inbox briefing. Say: check my email.',
+    phrases: ['check my email', 'view inbox', 'any new emails', 'check mail', 'unread messages'],
+    openFn: async () => {
+      const ctx = await openMailPanel(true);
+      if (ctx) {
+        logEvent('mail_inbox_snapshot', { llm_context: ctx });
+        await sendToOllama(getPrompt('MAIL_INBOX_SUMMARY') + '\n\n' + ctx, {
+          ephemeralMessages: [{ role: 'system', content: SYSTEM_PROMPT }],
+        });
+      }
+    },
+    renderExtraFn: (container) => _renderMailLogin(container),
   },
 ];
 
@@ -2424,6 +2583,17 @@ async function _routeInput(text) {
     return;
   }
 
+  // ── Mail inbox close phrase ──────────────────────────────────────────────────
+  if (isMailPanelOpen() && /\b(?:close|hide|dismiss|exit)\b.{0,15}\b(?:mail|email|inbox)\b/i.test(text)) {
+    closeMailPanel();
+    appendMessage('user', text);
+    const ack = 'Mail panel closed.';
+    const { txt: mailCloseTxt } = appendMessage('assistant', ack);
+    enqueueSpeak(ack, () => { mailCloseTxt.textContent = ack; });
+    setState('idle');
+    return;
+  }
+
   if (_matchesExitPhrase(text)) {
     exitPresMode();
     setState('idle');
@@ -2646,6 +2816,32 @@ async function _routeInput(text) {
     } else {
       await sendToOllama(
         'Inform the user that the calendar could not be reached right now. One sentence.'
+      );
+    }
+    fetchSystemStatus();
+    return;
+  }
+
+  // ── Mail inbox trigger ───────────────────────────────────────────────────────
+  if (detectMailTrigger(text)) {
+    logEvent('tool_dispatch', { tool: 'mail', trigger_phrase: text });
+    closeBrowserPanel();
+    setState('thinking');
+    appendMessage('user', text);
+    const mailCtx = await openMailPanel();
+    if (mailCtx) {
+      logEvent('mail_inbox_snapshot', { llm_context: mailCtx });
+      await sendToOllama(
+        getPrompt('MAIL_INBOX_SUMMARY') + '\n\n' + mailCtx,
+        {
+          ephemeralMessages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+          ],
+        }
+      );
+    } else {
+      await sendToOllama(
+        'Inform the user that the mail inbox could not be reached right now. One sentence.'
       );
     }
     fetchSystemStatus();
