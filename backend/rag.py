@@ -19,6 +19,7 @@ import hashlib
 import os
 import re
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -34,6 +35,12 @@ TOP_K          = int(os.getenv("RAG_TOP_K",          "4"))
 CONTEXT_WINDOW = int(os.getenv("RAG_CONTEXT_WINDOW", "1"))
 MAX_TOKENS     = int(os.getenv("RAG_MAX_CONTEXT_TOKENS", "500"))
 RAG_ENABLED    = os.getenv("RAG_ENABLED", "false").lower() == "true"
+
+# ── Long-term memory config ───────────────────────────────────────────────────
+MEMORY_COLLECTION  = "starling_memory"
+MEMORY_RAG_ENABLED = os.getenv("MEMORY_RAG_ENABLED", "true").lower() == "true"
+MEMORY_TOP_K       = int(os.getenv("MEMORY_TOP_K", "3"))
+MEMORY_MAX_TOKENS  = int(os.getenv("MEMORY_MAX_TOKENS", "300"))
 
 # ── Embedding model singleton ──────────────────────────────────────────────────
 _embed_model: Optional[object] = None
@@ -164,6 +171,7 @@ def retrieve(
     query: str,
     k: int = TOP_K,
     context_window: int = CONTEXT_WINDOW,
+    embedding: Optional[list[float]] = None,
 ) -> list[dict]:
     """
     Fusion retrieval (BM25 + vector cosine) fused via Reciprocal Rank Fusion.
@@ -201,7 +209,7 @@ def retrieve(
         )
 
         # ── Vector ────────────────────────────────────────────────────────────
-        query_embedding = get_embedding(query)
+        query_embedding = embedding if embedding is not None else get_embedding(query)
         n_results       = min(k * 3, len(all_docs["documents"]))
         vector_results  = col.query(
             query_embeddings=[query_embedding],
@@ -313,3 +321,286 @@ def get_status() -> dict:
         }
     except Exception as e:
         return {"enabled": False, "error": str(e)}
+
+
+# ── Long-term memory helpers ──────────────────────────────────────────────────
+
+def _iso_ts() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _get_memory_col():
+    """Get or create the starling_memory ChromaDB collection.
+
+    Returns None when MEMORY_RAG_ENABLED is False or on any error.
+    """
+    if not MEMORY_RAG_ENABLED:
+        return None
+    try:
+        import chromadb
+        client = chromadb.PersistentClient(path=CHROMA_PATH)
+        return client.get_or_create_collection(MEMORY_COLLECTION)
+    except Exception:
+        return None
+
+
+def parse_facts(facts_path) -> list[dict]:
+    """Parse a facts_*.md file into a list of {text, category} dicts.
+
+    Skips HTML comment header lines, blank lines, and section headings.
+    Bullet prefixes * and - are both handled.
+    category is "user" for ## About the User, "world" for ## About the World,
+    "other" for any other heading.
+    Returns [] on any error.
+    """
+    try:
+        facts_path = Path(facts_path)
+        lines = facts_path.read_text(encoding="utf-8").splitlines()
+        results: list[dict] = []
+        category = "other"
+        for line in lines:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("<!--"):
+                continue
+            if stripped.startswith("##"):
+                heading = stripped.lstrip("#").strip().lower()
+                if "user" in heading:
+                    category = "user"
+                elif "world" in heading:
+                    category = "world"
+                else:
+                    category = "other"
+                continue
+            m = re.match(r'^[\*\-]\s+(.+)', stripped)
+            if m:
+                results.append({"text": m.group(1).strip(), "category": category})
+        return results
+    except Exception:
+        return []
+
+
+def ingest_facts(facts_path, session_id: str) -> int:
+    """Ingest all fact bullets from a facts_*.md file into starling_memory.
+
+    Each fact is upserted as a separate vector document.  Uses MD5 chunk IDs
+    so repeated calls are fully idempotent.
+    Returns count of upserted facts, or 0 when disabled or on error.
+    """
+    if not MEMORY_RAG_ENABLED:
+        return 0
+    try:
+        col = _get_memory_col()
+        if col is None:
+            return 0
+        facts = parse_facts(facts_path)
+        if not facts:
+            return 0
+        count = 0
+        ts = _iso_ts()
+        for i, fact in enumerate(facts):
+            try:
+                chunk_id = hashlib.md5(
+                    f"memory:{session_id}:{i}:{fact['text'][:40]}".encode()
+                ).hexdigest()
+                vec = get_embedding(fact["text"])
+                col.upsert(
+                    ids=[chunk_id],
+                    embeddings=[vec],
+                    documents=[fact["text"]],
+                    metadatas=[{
+                        "session_id": session_id,
+                        "category":   fact["category"],
+                        "fact_date":  ts,
+                        "source":     "dream_pass_2",
+                    }],
+                )
+                count += 1
+            except Exception:
+                continue
+        return count
+    except Exception:
+        return 0
+
+
+def retrieve_memory(
+    query: str,
+    k: int = MEMORY_TOP_K,
+    embedding: Optional[list[float]] = None,
+) -> list[dict]:
+    """Retrieve the top-k most relevant memory facts for a query.
+
+    Uses pure vector similarity (no BM25 — facts are too short for term stats).
+    Pass a pre-computed embedding to skip the get_embedding() call.
+    Returns [] when disabled, collection is empty, or on any error.
+    """
+    if not MEMORY_RAG_ENABLED:
+        return []
+    try:
+        col = _get_memory_col()
+        if col is None or col.count() == 0:
+            return []
+        query_vec = embedding if embedding is not None else get_embedding(query)
+        results = col.query(
+            query_embeddings=[query_vec],
+            n_results=min(k, col.count()),
+            include=["documents", "metadatas", "distances"],
+        )
+        docs      = results["documents"][0]
+        metas     = results["metadatas"][0]
+        distances = results["distances"][0]
+        return sorted(
+            [
+                {
+                    "text":       docs[i],
+                    "category":   metas[i].get("category", "other"),
+                    "session_id": metas[i].get("session_id", ""),
+                    "score":      distances[i],
+                }
+                for i in range(len(docs))
+            ],
+            key=lambda x: x["score"],
+        )
+    except Exception:
+        return []
+
+
+def format_memory_for_llm(
+    results: list[dict],
+    max_tokens: int = MEMORY_MAX_TOKENS,
+) -> str:
+    """Serialise memory facts into a [MEMORY CONTEXT] system message block.
+
+    Caps total output at max_tokens words, truncating from the end of the list.
+    Returns "" when results is empty.
+    """
+    if not results:
+        return ""
+    lines = ["[MEMORY CONTEXT \u2014 facts about the user and world from prior sessions]\n"]
+    total_words = 0
+    for r in results:
+        words = r["text"].split()
+        if total_words + len(words) > max_tokens:
+            remaining = max_tokens - total_words
+            if remaining <= 0:
+                break
+            words = words[:remaining]
+        if words:
+            lines.append(f"\u2022 {' '.join(words)}")
+            total_words += len(words)
+        if total_words >= max_tokens:
+            break
+    return "\n".join(lines)
+
+
+def ingest_memory_catchup() -> int:
+    """Ingest any facts_*.md files not yet represented in starling_memory.
+
+    Called at startup to catch up on dream runs that predated this feature.
+    Returns total count of newly ingested facts, or 0 when disabled.
+    """
+    if not MEMORY_RAG_ENABLED:
+        return 0
+    try:
+        col = _get_memory_col()
+        if col is None:
+            return 0
+        total = 0
+        for facts_file in Path(INPUT_FOLDER).glob("facts_*.md"):
+            session_id = facts_file.stem[len("facts_"):]
+            try:
+                existing = col.get(
+                    where={"session_id": session_id},
+                    include=["metadatas"],
+                )
+                if existing and existing.get("ids") and len(existing["ids"]) > 0:
+                    continue
+            except Exception:
+                pass
+            total += ingest_facts(facts_file, session_id)
+        return total
+    except Exception:
+        return 0
+
+
+def get_memory_status() -> dict:
+    """Return starling_memory collection status."""
+    if not MEMORY_RAG_ENABLED:
+        return {
+            "enabled":       False,
+            "collection":    MEMORY_COLLECTION,
+            "total_facts":   0,
+            "session_count": 0,
+        }
+    try:
+        col = _get_memory_col()
+        if col is None:
+            return {"enabled": False, "collection": MEMORY_COLLECTION, "total_facts": 0, "session_count": 0}
+        total_facts = col.count()
+        all_meta = col.get(include=["metadatas"])
+        session_ids = {m.get("session_id") for m in all_meta.get("metadatas", []) if m.get("session_id")}
+        return {
+            "enabled":       True,
+            "collection":    MEMORY_COLLECTION,
+            "total_facts":   total_facts,
+            "session_count": len(session_ids),
+        }
+    except Exception:
+        return {"enabled": False, "collection": MEMORY_COLLECTION, "total_facts": 0, "session_count": 0}
+
+
+def list_memory_sessions() -> list[dict]:
+    """List all sessions that have facts stored in starling_memory.
+
+    Returns [{session_id, fact_count, categories, fact_date}] sorted by fact_date desc.
+    Returns [] when disabled or on error.
+    """
+    if not MEMORY_RAG_ENABLED:
+        return []
+    try:
+        col = _get_memory_col()
+        if col is None:
+            return []
+        all_data = col.get(include=["metadatas"])
+        groups: dict[str, dict] = {}
+        for meta in all_data.get("metadatas", []):
+            sid = meta.get("session_id", "unknown")
+            if sid not in groups:
+                groups[sid] = {"fact_count": 0, "categories": set(), "fact_date": ""}
+            groups[sid]["fact_count"] += 1
+            if meta.get("category"):
+                groups[sid]["categories"].add(meta["category"])
+            if meta.get("fact_date", "") > groups[sid]["fact_date"]:
+                groups[sid]["fact_date"] = meta["fact_date"]
+        result = [
+            {
+                "session_id":  sid,
+                "fact_count":  data["fact_count"],
+                "categories":  sorted(data["categories"]),
+                "fact_date":   data["fact_date"],
+            }
+            for sid, data in groups.items()
+        ]
+        return sorted(result, key=lambda x: x["fact_date"], reverse=True)
+    except Exception:
+        return []
+
+
+def delete_memory_session(session_id: str) -> int:
+    """Delete all facts for a given session_id from starling_memory.
+
+    Returns count of deleted chunks, or 0 on error or when disabled.
+    """
+    if not MEMORY_RAG_ENABLED:
+        return 0
+    try:
+        col = _get_memory_col()
+        if col is None:
+            return 0
+        existing = col.get(where={"session_id": session_id}, include=["metadatas"])
+        ids = existing.get("ids", [])
+        if not ids:
+            return 0
+        col.delete(ids=ids)
+        return len(ids)
+    except Exception:
+        return 0

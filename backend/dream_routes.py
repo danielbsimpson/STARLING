@@ -56,6 +56,7 @@ def dream_status():
         "soul_path":        str(r.soul_path)     if r.soul_path     else None,
         "duration_s":       r.duration_s,
         "errors":           r.errors,
+        "memory_ingested":  r.memory_ingested,
     }
 
 

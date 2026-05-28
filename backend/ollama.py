@@ -49,24 +49,34 @@ async def chat(req: ChatRequest):
     # When RAG_ENABLED=true, retrieve relevant chunks for the latest user message
     # and prepend them as a system message before the conversation history.
     # Uses voice-mode TOP_K (smaller) to stay within the < 100 ms latency budget.
+    # The query embedding is computed once and shared between doc and memory retrieval.
     try:
-        from rag import RAG_ENABLED, retrieve, format_context_for_llm
-        if RAG_ENABLED:
-            # Find the last user message to use as the retrieval query
-            last_user = next(
-                (m["content"] for m in reversed(messages) if m["role"] == "user"),
-                None,
-            )
-            if last_user:
+        from rag import RAG_ENABLED, retrieve, format_context_for_llm, get_embedding
+        from rag import MEMORY_RAG_ENABLED, retrieve_memory, format_memory_for_llm
+        last_user = next(
+            (m["content"] for m in reversed(messages) if m["role"] == "user"),
+            None,
+        )
+        if last_user:
+            query_vec = get_embedding(last_user)
+            if RAG_ENABLED:
                 rag_k     = int(os.getenv("RAG_VOICE_TOP_K", "2"))
                 max_toks  = int(os.getenv("RAG_MAX_CONTEXT_TOKENS", "400"))
-                results   = retrieve(last_user, k=rag_k)
+                results   = retrieve(last_user, k=rag_k, embedding=query_vec)
                 ctx_block = format_context_for_llm(results, max_tokens=max_toks)
                 if ctx_block:
                     # Insert immediately after the system prompt (index 1)
                     messages.insert(1, {"role": "system", "content": ctx_block})
+            if MEMORY_RAG_ENABLED:
+                mem_results = retrieve_memory(last_user, embedding=query_vec)
+                mem_block   = format_memory_for_llm(mem_results)
+                if mem_block:
+                    # Insert after doc RAG block (or after system prompt if no doc RAG)
+                    insert_idx = 2 if (RAG_ENABLED and len(messages) > 1 and
+                                       messages[1].get("role") == "system") else 1
+                    messages.insert(insert_idx, {"role": "system", "content": mem_block})
     except Exception:
-        pass  # RAG failure must never break the main chat path
+        pass  # RAG/memory failure must never break the main chat path
     # ── end RAG injection ────────────────────────────────────────────────────
 
     payload = {

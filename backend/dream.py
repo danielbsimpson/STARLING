@@ -74,6 +74,7 @@ class DreamResult:
     soul_path:        Optional[Path]  = None
     duration_s:       float           = 0.0
     errors:           list[str]       = field(default_factory=list)
+    memory_ingested:  int             = 0
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -392,6 +393,11 @@ def _run_pipeline(session_id: str, from_ts: Optional[str] = None) -> DreamResult
         result.facts_path = _run_pass2_facts(transcript, session_id, model)
         facts_text = result.facts_path.read_text(encoding="utf-8")
         result.completed_passes.append("facts")
+        try:
+            from rag import ingest_facts as _ingest_facts
+            result.memory_ingested = _ingest_facts(result.facts_path, session_id)
+        except Exception as _exc:
+            result.errors.append(f"Memory ingest failed: {_exc}")
     except Exception as exc:
         err_msg = str(exc)
         result.errors.append(f"Pass 2 (facts) failed: {err_msg}")

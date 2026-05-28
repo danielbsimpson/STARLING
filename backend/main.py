@@ -71,6 +71,12 @@ from prompt_routes import router as prompts_router
 from soul_routes import router as soul_router
 from dream_routes import router as dream_router
 from rag import ingest as _rag_ingest, get_status as _rag_get_status, INPUT_FOLDER as _RAG_INPUT_FOLDER
+from rag import (
+    ingest_memory_catchup  as _memory_catchup,
+    get_memory_status,
+    list_memory_sessions,
+    delete_memory_session,
+)
 from wikipedia_rag import (
     load_index        as _wiki_load_index,
     get_embed_model   as _wiki_get_embed_model,
@@ -126,6 +132,15 @@ async def startup_event():
         _log.warning("Wikipedia: startup warm-up timed out (30s) — server starting without warm index")
     except Exception as exc:
         _log.warning(f"Wikipedia: startup warm-up failed (non-fatal) — {exc}")
+    try:
+        loop = asyncio.get_running_loop()
+        await asyncio.wait_for(
+            loop.run_in_executor(None, _memory_catchup),
+            timeout=30.0,
+        )
+        _log.info("Memory: startup catch-up complete")
+    except Exception:
+        pass
 
 
 @app.on_event("shutdown")
@@ -246,6 +261,33 @@ def rag_manifest():
         return json.loads(manifest_path.read_text(encoding="utf-8"))
     except Exception:
         return []
+
+
+# ── Long-term memory admin endpoints ─────────────────────────────────────────
+
+@app.get("/memory/status")
+async def memory_status(request: Request):
+    """Return starling_memory collection status. Localhost only."""
+    if request.client is None or request.client.host not in _LOCALHOST_HOSTS:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return get_memory_status()
+
+
+@app.get("/memory/facts")
+async def memory_facts(request: Request):
+    """List all sessions with stored memory facts. Localhost only."""
+    if request.client is None or request.client.host not in _LOCALHOST_HOSTS:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return list_memory_sessions()
+
+
+@app.delete("/memory/facts/{session_id}")
+async def memory_delete_session(session_id: str, request: Request):
+    """Delete all memory facts for a session. Localhost only."""
+    if request.client is None or request.client.host not in _LOCALHOST_HOSTS:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    deleted = delete_memory_session(session_id)
+    return {"deleted": deleted, "session_id": session_id}
 
 
 # ── Wikipedia RAG endpoints ───────────────────────────────────────────────────
