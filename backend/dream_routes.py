@@ -17,14 +17,18 @@ from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 
 import dream
-import session_log
-from session_log import LOCALHOST_HOSTS
+from session_log import LOCALHOST_HOSTS, get_session_id
 
 router = APIRouter(prefix="/dream", tags=["dream"])
 
 # ── Last result store ─────────────────────────────────────────────────────────
 _last_result: Optional[dream.DreamResult] = None
 _result_lock = threading.Lock()
+
+
+def _require_localhost(request: Request) -> None:
+    if request.client is None or request.client.host not in LOCALHOST_HOSTS:
+        raise HTTPException(status_code=403, detail="Forbidden")
 
 
 # ── Request model ─────────────────────────────────────────────────────────────
@@ -58,10 +62,9 @@ def dream_status():
 @router.post("/run")
 def dream_run(req: DreamRunRequest, request: Request):
     """Trigger the dream state pipeline. Localhost only. Returns immediately."""
-    if request.client is None or request.client.host not in LOCALHOST_HOSTS:
-        raise HTTPException(status_code=403, detail="Forbidden")
+    _require_localhost(request)
 
-    sid     = req.session_id or session_log.get_session_id()
+    sid     = req.session_id or get_session_id()
     from_ts = req.from_ts
 
     def _run() -> None:
@@ -77,8 +80,7 @@ def dream_run(req: DreamRunRequest, request: Request):
 @router.get("/thoughts")
 def dream_thoughts(request: Request):
     """Return the full thoughts.md content. Localhost only."""
-    if request.client is None or request.client.host not in LOCALHOST_HOSTS:
-        raise HTTPException(status_code=403, detail="Forbidden")
+    _require_localhost(request)
     path = dream.DREAM_DIR / "thoughts.md"
     if not path.exists():
         raise HTTPException(status_code=404, detail="No thoughts recorded yet")

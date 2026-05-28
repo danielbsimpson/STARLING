@@ -4662,21 +4662,15 @@ a.news-story-source-title:hover {
 }
 
 .mail-card {
-  padding: 10px 12px;
+  padding: 10px 12px 10px 10px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-left: 2px solid transparent;
 }
 .mail-card:last-child { border-bottom: none; }
 
-.mail-card--unread {
-  border-left: 2px solid rgba(120, 180, 255, 0.5);
-  padding-left: 10px;
-}
+.mail-card--unread { border-left-color: rgba(120, 180, 255, 0.5); }
 
-.mail-card--read {
-  border-left: 2px solid transparent;
-  padding-left: 10px;
-  opacity: 0.6;
-}
+.mail-card--read { opacity: 0.6; }
 
 .mail-from {
   font-family: 'Share Tech Mono', monospace;

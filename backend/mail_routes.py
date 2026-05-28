@@ -16,6 +16,7 @@ Endpoints:
 Credential priority:  mail_credentials.json > calendar_credentials.json > env vars
 """
 
+import asyncio
 import email
 import email.header
 import imaplib
@@ -47,6 +48,10 @@ _LOOKBACK_DAYS   = int(os.getenv("MAIL_LOOKBACK_DAYS", "7"))   # how far back to
 _CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
 if not _CACHE_FILE.exists():
     _CACHE_FILE.write_text("{}", encoding="utf-8")
+
+
+def _is_localhost(request: Request) -> bool:
+    return request.client is not None and request.client.host in session_log.LOCALHOST_HOSTS
 
 # ── Disk-cache helpers ────────────────────────────────────────────────────────
 
@@ -170,7 +175,7 @@ def _fetch_inbox_sync(
             if not raw_headers:
                 continue
 
-            read = "\\Seen" in flags_str or r"\Seen" in flags_str
+            read = "\\Seen" in flags_str
 
             msg = email.message_from_bytes(raw_headers)
 
@@ -203,12 +208,12 @@ def _fetch_inbox_sync(
 
 
 def _build_llm_context(messages: list[dict]) -> str:
-    total   = len(messages)
-    unread  = [m for m in messages if not m["read"]]
-    read    = [m for m in messages if m["read"]]
-
+    total  = len(messages)
     if total == 0:
         return "[MAIL DATA — No messages in the past 7 days.]"
+
+    unread = [m for m in messages if not m["read"]]
+    read   = [m for m in messages if     m["read"]]
 
     lines = [
         f"[MAIL DATA — {total} message(s) in the past 7 days: "
@@ -238,8 +243,6 @@ async def get_mail_inbox():
     Results are persisted to disk and served from cache for up to
     MAIL_CACHE_SECONDS (default 5 min) to avoid hammering IMAP.
     """
-    import asyncio
-
     creds = _load_credentials()
     if not creds["username"] or not creds["password"]:
         raise HTTPException(
@@ -253,7 +256,7 @@ async def get_mail_inbox():
         return cached
 
     try:
-        loop     = asyncio.get_event_loop()
+        loop     = asyncio.get_running_loop()
         messages = await loop.run_in_executor(
             None,
             _fetch_inbox_sync,
@@ -305,8 +308,7 @@ class _MailCredentials(BaseModel):
 @router.post("/mail/credentials")
 async def save_mail_credentials(body: _MailCredentials, request: Request):
     """Save dedicated IMAP credentials. Restricted to localhost connections."""
-    client_host = request.client.host if request.client else ""
-    if client_host not in session_log.LOCALHOST_HOSTS:
+    if not _is_localhost(request):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     username = body.username.strip()
@@ -316,7 +318,6 @@ async def save_mail_credentials(body: _MailCredentials, request: Request):
         )
 
     creds = {"username": username, "password": body.password}
-    _MAIL_CRED_FILE.parent.mkdir(parents=True, exist_ok=True)
     tmp = _MAIL_CRED_FILE.with_suffix(".tmp")
     tmp.write_text(json.dumps(creds, ensure_ascii=False, indent=2), encoding="utf-8")
     os.replace(tmp, _MAIL_CRED_FILE)
@@ -327,8 +328,7 @@ async def save_mail_credentials(body: _MailCredentials, request: Request):
 @router.delete("/mail/credentials")
 async def delete_mail_credentials(request: Request):
     """Remove dedicated mail credentials. Restricted to localhost connections."""
-    client_host = request.client.host if request.client else ""
-    if client_host not in session_log.LOCALHOST_HOSTS:
+    if not _is_localhost(request):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     if _MAIL_CRED_FILE.exists():

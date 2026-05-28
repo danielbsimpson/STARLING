@@ -164,6 +164,14 @@ def list_history() -> list[dict]:
     return results
 
 
+def _strip_archive_header(text: str) -> str:
+    """Strip the self-describing comment header from an archived soul file."""
+    lines = text.splitlines(keepends=True)
+    if lines and lines[0].startswith("<!--"):
+        lines = lines[1:]
+    return "".join(lines)
+
+
 def diff(session_id: str) -> str:
     """Return a unified diff between the archived version for session_id
     and the version that followed it (or the current SOUL.md if most recent).
@@ -174,13 +182,10 @@ def diff(session_id: str) -> str:
     if not archive_path.exists():
         raise FileNotFoundError(f"No archive found for session_id: {session_id}")
 
-    # Read the archived file, strip the comment header
     try:
-        archived_raw = archive_path.read_text(encoding="utf-8")
-        archived_lines = archived_raw.splitlines(keepends=True)
-        # Strip the comment header (first line) if present
-        if archived_lines and archived_lines[0].startswith("<!--"):
-            archived_lines = archived_lines[1:]
+        archived_lines = _strip_archive_header(
+            archive_path.read_text(encoding="utf-8")
+        ).splitlines(keepends=True)
     except Exception:
         return "(no diff available)"
 
@@ -202,11 +207,9 @@ def diff(session_id: str) -> str:
         return "(no diff available)"
 
     try:
-        successor_raw = successor_path.read_text(encoding="utf-8")
-        successor_lines = successor_raw.splitlines(keepends=True)
-        # Strip comment header from archive successors
-        if successor_lines and successor_lines[0].startswith("<!--"):
-            successor_lines = successor_lines[1:]
+        successor_lines = _strip_archive_header(
+            successor_path.read_text(encoding="utf-8")
+        ).splitlines(keepends=True)
     except Exception:
         return "(no diff available)"
 
@@ -231,11 +234,9 @@ def restore(session_id: str) -> Path:
         raise FileNotFoundError(f"No archive found for session_id: {session_id}")
 
     # Read archive, strip comment header
-    raw = archive_path.read_text(encoding="utf-8")
-    lines = raw.splitlines(keepends=True)
-    if lines and lines[0].startswith("<!--"):
-        lines = lines[1:]
-    restored_content = "".join(lines)
+    restored_content = _strip_archive_header(
+        archive_path.read_text(encoding="utf-8")
+    )
 
     now_tag = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
     restore_session_id = f"restore_{session_id}_{now_tag}"

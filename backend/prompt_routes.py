@@ -28,10 +28,10 @@ class PromptUpdate(BaseModel):
 
 def _entry_for(key: str) -> dict:
     """Return the catalog entry for key, or raise 422 if not found."""
-    entries = [e for e in prompts.catalog() if e["key"] == key]
-    if not entries:
+    entry = next((e for e in prompts.catalog() if e["key"] == key), None)
+    if entry is None:
         raise HTTPException(status_code=422, detail=f"Unknown prompt key: {key}")
-    return entries[0]
+    return entry
 
 
 @router.get("/")
@@ -47,8 +47,7 @@ async def list_prompts(category: str | None = None):
 async def update_prompt(key: str, body: PromptUpdate, request: Request):
     """Set a prompt override. Localhost only."""
     _require_localhost(request)
-    if key not in prompts._INDEX:
-        raise HTTPException(status_code=422, detail=f"Unknown prompt key: {key}")
+    _entry_for(key)  # raises 422 if key is unknown
     if len(body.value) > prompts.MAX_PROMPT_CHARS:
         raise HTTPException(
             status_code=413,
@@ -62,8 +61,7 @@ async def update_prompt(key: str, body: PromptUpdate, request: Request):
 async def reset_prompt(key: str, request: Request):
     """Reset a prompt to its default. Localhost only."""
     _require_localhost(request)
-    if key not in prompts._INDEX:
-        raise HTTPException(status_code=422, detail=f"Unknown prompt key: {key}")
+    _entry_for(key)  # raises 422 if key is unknown
     prompts.reset(key)
     return _entry_for(key)
 

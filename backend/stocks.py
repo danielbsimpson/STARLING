@@ -468,7 +468,7 @@ async def get_stocks():
     watchlist = _load_watchlist()
     symbols   = _flat_tickers(watchlist)
 
-    loop    = asyncio.get_event_loop()
+    loop    = asyncio.get_running_loop()
     results = await asyncio.gather(
         *[loop.run_in_executor(None, _fetch_ticker, sym) for sym in symbols],
         return_exceptions=True,
@@ -538,7 +538,7 @@ async def get_stock_history(
     if window not in _WINDOW_MAP:
         raise HTTPException(status_code=400, detail=f"Invalid window '{window}'. Choose from: {list(_WINDOW_MAP)}")
 
-    loop    = asyncio.get_event_loop()
+    loop    = asyncio.get_running_loop()
     candles = await loop.run_in_executor(None, _history_with_gap_fill, ticker, window, force)
 
     store = _load_history_store()
@@ -570,7 +570,7 @@ async def get_history_batch(
     if not symbols:
         raise HTTPException(status_code=400, detail="No tickers provided")
 
-    loop    = asyncio.get_event_loop()
+    loop    = asyncio.get_running_loop()
     results = await asyncio.gather(
         *[loop.run_in_executor(None, _history_with_gap_fill, sym, window, force) for sym in symbols],
         return_exceptions=True,
@@ -599,7 +599,7 @@ async def get_briefing(
     ticker: str = Query(...),
     window: str = Query("1m"),
 ):
-    loop         = asyncio.get_event_loop()
+    loop         = asyncio.get_running_loop()
     quote_task   = loop.run_in_executor(None, _fetch_ticker, ticker)
     candles_task = loop.run_in_executor(None, _history_with_gap_fill, ticker, window, False)
     quote, candles = await asyncio.gather(quote_task, candles_task)

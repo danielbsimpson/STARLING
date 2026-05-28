@@ -7,6 +7,7 @@ current session's log file. One JSONL file per process lifetime.
 import hashlib
 import json
 import os
+import sys
 import threading
 import time
 import traceback
@@ -54,7 +55,6 @@ def log(event_type: str, data: dict, source: str = "backend") -> None:
                 fh.write(line)
             _event_count += 1
     except Exception:
-        import sys
         print(f"[session_log] ERROR writing event '{event_type}':", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)
 

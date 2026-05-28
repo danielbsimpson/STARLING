@@ -135,7 +135,7 @@ async def shutdown_event():
     # On Windows the /system/shutdown endpoint handles this via its own thread.
     # The _running guard in dream.py prevents double execution if both paths fire.
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         from_ts = _dream.read_checkpoint()
         await asyncio.wait_for(
             loop.run_in_executor(

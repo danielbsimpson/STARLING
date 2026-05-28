@@ -219,7 +219,7 @@ async def _fetch_caldav(start: datetime, end: datetime) -> list[dict]:
         events.sort(key=lambda e: (e["date"], e["time"]))
         return events
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _call)
 
 
