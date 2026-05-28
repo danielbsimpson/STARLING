@@ -25,8 +25,8 @@ See [`TRIGGER_PHRASES.md`](./TRIGGER_PHRASES.md) for the full voice command refe
 | 11 | Reddit Social Feed | [`assets/archived/feature-reddit-social-1.md`](../assets/archived/feature-reddit-social-1.md) | Reddit JSON API (no auth) | ✅ Done |
 | 12 | YouTube Feed | [`assets/archived/feature-youtube-feed-1.md`](../assets/archived/feature-youtube-feed-1.md) | YouTube Atom RSS (no key) | ✅ Done |
 | 13 | Toolkit Menu | [`plan/feature-toolkit-menu-1.md`](../plan/feature-toolkit-menu-1.md) | None (frontend only) | ✅ Done |
-| 14 | Google Calendar | [`markdown/CALENDAR.md`](../markdown/CALENDAR.md) | Google Calendar API (OAuth2) | 🔲 Planned |
-| 15 | Gmail | [`markdown/GMAIL.md`](../markdown/GMAIL.md) | Gmail API (OAuth2) | 🔲 Planned |
+| 14 | iCloud Calendar | [`plan/feature-apple-mail-inbox-1.md`](../plan/feature-apple-mail-inbox-1.md) | CalDAV (stdlib only, Apple ID) | ✅ Done |
+| 15 | Apple Mail Inbox | [`plan/feature-apple-mail-inbox-1.md`](../plan/feature-apple-mail-inbox-1.md) | IMAP (stdlib only, Apple ID) | ✅ Done |
 
 Tools dispatch in priority order — the first matching tool wins; unmatched input falls
 through to the LLM. See [`TRIGGER_PHRASES.md`](./TRIGGER_PHRASES.md) for the full ordering
@@ -46,24 +46,28 @@ reference.
 | 6 | Weather — close | Only when weather panel is open |
 | 7 | YouTube — close | |
 | 8 | Reddit — close | |
-| 9 | Dossier — exit | |
-| 10 | Toolkit Menu — open | Checked before dossier open to avoid conflicts |
-| 11 | Dossier — open | |
-| 12 | Wikipedia RAG — open | Requires **"local"** or **"offline"** keyword |
-| 13 | Journal — start | |
-| 14 | Journal — read / search | |
-| 15 | Timer | Checked before Time to avoid "timer" matching time patterns |
-| 16 | Date | Checked before Time — date phrases are more specific |
-| 17 | Time | |
-| 18 | Ideas Vault — capture | Both "idea/ideas" **and** "vault" must appear |
-| 19 | Ideas Vault — read / manage | Both "idea/ideas" **and** "vault" must appear |
-| 20 | Weather | |
-| 21 | Market / Stocks / Crypto | More specific domain vocabulary, checked before News |
-| 22 | YouTube feed | Requires **"youtube feed"** — checked before Reddit and News |
-| 23 | Reddit social feed | Requires **"reddit social"** — checked before News |
-| 24 | News | |
-| 25 | Browser — open | Requires **"browser"** keyword; Wikipedia also requires **"browser"** |
-| 26 | LLM fallback | Anything unmatched |
+| 9 | Mail inbox — close | Only when mail panel is open |
+| 10 | Dossier — exit | |
+| 11 | Toolkit Menu — open | Checked before dossier open to avoid conflicts |
+| 12 | Dossier — open | |
+| 13 | Wikipedia RAG — open | Requires **"local"** or **"offline"** keyword |
+| 14 | Journal — start | |
+| 15 | Journal — read / search | |
+| 16 | Timer | Checked before Time to avoid "timer" matching time patterns |
+| 17 | Date | Checked before Time — date phrases are more specific |
+| 18 | Time | |
+| 19 | Ideas Vault — capture | Both "idea/ideas" **and** "vault" must appear |
+| 20 | Ideas Vault — read / manage | Both "idea/ideas" **and** "vault" must appear |
+| 21 | Weather | |
+| 22 | Calendar | iCloud CalDAV; checked before Mail |
+| 23 | Mail inbox | IMAP fetch from Apple Mail |
+| 24 | Market / Stocks / Crypto | Checked before News — more specific domain vocabulary |
+| 25 | YouTube feed | Requires **"youtube feed"** — checked before Reddit and News |
+| 26 | Reddit social feed | Requires **"reddit social"** — checked before News |
+| 27 | News | |
+| 28 | Browser — open | Requires **"browser"** keyword; Wikipedia also requires **"browser"** |
+| 29 | Prompt Registry editor | Opens the prompt editor sub-view inside the menu panel |
+| 30 | LLM fallback | Anything unmatched |
 
 ---
 
@@ -339,10 +343,47 @@ Implementation guide: [`assets/archived/feature-youtube-feed-1.md`](../assets/ar
 
 ---
 
+## iCloud Calendar
+
+Opens a CalDAV calendar panel showing today's and the coming week's events fetched from
+iCloud. No third-party packages required — uses Python stdlib (`xml.etree`, `http.client`).
+Requires an Apple ID and App-Specific Password configured in the toolkit login form.
+Calendar data is disk-cached with a 1-hour TTL.
+
+**Open triggers:**  
+`"show my calendar"` · `"check my calendar"` · `"what's on my schedule"` · `"any meetings today"` · `"open calendar"`
+
+**Refresh triggers:**  
+`"refresh my calendar"` · `"sync my calendar"` · `"update my calendar"`
+
+Configuration (`.env`): `CALDAV_URL`, `CALDAV_USERNAME`, `CALDAV_PASSWORD`, `CALENDAR_CACHE_SECONDS`
+
+Implementation guide: [`plan/feature-apple-mail-inbox-1.md`](../plan/feature-apple-mail-inbox-1.md)
+
+---
+
+## Apple Mail Inbox
+
+Opens an IMAP inbox panel showing the most recent unread messages from Apple Mail.
+Fetches only FROM, SUBJECT, and DATE headers — no body content is ever read.
+No third-party packages required — uses Python stdlib (`imaplib`, `email`, `ssl`).
+Requires an Apple ID and App-Specific Password configured in the toolkit login form.
+Results are in-memory cached with a 5-minute TTL.
+
+**Open triggers:**  
+`"check my email"` · `"any new emails"` · `"what's in my inbox"` · `"unread messages"` · `"check mail"`
+
+**Close triggers:**  
+`"close mail"` · `"close email"` · `"exit inbox"` · `"hide mail"`
+
+Configuration (`.env`): `IMAP_HOST`, `IMAP_PORT`, `IMAP_USERNAME`, `IMAP_PASSWORD`, `MAIL_MAX_UNREAD`, `MAIL_CACHE_SECONDS`
+
+Implementation guide: [`plan/feature-apple-mail-inbox-1.md`](../plan/feature-apple-mail-inbox-1.md)
+
+---
+
 ## Planned Tools
 
 | Tool | Guide | Notes |
 |------|-------|-------|
 | Wake Word & Interrupt | [`WAKE_WORD.md`](../markdown/WAKE_WORD.md) | Passive listener; say "Hey Starling" to activate without pressing mic |
-| Google Calendar | [`CALENDAR.md`](../markdown/CALENDAR.md) | Read today's / week's events via Google Calendar OAuth2 |
-| Gmail | [`GMAIL.md`](../markdown/GMAIL.md) | Inbox summary, message read-out, and trash via Gmail API OAuth2 |
