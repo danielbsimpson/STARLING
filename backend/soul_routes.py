@@ -15,7 +15,7 @@ from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 
 import soul
-from session_log import LOCALHOST_HOSTS as _LOCALHOST_HOSTS
+from session_log import LOCALHOST_HOSTS as _LOCALHOST_HOSTS, get_session_id as _get_session_id
 
 router = APIRouter(prefix="/soul", tags=["soul"])
 
@@ -55,10 +55,10 @@ def get_soul_diff(session_id: str):
     Returns 404 if no archive exists for session_id.
     """
     _validate_session_id(session_id)
-    archive_path = soul._SOUL_DIR / f"SOUL_{session_id}.md"
-    if not archive_path.exists():
+    try:
+        return PlainTextResponse(soul.diff(session_id))
+    except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"No archive found for session: {session_id}")
-    return PlainTextResponse(soul.diff(session_id))
 
 
 @router.post("/restore/{session_id}")
@@ -89,8 +89,7 @@ def update_soul(body: SoulUpdateRequest, request: Request):
     """
     if not _is_localhost(request):
         raise HTTPException(status_code=403, detail="Soul updates are only available from localhost.")
-    import session_log as _sl
-    session_id = _sl.get_session_id()
+    session_id = _get_session_id()
     archive_path = soul.update(body.content, session_id)
     return {"ok": True, "archived_previous_to": str(archive_path)}
 

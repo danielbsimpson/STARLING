@@ -299,6 +299,35 @@ Every other tool has its own equivalent guide in `markdown/`.
 
 ---
 
+## STARLING Soul
+
+STARLING maintains a persistent personality file at `backend/memory/soul/SOUL.md`. This Markdown document encodes STARLING's accumulated identity: relationship with the user, communication style, recurring interests, and developing philosophy.
+
+### How it works
+
+**Session injection** — On every startup, `SOUL.md` is read and appended to the system prompt for all LLM calls (`ollama.py`, `llama_server.py`, `wikipedia_rag.py`). The soul is fetched per-request in the backend, so a soul updated during shutdown is automatically present in the next session without a server restart. The frontend also fetches `/soul` during warmup and appends it to `SYSTEM_PROMPT`.
+
+**Pass 4 Soul Reviewer** — When STARLING shuts down, the dream state pipeline runs four passes. Pass 4 (Soul Reviewer) reads the session reflection from `thoughts.md` alongside the current `SOUL.md` and asks the LLM whether the soul should be updated. If the session revealed something genuinely new or enduring, a full updated `SOUL.md` is written and the previous version is archived to `backend/memory/soul/SOUL_<session_id>.md`. Routine sessions that add nothing new produce `NO_CHANGE` — the soul file is left untouched.
+
+**Default soul** — If `SOUL.md` does not exist at startup, the backend recreates it from the hardcoded default defined in `backend/soul.py`. The default covers identity, relationship with Daniel, communication style, and placeholders for interests and philosophy.
+
+### Soul API endpoints
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/soul` | GET | Return the current `SOUL.md` content as `text/plain` |
+| `/soul/history` | GET | List all archived soul versions as JSON `[{session_id, archived_at, path_str}]` |
+| `/soul/diff/{session_id}` | GET | Unified diff between the archived version and the version that followed it |
+| `/soul/restore/{session_id}` | POST | Roll back `SOUL.md` to an archived version (localhost only) |
+
+### Manual editing
+
+`SOUL.md` is a plain Markdown file. Open it in any text editor to add, remove, or rewrite sections. Changes take effect on the next LLM request — no server restart needed. The five core section headers (`## Identity`, `## Relationship with Daniel`, `## Communication Style`, `## Interests & Recurring Patterns`, `## Personal Philosophy`) should be preserved so Pass 4 can update them correctly.
+
+The **Soul Panel** in the UI (`VIEW / EDIT SOUL` button in the toolkit) provides an in-app editor for inspecting and editing `SOUL.md` directly.
+
+---
+
 ## Running the Project (Windows — PowerShell)
 
 > These are the exact commands to get everything running from scratch each session.

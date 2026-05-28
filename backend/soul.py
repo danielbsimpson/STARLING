@@ -172,7 +172,7 @@ def diff(session_id: str) -> str:
     """
     archive_path = _SOUL_DIR / f"SOUL_{session_id}.md"
     if not archive_path.exists():
-        return "(no diff available)"
+        raise FileNotFoundError(f"No archive found for session_id: {session_id}")
 
     # Read the archived file, strip the comment header
     try:

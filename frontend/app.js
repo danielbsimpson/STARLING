@@ -3021,6 +3021,21 @@ document.addEventListener('keyup', e => {
 const GREETING_TEXT =
   `All systems nominal. S.T.A.R.L.I.N.G. online — running ${MODEL} locally on GPU. How can I assist?`;
 
+// Fetch the current SOUL.md content from the backend.
+// Returns the soul text on success, or "" if the backend is unreachable or times out.
+async function _loadSoul() {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(`${BACKEND_BASE}/soul`, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!res.ok) return '';
+    return await res.text();
+  } catch {
+    return '';
+  }
+}
+
 // Synthesise the greeting to pre-heat Kokoro, then POST the returned WAV to
 // /transcribe so the Whisper CUDA session is initialised before the user ever
 // presses the mic.
@@ -3058,10 +3073,15 @@ async function warmupModels(greetingEl) {
       kokoro_device:  footerKokoroDevice?.textContent?.trim()  || 'CUDA',
       llm_device:     footerLlmDevice?.textContent?.trim()     || 'CUDA',
     });
-  // Update the first message in the conversation history with the rebuilt prompt.
-  if (conversationHistory.length > 0 && conversationHistory[0].role === 'system') {
-    conversationHistory[0].content = SYSTEM_PROMPT;
+  // Augment SYSTEM_PROMPT with the current soul content (fetched from /soul).
+  // This runs after the prompt is fully built with real device values so the soul
+  // is always appended to the final version, not the initial fallback.
+  const soulContent = await _loadSoul();
+  if (soulContent) {
+    SYSTEM_PROMPT += '\n\n---\n\n# STARLING Soul File\n\n' + soulContent;
   }
+  // Update the first message in the conversation history with the rebuilt prompt.
+  conversationHistory = [{ role: 'system', content: SYSTEM_PROMPT }];
   // Reveal the full greeting only once everything is ready.
   if (greetingEl) greetingEl.textContent = GREETING_TEXT;
   setState('idle');
