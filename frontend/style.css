@@ -151,6 +151,36 @@ html, body {
   font-size: 11px; letter-spacing: 6px;
   color: rgba(200,200,200,0.2); text-transform: uppercase;
 }
+
+/* ── Sleep overlay ───────────────────────────────────────────────────────── */
+/* Lower z-index than offline overlay (9999) so shutdown still wins. */
+.sleep-overlay {
+  position: fixed; inset: 0;
+  background: rgba(6,6,6,0.97);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 8000;
+  opacity: 0; pointer-events: none;
+  transition: opacity 1.5s ease;
+}
+.sleep-overlay.visible {
+  opacity: 1; pointer-events: all;
+}
+.sleep-label {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px; letter-spacing: 5px;
+  color: rgba(200,200,200,0.12); text-transform: uppercase;
+  animation: sleep-breathe 4s ease-in-out infinite;
+}
+@keyframes sleep-breathe {
+  0%, 100% { opacity: 0.08; }
+  50%       { opacity: 0.22; }
+}
+/* Hide header + body-cols while sleeping so only the overlay is visible */
+.starling.sleep-mode .hdr,
+.starling.sleep-mode .body-cols {
+  opacity: 0;
+  transition: opacity 0.8s ease;
+}
 .stat-lbl {
   font-family: 'Share Tech Mono', monospace;
   font-size: 8px; letter-spacing: 2px;

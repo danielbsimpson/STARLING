@@ -2,15 +2,15 @@
 goal: Boot & Shutdown Sphere Animation + In-UI System Power Control
 version: '1.0'
 date_created: 2026-05-20
-last_updated: 2026-05-20
+last_updated: 2026-05-27
 owner: simps
-status: 'Planned'
+status: 'Complete'
 tags: [feature, frontend, animation, ux, three.js, launcher, power-management]
 ---
 
 # Introduction
 
-![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
+![Status: Complete](https://img.shields.io/badge/status-Complete-brightgreen)
 
 When S.T.A.R.L.I.N.G. starts up or shuts down, the user currently sees the UI either appear instantly or disappear abruptly. This plan introduces two cinematic Three.js camera animations — a **boot sequence** where the Starling sphere and orbiting light orbs travel in from deep space with a controlled back-and-forth drift, growing larger until they settle into the default position; and a **shutdown sequence** where the sphere and orbs slowly retreat into the background, oscillating as they shrink, before curving off-screen and vanishing. Both animations are configurable in duration so they can be tuned to match actual boot/shutdown times.
 
@@ -43,8 +43,8 @@ This plan also adds a **power-off button** to the UI header so the user can init
 
 | Task | Description | Completed | Date |
 |------|-------------|-----------|------|
-| TASK-001 | In `frontend/config.js`, add `export const BOOT_ANIMATION_MS = 6000;` (6 seconds). Add `export const SHUTDOWN_ANIMATION_MS = 4000;` (4 seconds). Add a comment: `// Increase these values if boot/shutdown takes longer than the animation.` | | |
-| TASK-002 | In `frontend/app.js`, import `BOOT_ANIMATION_MS` and `SHUTDOWN_ANIMATION_MS` from `./config.js` alongside the existing `BACKEND_BASE` import. | | |
+| TASK-001 | In `frontend/config.js`, add `export const BOOT_ANIMATION_MS = 6000;` (6 seconds). Add `export const SHUTDOWN_ANIMATION_MS = 4000;` (4 seconds). Add a comment: `// Increase these values if boot/shutdown takes longer than the animation.` | ✓ | 2026-05-27 |
+| TASK-002 | In `frontend/app.js`, import `BOOT_ANIMATION_MS` and `SHUTDOWN_ANIMATION_MS` from `./config.js` alongside the existing `BACKEND_BASE` import. | ✓ | 2026-05-27 |
 
 ### Implementation Phase 2 — Boot Animation (Sphere Approach)
 
@@ -52,11 +52,11 @@ This plan also adds a **power-off button** to the UI header so the user can init
 
 | Task | Description | Completed | Date |
 |------|-------------|-----------|------|
-| TASK-003 | At the top of `initSphere()`, after `camera.position.z = 6.2`, override to `camera.position.z = 80`. Declare `let _animPhase = 'booting'` and `let _animStart = Date.now()` as local variables inside `initSphere()` (they live in the `animate()` closure). | | |
-| TASK-004 | In the `animate()` function body, add a boot-phase block executed when `_animPhase === 'booting'`. Compute `const p = Math.min((Date.now() - _animStart) / BOOT_ANIMATION_MS, 1)`. Apply an ease-out-cubic easing: `const eased = 1 - Math.pow(1 - p, 3)`. Set `camera.position.z = 80 + (6.2 - 80) * eased`. Compute lateral oscillation: `const amp = (1 - eased) * 2.8; camera.position.x = amp * Math.sin(p * Math.PI * 6); camera.position.y = amp * 0.45 * Math.cos(p * Math.PI * 4.7 + 0.9)`. When `p >= 1`, set `camera.position.set(0, 0, 6.2)`, `_animPhase = 'none'`, call `_onBootAnimationComplete()`. | | |
-| TASK-005 | Define `_onBootAnimationComplete()` as a function in `app.js` (after `initSphere` is called). It must: (1) call `setState('idle')`, (2) re-enable the mic button, text input, and send button (remove the `disabled` attribute added in TASK-007). | | |
-| TASK-006 | Expose `_sphereAnimPhase` as a module-level variable in `app.js` that mirrors the value of `_animPhase` inside the closure. Update it whenever `_animPhase` changes by calling `_syncAnimPhase(phase)` — a simple setter that writes to the outer variable. This allows other code to check `if (_sphereAnimPhase !== 'none')`. | | |
-| TASK-007 | On `DOMContentLoaded` (before `initSphere()` is called), add `disabled` attribute to `#mic-btn`, `#send-btn`, and `#text-input` so they are non-interactive during boot animation. This is undone by `_onBootAnimationComplete()` (TASK-005). | | |
+| TASK-003 | At the top of `initSphere()`, after `camera.position.z = 6.2`, override to `camera.position.z = 80`. Declare `let _animPhase = 'booting'` and `let _animStart = Date.now()` as local variables inside `initSphere()` (they live in the `animate()` closure). | ✓ | 2026-05-27 |
+| TASK-004 | In the `animate()` function body, add a boot-phase block executed when `_animPhase === 'booting'`. Compute `const p = Math.min((Date.now() - _animStart) / BOOT_ANIMATION_MS, 1)`. Apply an ease-out-cubic easing: `const eased = 1 - Math.pow(1 - p, 3)`. Set `camera.position.z = 80 + (6.2 - 80) * eased`. Compute lateral oscillation: `const amp = (1 - eased) * 2.8; camera.position.x = amp * Math.sin(p * Math.PI * 6); camera.position.y = amp * 0.45 * Math.cos(p * Math.PI * 4.7 + 0.9)`. When `p >= 1`, set `camera.position.set(0, 0, 6.2)`, `_animPhase = 'none'`, call `_onBootAnimationComplete()`. | ✓ | 2026-05-27 |
+| TASK-005 | Define `_onBootAnimationComplete()` as a function in `app.js` (after `initSphere` is called). It must: (1) call `setState('idle')`, (2) re-enable the mic button, text input, and send button (remove the `disabled` attribute added in TASK-007). | ✓ | 2026-05-27 |
+| TASK-006 | Expose `_sphereAnimPhase` as a module-level variable in `app.js` that mirrors the value of `_animPhase` inside the closure. Update it whenever `_animPhase` changes by calling `_syncAnimPhase(phase)` — a simple setter that writes to the outer variable. This allows other code to check `if (_sphereAnimPhase !== 'none')`. | ✓ | 2026-05-27 |
+| TASK-007 | On `DOMContentLoaded` (before `initSphere()` is called), add `disabled` attribute to `#mic-btn`, `#send-btn`, and `#text-input` so they are non-interactive during boot animation. This is undone by `_onBootAnimationComplete()` (TASK-005). | ✓ | 2026-05-27 |
 
 ### Implementation Phase 3 — Shutdown Animation (Sphere Retreat)
 
@@ -64,9 +64,9 @@ This plan also adds a **power-off button** to the UI header so the user can init
 
 | Task | Description | Completed | Date |
 |------|-------------|-----------|------|
-| TASK-008 | Define `startShutdownAnimation()` as an exported-style function in `app.js`. It must: (1) disable all UI controls (mic, send, text input, power button), (2) call `setState('idle')` to reset orb colours to calm white, (3) set `_animPhase = 'shutting_down'` and `_animStart = Date.now()` (writing to the closure variables via a setter). | | |
-| TASK-009 | In the `animate()` function body, add a shutdown-phase block when `_animPhase === 'shutting_down'`. Compute `const p = Math.min((Date.now() - _animStart) / SHUTDOWN_ANIMATION_MS, 1)`. Apply ease-in-cubic: `const eased = Math.pow(p, 3)`. Set `camera.position.z = 6.2 + (80 - 6.2) * eased`. Oscillation: `camera.position.x = 2.4 * Math.sin(p * Math.PI * 5)`. Final curve: when `p > 0.75`, ramp `camera.position.x += ((p - 0.75) / 0.25) * 18` and `camera.position.y = ((p - 0.75) / 0.25) * 10` so the sphere arcs off screen in the last 25% of the animation. When `p >= 1`, set `_animPhase = 'done'` and call `_onShutdownAnimationComplete()`. | | |
-| TASK-010 | Define `_onShutdownAnimationComplete()` in `app.js`. It must call `fetch(\`${BACKEND_BASE}/system/shutdown\`, { method: 'POST' }).catch(() => {})`. After a 1200 ms delay (to allow the server to begin shutting down), display a full-screen "OFFLINE" overlay (see TASK-015). | | |
+| TASK-008 | Define `startShutdownAnimation()` as an exported-style function in `app.js`. It must: (1) disable all UI controls (mic, send, text input, power button), (2) call `setState('idle')` to reset orb colours to calm white, (3) set `_animPhase = 'shutting_down'` and `_animStart = Date.now()` (writing to the closure variables via a setter). | ✓ | 2026-05-27 |
+| TASK-009 | In the `animate()` function body, add a shutdown-phase block when `_animPhase === 'shutting_down'`. Compute `const p = Math.min((Date.now() - _animStart) / SHUTDOWN_ANIMATION_MS, 1)`. Apply ease-in-cubic: `const eased = Math.pow(p, 3)`. Set `camera.position.z = 6.2 + (80 - 6.2) * eased`. Oscillation: `camera.position.x = 2.4 * Math.sin(p * Math.PI * 5)`. Final curve: when `p > 0.75`, ramp `camera.position.x += ((p - 0.75) / 0.25) * 18` and `camera.position.y = ((p - 0.75) / 0.25) * 10` so the sphere arcs off screen in the last 25% of the animation. When `p >= 1`, set `_animPhase = 'done'` and call `_onShutdownAnimationComplete()`. | ✓ | 2026-05-27 |
+| TASK-010 | Define `_onShutdownAnimationComplete()` in `app.js`. It must call `fetch(\`${BACKEND_BASE}/system/shutdown\`, { method: 'POST' }).catch(() => {})`. After a 1200 ms delay (to allow the server to begin shutting down), display a full-screen "OFFLINE" overlay (see TASK-015). | ✓ | 2026-05-27 |
 
 ### Implementation Phase 4 — Power-Off Button (UI)
 
@@ -74,11 +74,11 @@ This plan also adds a **power-off button** to the UI header so the user can init
 
 | Task | Description | Completed | Date |
 |------|-------------|-----------|------|
-| TASK-011 | In `frontend/index.html`, inside `<header class="hdr">`, add a power button after `<div class="hdr-stats">`: `<button class="power-btn" id="power-btn" title="Shut down S.T.A.R.L.I.N.G.">⏻</button>`. | | |
-| TASK-012 | In `frontend/style.css`, add `.power-btn` styles: `position: absolute; top: 14px; right: 14px; background: transparent; border: 1px solid rgba(200,200,200,0.15); color: rgba(200,200,200,0.35); font-size: 14px; width: 28px; height: 28px; border-radius: 3px; cursor: pointer; font-family: inherit; letter-spacing: 0; transition: color 0.2s, border-color 0.2s, box-shadow 0.2s`. Add hover state: `border-color: rgba(255,80,80,0.5); color: rgba(255,100,100,0.8); box-shadow: 0 0 8px rgba(255,60,60,0.15)`. Add disabled state: `opacity: 0.2; cursor: default`. | | |
-| TASK-013 | In `frontend/app.js`, get a reference to `#power-btn` (`const powerBtn = document.getElementById('power-btn')`). Add `powerBtn.addEventListener('click', () => { if (_sphereAnimPhase !== 'none') return; startShutdownAnimation(); })`. | | |
-| TASK-014 | Add a confirmation step before starting the shutdown animation: on first click, the power button's label changes to `✕` and a 2-second timeout resets it. On second click within that window (or if no confirmation behaviour is desired, this task can be skipped in favor of a direct single-click shutdown — to be decided at implementation time). | | |
-| TASK-015 | In `frontend/index.html`, add a hidden full-screen offline overlay div: `<div class="offline-overlay hidden" id="offline-overlay"><div class="offline-label">OFFLINE</div></div>`. In `frontend/style.css`, style it: `position:fixed; inset:0; background:#060606; display:flex; align-items:center; justify-content:center; z-index:9999; opacity:0; transition:opacity 1.2s ease`. When class `visible` is added: `opacity:1`. The `.offline-label` is `font-family: 'Share Tech Mono'; font-size: 11px; letter-spacing: 6px; color: rgba(200,200,200,0.2); text-transform: uppercase`. In `_onShutdownAnimationComplete()`, add class `visible` to make it fade in. | | |
+| TASK-011 | In `frontend/index.html`, inside `<header class="hdr">`, add a power button after `<div class="hdr-stats">`: `<button class="power-btn" id="power-btn" title="Shut down S.T.A.R.L.I.N.G.">⏻</button>`. | ✓ | 2026-05-27 |
+| TASK-012 | In `frontend/style.css`, add `.power-btn` styles: `position: absolute; top: 14px; right: 14px; background: transparent; border: 1px solid rgba(200,200,200,0.15); color: rgba(200,200,200,0.35); font-size: 14px; width: 28px; height: 28px; border-radius: 3px; cursor: pointer; font-family: inherit; letter-spacing: 0; transition: color 0.2s, border-color 0.2s, box-shadow 0.2s`. Add hover state: `border-color: rgba(255,80,80,0.5); color: rgba(255,100,100,0.8); box-shadow: 0 0 8px rgba(255,60,60,0.15)`. Add disabled state: `opacity: 0.2; cursor: default`. | ✓ | 2026-05-27 |
+| TASK-013 | In `frontend/app.js`, get a reference to `#power-btn` (`const powerBtn = document.getElementById('power-btn')`). Add `powerBtn.addEventListener('click', () => { if (_sphereAnimPhase !== 'none') return; startShutdownAnimation(); })`. | ✓ | 2026-05-27 |
+| TASK-014 | Add a confirmation step before starting the shutdown animation: on first click, the power button's label changes to `✕` and a 2-second timeout resets it. On second click within that window (or if no confirmation behaviour is desired, this task can be skipped in favor of a direct single-click shutdown — to be decided at implementation time). | ✓ | 2026-05-27 |
+| TASK-015 | In `frontend/index.html`, add a hidden full-screen offline overlay div: `<div class="offline-overlay hidden" id="offline-overlay"><div class="offline-label">OFFLINE</div></div>`. In `frontend/style.css`, style it: `position:fixed; inset:0; background:#060606; display:flex; align-items:center; justify-content:center; z-index:9999; opacity:0; transition:opacity 1.2s ease`. When class `visible` is added: `opacity:1`. The `.offline-label` is `font-family: 'Share Tech Mono'; font-size: 11px; letter-spacing: 6px; color: rgba(200,200,200,0.2); text-transform: uppercase`. In `_onShutdownAnimationComplete()`, add class `visible` to make it fade in. | ✓ | 2026-05-27 |
 
 ### Implementation Phase 5 — Backend Shutdown Endpoint
 
@@ -86,9 +86,9 @@ This plan also adds a **power-off button** to the UI header so the user can init
 
 | Task | Description | Completed | Date |
 |------|-------------|-----------|------|
-| TASK-016 | In `backend/main.py`, add the following route after the `/health` endpoint: `@app.post("/system/shutdown")` with `async def system_shutdown(request: Request)`. Import `Request` from `fastapi` (already imported or add to existing import). Check `request.client.host not in {"127.0.0.1", "::1", "localhost"}` → raise `HTTPException(403, "Forbidden")`. | | |
-| TASK-017 | In `system_shutdown()`, call `session_log.log_session_end()`. Then trigger graceful shutdown by scheduling `os.kill(os.getpid(), signal.SIGTERM)` in a background task with a short delay (`asyncio.get_event_loop().call_later(0.5, lambda: os.kill(os.getpid(), signal.SIGTERM))`). Add `import signal` to `main.py` imports. Return `{"ok": True, "message": "Shutting down"}`. | | |
-| TASK-018 | If `feature-dream-state-shutdown-pipeline-1.md` has been implemented: before calling `os.kill`, call the dream-state trigger in a `BackgroundTask` so the dream pipeline runs during the shutdown delay. If not yet implemented, leave a `# TODO: trigger dream state here` comment. | | |
+| TASK-016 | In `backend/main.py`, add the following route after the `/health` endpoint: `@app.post("/system/shutdown")` with `async def system_shutdown(request: Request)`. Import `Request` from `fastapi` (already imported or add to existing import). Check `request.client.host not in {"127.0.0.1", "::1", "localhost"}` → raise `HTTPException(403, "Forbidden")`. | ✓ | 2026-05-27 |
+| TASK-017 | In `system_shutdown()`, call `session_log.log_session_end()`. Then trigger graceful shutdown by scheduling `os.kill(os.getpid(), signal.SIGTERM)` in a background task with a short delay (`asyncio.get_event_loop().call_later(0.5, lambda: os.kill(os.getpid(), signal.SIGTERM))`). Add `import signal` to `main.py` imports. Return `{"ok": True, "message": "Shutting down"}`. | ✓ | 2026-05-27 |
+| TASK-018 | If `feature-dream-state-shutdown-pipeline-1.md` has been implemented: before calling `os.kill`, call the dream-state trigger in a `BackgroundTask` so the dream pipeline runs during the shutdown delay. If not yet implemented, leave a `# TODO: trigger dream state here` comment. | ✓ | 2026-05-27 |
 
 ### Implementation Phase 6 — Integration with Launcher (Simple On/Off)
 
@@ -96,8 +96,8 @@ This plan also adds a **power-off button** to the UI header so the user can init
 
 | Task | Description | Completed | Date |
 |------|-------------|-----------|------|
-| TASK-019 | Verify that when `POST /system/shutdown` sends `SIGTERM` to the uvicorn process, the `scripts/launch.py` watchdog (TASK-007 of `feature-simple-on-off-launcher-1.md`) detects the exit and also terminates `llama-server`. Document this in `README.md` under the "Shutdown" section. | | |
-| TASK-020 | Verify that `scripts/stop.py` (`make down`) produces the same end state as clicking the power button in the UI. Both paths must result in both processes terminated and `.starling.pid` deleted. | | |
+| TASK-019 | Verify that when `POST /system/shutdown` sends `SIGTERM` to the uvicorn process, the `scripts/launch.py` watchdog (TASK-007 of `feature-simple-on-off-launcher-1.md`) detects the exit and also terminates `llama-server`. Document this in `README.md` under the "Shutdown" section. | ✓ | 2026-05-27 |
+| TASK-020 | Verify that `scripts/stop.py` (`make down`) produces the same end state as clicking the power button in the UI. Both paths must result in both processes terminated and `.starling.pid` deleted. | ✓ | 2026-05-27 |
 
 ## 3. Alternatives
 

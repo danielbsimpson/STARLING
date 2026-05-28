@@ -1,5 +1,5 @@
 // ── Imports ───────────────────────────────────────────────────────────────────
-import { BACKEND_BASE, BOOT_ANIMATION_MS, SHUTDOWN_ANIMATION_MS } from './config.js';
+import { BACKEND_BASE, BOOT_ANIMATION_MS, SHUTDOWN_ANIMATION_MS, SLEEP_AFTER_MS, SLEEP_ANIMATION_MS, WAKE_ANIMATION_MS } from './config.js';
 import { detectTimerTrigger, handleTimerTrigger, initTimerPanel, dismissTimerPanel } from './timer-panel.js';
 import { detectWeatherTrigger, openWeatherPanel, closeWeatherPanel, initWeatherPanel, isWeatherPanelOpen, getWeatherContext } from './weather-panel.js';
 import { detectNewsTrigger, openNewsPanel, closeNewsPanel, initNewsPanel, isNewsPanelOpen, getActiveArticleContext } from './news-panel.js';
@@ -605,6 +605,20 @@ let _startShutdownAnim = function () {
   _triggerSystemShutdown();
 };
 
+// ── Sleep / wake animation triggers (overwritten by initSphere()) ──────────────
+// Fallbacks fire the completion callbacks directly when Three.js is unavailable.
+let _startSleepAnim = function () { _onSleepAnimationComplete(); };
+let _startWakeAnim  = function () { _onWakeAnimationComplete();  };
+
+// ── Sleep mode state ──────────────────────────────────────────────────────────
+let _isSleeping           = false;   // true while sleep overlay is showing
+let _sleepEnteredAt       = 0;       // Date.now() when sleep was triggered
+let _lastActivityTs       = Date.now();  // updated on every user interaction
+let _lastDreamCheckpointTs = null;   // ISO 8601 UTC; updated after each sleep dream
+let _currentSessionId     = null;   // cached from GET /health on startup
+
+const sleepOverlay = document.getElementById('sleep-overlay');
+
 /**
  * Final step of the shutdown sequence: POST to the backend and show the
  * offline overlay.  The boot-shutdown-animation feature will call this from
@@ -627,6 +641,143 @@ function startShutdown() {
   [micBtn, sendBtn, textInput, powerBtn].forEach(el => el && (el.disabled = true));
   setState('idle');
   _startShutdownAnim();
+}
+
+// ── Sleep / wake lifecycle ─────────────────────────────────────────────────────
+
+/** Mark the current moment as the last user activity (resets the sleep timer). */
+function _resetActivity() {
+  _lastActivityTs = Date.now();
+}
+
+/** Called by animate() (or the no-sphere fallback) when the sleep animation ends. */
+function _onSleepAnimationComplete() {
+  sleepOverlay && sleepOverlay.classList.add('visible');
+  _triggerSleepDream();
+}
+
+/** Called by animate() (or the no-sphere fallback) when the wake animation ends. */
+function _onWakeAnimationComplete() {
+  starlingEl.classList.remove('sleep-mode');
+  [micBtn, sendBtn, textInput, powerBtn].forEach(el => el && (el.disabled = false));
+  setState('idle');
+  _resetActivity();
+  _sendWakeGreeting();
+}
+
+/**
+ * Transition the UI into sleep mode: disable controls, start the retreat
+ * animation (sphere drifts off into space), then show the sleep overlay.
+ */
+function enterSleepMode() {
+  if (_isSleeping || _sphereAnimPhase !== 'none') return;
+  _isSleeping     = true;
+  _sleepEnteredAt = Date.now();
+  [micBtn, sendBtn, textInput, powerBtn].forEach(el => el && (el.disabled = true));
+  setState('idle');
+  starlingEl.classList.add('sleep-mode');
+  _startSleepAnim();
+}
+
+/**
+ * Wake from sleep: hide overlay, play the sphere approach animation,
+ * then re-enable controls and greet the user.
+ */
+function wakeSleepMode() {
+  if (!_isSleeping || _sphereAnimPhase !== 'none') return;
+  _isSleeping = false;
+  sleepOverlay && sleepOverlay.classList.remove('visible');
+  _startWakeAnim();
+}
+
+/**
+ * Fire-and-forget dream run after sleep.  Polls /dream/status until a pass
+ * completes, then updates the checkpoint timestamp.
+ */
+async function _triggerSleepDream() {
+  if (!_currentSessionId) return;
+  const body = { session_id: _currentSessionId, from_ts: _lastDreamCheckpointTs };
+  fetch(`${BACKEND_BASE}/dream/run`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(body),
+  }).catch(() => {});  // intentional fire-and-forget
+
+  // Poll until at least one pass completes, then record the checkpoint.
+  const pollId = setInterval(async () => {
+    try {
+      const r = await fetch(`${BACKEND_BASE}/dream/status`);
+      if (!r.ok) return;
+      const data = await r.json();
+      if (data.completed_passes && data.completed_passes.length > 0) {
+        _lastDreamCheckpointTs = new Date().toISOString();
+        clearInterval(pollId);
+      }
+    } catch { /* non-fatal */ }
+  }, 10000);
+}
+
+/**
+ * Greet the user when they return from sleep.  Injects an ephemeral system
+ * note with the elapsed idle time into the LLM context without persisting it
+ * to conversationHistory.  The assistant response IS appended and spoken.
+ */
+async function _sendWakeGreeting() {
+  const elapsedMin = Math.round((Date.now() - _sleepEnteredAt) / 60000);
+  const systemNote = elapsedMin >= 1
+    ? `The user has just returned after approximately ${elapsedMin} minute${elapsedMin !== 1 ? 's' : ''} of inactivity. Greet them warmly and briefly — one or two sentences maximum. Do not refer to yourself as having been asleep.`
+    : `The user has just returned. Greet them briefly — one sentence.`;
+
+  // Build the outbound message list: ephemeral system note + existing history.
+  // The system note is NOT pushed to conversationHistory; it is request-only.
+  const messages = [{ role: 'system', content: systemNote }, ...conversationHistory];
+
+  const { wrap, txt } = appendMessage('assistant', '');
+  wrap.classList.add('streaming');
+  setState('thinking');
+
+  try {
+    const res = await fetch(`${BACKEND_BASE}/chat/`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: MODEL, messages }),
+    });
+    if (!res.ok) throw new Error(`LLM ${res.status}`);
+
+    const reader  = res.body.getReader();
+    const decoder = new TextDecoder();
+    let full = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      for (const line of decoder.decode(value, { stream: true }).split('\n')) {
+        if (!line.trim()) continue;
+        try {
+          const token = JSON.parse(line)?.message?.content ?? '';
+          full += token;
+          txt.textContent = full;
+          chatInner.scrollTop = chatInner.scrollHeight;
+        } catch { /* skip partial chunks */ }
+      }
+    }
+
+    wrap.classList.remove('streaming');
+    if (full) {
+      conversationHistory.push({ role: 'assistant', content: full });
+      if (ttsMode !== 'off') {
+        setState('speaking');
+        enqueueSpeak(full, () => { txt.textContent = full; });
+      } else {
+        txt.textContent = full;
+        setState('idle');
+      }
+    } else {
+      setState('idle');
+    }
+  } catch {
+    wrap.classList.remove('streaming');
+    setState('idle');
+  }
 }
 
 // Two-click confirmation: first click arms the button (label → ✕), second
@@ -1089,6 +1240,20 @@ function initSphere() {
     _sphereAnimPhase = 'shutting_down';
   };
 
+  // Allow enterSleepMode() to trigger the sleep retreat animation.
+  _startSleepAnim = function () {
+    _animPhase       = 'sleeping';
+    _animStart       = Date.now();
+    _sphereAnimPhase = 'sleeping';
+  };
+
+  // Allow wakeSleepMode() to trigger the wake approach animation.
+  _startWakeAnim = function () {
+    _animPhase       = 'waking';
+    _animStart       = Date.now();
+    _sphereAnimPhase = 'waking';
+  };
+
   /** Called once the boot animation finishes. Re-enables all interactive controls. */
   function _onBootAnimationComplete() {
     _animPhase       = 'none';
@@ -1219,6 +1384,45 @@ function initSphere() {
       if (p >= 1) _onShutdownAnimationComplete();
       renderer.render(scene, camera);
       return;  // skip normal per-frame logic while shutting down
+    }
+
+    // ── Sleep animation — same retreat path as shutdown ────────────────────
+    if (_animPhase === 'sleeping') {
+      const p = Math.min((Date.now() - _animStart) / SLEEP_ANIMATION_MS, 1);
+      const eased = p * p;                                     // ease-in quad
+      camera.position.z = 6.2 + (80 - 6.2) * eased;
+      camera.position.x = 2.4 * Math.sin(p * Math.PI * 5);
+      camera.position.y = 0;
+      if (p > 0.75) {
+        const tail = (p - 0.75) / 0.25;
+        camera.position.x += tail * 18;
+        camera.position.y  = tail * 10;
+      }
+      if (p >= 1) {
+        _animPhase       = 'none';
+        _sphereAnimPhase = 'none';
+        _onSleepAnimationComplete();
+      }
+      renderer.render(scene, camera);
+      return;
+    }
+
+    // ── Wake animation — same approach path as boot ────────────────────────
+    if (_animPhase === 'waking') {
+      const p = Math.min((Date.now() - _animStart) / WAKE_ANIMATION_MS, 1);
+      const eased = 1 - Math.pow(1 - p, 3);                   // ease-out cubic
+      camera.position.z = 80 + (6.2 - 80) * eased;
+      const amp = (1 - eased) * 2.8;
+      camera.position.x = amp * Math.sin(p * Math.PI * 6);
+      camera.position.y = amp * 0.45 * Math.cos(p * Math.PI * 4.7 + 0.9);
+      if (p >= 1) {
+        camera.position.set(0, 0, 6.2);
+        _animPhase       = 'none';
+        _sphereAnimPhase = 'none';
+        _onWakeAnimationComplete();
+      }
+      renderer.render(scene, camera);
+      return;
     }
 
     // ── Mouse proximity computation (once per frame) ─────────────────────────
@@ -2682,6 +2886,7 @@ async function _routeInput(text) {
 async function handleSend() {
   const text = textInput.value.trim();
   if (!text) return;
+  _resetActivity();
   logEvent('user_text', { text });
   _rttStart = performance.now();
   clearAudioQueue();
@@ -2748,6 +2953,7 @@ async function startRecording() {
 
         logEvent('user_speech_frontend', { transcript });
 
+        _resetActivity();
         // Preserve RTT timestamp across clearAudioQueue before routing
         const rttSnap = _rttStart;
         clearAudioQueue();
@@ -2781,7 +2987,11 @@ function stopRecording() {
 // Push-to-talk — mouse
 // Use document-level mouseup so cursor drift off the button mid-speech does not stop recording.
 let _micMouseDown = false;
-micBtn.addEventListener('mousedown', () => { _micMouseDown = true;  startRecording(); });
+micBtn.addEventListener('mousedown', () => {
+  if (_isSleeping) { wakeSleepMode(); return; }  // wake before recording
+  _micMouseDown = true;
+  startRecording();
+});
 document.addEventListener('mouseup',  () => { if (_micMouseDown) { _micMouseDown = false; stopRecording(); } });
 
 // Push-to-talk — touch
@@ -2792,8 +3002,13 @@ micBtn.addEventListener('touchend',   e => { e.preventDefault(); stopRecording()
 document.addEventListener('keydown', e => {
   if (e.code === 'Space' && document.activeElement !== textInput && !e.repeat) {
     e.preventDefault();
+    if (_isSleeping) { wakeSleepMode(); return; }  // wake before recording
     startRecording();
   }
+});
+// Any other keypress while sleeping also wakes the system
+document.addEventListener('keydown', e => {
+  if (_isSleeping && e.code !== 'Space') { e.preventDefault(); wakeSleepMode(); }
 });
 document.addEventListener('keyup', e => {
   if (e.code === 'Space' && document.activeElement !== textInput) {
@@ -2830,6 +3045,11 @@ async function warmupModels(greetingEl) {
   // Both Kokoro and Whisper have now completed their first inference pass — poll
   // system-status so the GPU badges in the footer are populated before the user speaks.
   await fetchSystemStatus();
+  // Cache the current session ID for sleep-dream triggers.
+  try {
+    const hr = await fetch(`${BACKEND_BASE}/health`);
+    if (hr.ok) { const h = await hr.json(); _currentSessionId = h.current_session || null; }
+  } catch { /* non-fatal — _triggerSleepDream will silently skip if null */ }
   // Rebuild SYSTEM_PROMPT with real device values now that the footer badges are populated.
   SYSTEM_PROMPT =
     _buildInitialContext() + ' ' +
@@ -2984,3 +3204,17 @@ wireJournalButtons({
 });
 const { txt: _greetingTxt } = appendMessage('assistant', 'INITIALISING…');
 warmupModels(_greetingTxt);  // async — heats Kokoro + Whisper, then reveals greeting
+
+// ── Sleep mode: overlay click, and inactivity poll ──────────────────────────────────
+if (sleepOverlay) sleepOverlay.addEventListener('click', wakeSleepMode);
+
+// Check every 15 s whether the user has been idle long enough to sleep.
+// Guards: skip if an animation is playing, if the system is already sleeping,
+// or if Starling is currently speaking/listening.
+setInterval(() => {
+  if (_sphereAnimPhase !== 'none') return;
+  if (_isSleeping) return;
+  const s = sphereStateRef.current;
+  if (s === 'speaking' || s === 'listening' || s === 'thinking' || s === 'transcribing') return;
+  if (Date.now() - _lastActivityTs >= SLEEP_AFTER_MS) enterSleepMode();
+}, 15000);
