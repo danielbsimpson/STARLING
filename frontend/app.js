@@ -10,7 +10,9 @@ import { detectCalendarTrigger, openCalendarPanel, closeCalendarPanel, isCalenda
 import { detectMailTrigger, openMailPanel, closeMailPanel, isMailPanelOpen } from './mail-panel.js';
 import { detectBrowserTrigger, detectBrowserClose, detectWikiSectionTrigger, isBrowserPanelOpen, openBrowserPanel, closeBrowserPanel, getBrowserPageText, ensureBrowserPageText, getBrowserPageUrl, getBrowserJsRendered } from './browser-panel.js';
 import { detectSystemStatusTrigger, handleSystemStatusTrigger, initSystemPanel, showSystemPanel } from './system-panel.js';
+import { detectFuzzyToolIntent } from './fuzzy-tool-detect.js';
 import { getInterruptPhrase } from './interrupt-phrases.js';
+import { easeOutCubic, easeInCubic, easeInOutQuad, easeOutBack, easeInOutSine } from './animation-easings.js';
 import {
   wikiMode,
   detectWikiTrigger,
@@ -268,8 +270,7 @@ async function enterPresMode(subject) {
 function exitPresMode() {
   _presSubject = null;
   starlingEl.classList.remove('pres-mode');
-  presTitle.textContent  = 'SUBJECT UNKNOWN';
-  presBody.textContent   = 'Awaiting intelligence data. No records on file for this subject.';
+  presTitle.textContent  = 'SUBJECT UNKNOWN';  presBody.textContent   = 'Awaiting intelligence data. No records on file for this subject.';
   presMeta.innerHTML     =
     '<span class="key">STATUS</span><span class="val">UNCLASSIFIED</span>' +
     '<span class="key">SOURCE</span><span class="val">LOCAL KB</span>' +
@@ -334,11 +335,72 @@ function _buildInitialContext() {
   return `Current date: ${date}. Current time: ${time} (${tz}). You are running as the model ${MODEL} served locally.`;
 }
 
+// ── Toolkit manifest (Tier 1 — tool awareness) ───────────────────────────────
+// Plain-prose description of every active tool, appended to SYSTEM_PROMPT so
+// Starling can describe her own capabilities without hallucinating.
+//
+// CO-CHANGE NOTE: When a tool is added to or removed from _routeInput(), update
+// this block AND FUZZY_TOOL_MAP in fuzzy-tool-detect.js AND the switch in
+// _retriggerTool(). All three are kept in sync deliberately.
+const TOOLKIT_MANIFEST_BLOCK =
+  'You have access to the following built-in tools. When the user asks what you can do, ' +
+  'which tools are available, or whether you support a specific capability, describe these ' +
+  'tools accurately in plain natural prose — do not use markdown or bullet points. ' +
+
+  'Dossier: opens a full-screen intelligence briefing panel with a subject portrait and an automatic spoken report. ' +
+  'Say "open dossier on [name]", "show dossier for [name]", or "pull up the dossier". ' +
+
+  'Timer: sets and tracks multiple named countdown timers in-browser with an audio chime on completion. ' +
+  'Say "set a timer for [duration]", "set a [name] timer for [duration]", "cancel timer", or "what timers are running". ' +
+
+  'Time: speaks the current local time instantly with no backend or LLM call. ' +
+  'Say "what time is it", "what\'s the time", or "current time". ' +
+
+  'Date: speaks today\'s full date instantly with no backend or LLM call. ' +
+  'Say "what\'s today\'s date", "what day is it", or "what date is it today". ' +
+
+  'Weather: fetches live local conditions and a 7-day forecast from Open-Meteo — no API key required. ' +
+  'Say "what\'s the weather", "weather today", "weather forecast", or "weather in [city]". ' +
+
+  'News: delivers a spoken briefing from live RSS feeds across categories: tech, business, US, science, health, sports, entertainment, and world. ' +
+  'Say "news briefing", "what\'s in the news", "tech news", "morning briefing", or "top headlines". ' +
+
+  'Stocks and Market: shows a live market dashboard with equity and cryptocurrency prices, charts, and a spoken overview. ' +
+  'Say "show me the market", "crypto prices", "bitcoin price", "show stocks", or "how are the markets". ' +
+
+  'Browser: opens an in-UI browser panel for navigating web pages, Wikipedia lookups, and web search. ' +
+  'Say "open the browser", "browser search for [topic]", or "browser wikipedia [topic]". ' +
+
+  'Ideas Vault: captures, stores, searches, and reads back ideas saved to a local JSON file. ' +
+  'Say "open ideas vault", "store an idea in the vault", "save to the ideas vault", or "search the vault for [topic]". ' +
+
+  'Voice Journal: records multi-segment dictated entries, generates an AI summary and tags, and saves them locally. ' +
+  'Say "start a journal entry", "new journal entry", "show journal", or "read my journal". ' +
+
+  'Wikipedia RAG: searches a locally-embedded offline Simple English Wikipedia index — no internet required. ' +
+  'Say "search local Wikipedia for [topic]", "local wiki [topic]", or "offline Wikipedia [topic]". ' +
+
+  'Calendar: fetches iCloud calendar events for today and the coming week via CalDAV — requires Apple ID and App-Specific Password. ' +
+  'Say "show my calendar", "what\'s on my schedule", "any meetings today", or "open calendar". ' +
+
+  'Mail: fetches unread Apple Mail messages via IMAP and delivers a spoken inbox briefing. ' +
+  'Say "check my email", "view inbox", "any new emails", or "check mail". ' +
+
+  'YouTube: opens the YouTube feed panel with the latest videos from your subscribed channels. ' +
+  'Say "open youtube feed" or "view youtube feed". ' +
+
+  'Reddit: opens the Reddit social feed with top posts from your configured subreddits. ' +
+  'Say "open reddit social" or "view reddit social". ' +
+
+  'Toolkit Menu: opens a browsable overlay listing every active tool with its description and example trigger phrases. ' +
+  'Say "show tools", "open toolkit", "what tools do you have", "tool menu", or "show the menu".';
+
 // SYSTEM_PROMPT is rebuilt after fetchSystemStatus() in warmupModels() with real device values.
 // Initialised here with fallback device strings so it is never empty before warmup completes.
 let SYSTEM_PROMPT =
   _buildInitialContext() + ' ' +
-  getPrompt('STARLING_PERSONA', { whisper_device: 'CUDA', kokoro_device: 'CUDA', llm_device: 'CUDA' });
+  getPrompt('STARLING_PERSONA', { whisper_device: 'CUDA', kokoro_device: 'CUDA', llm_device: 'CUDA' }) +
+  ' ' + TOOLKIT_MANIFEST_BLOCK;
 
 // ── Calendar login helpers (used by TOOLKIT_REGISTRY renderExtraFn) ──────────
 
@@ -755,6 +817,11 @@ let _toolkitConfirmPending    = false;
 let _toolkitPendingTool       = null;
 let _toolkitConfirmTimeoutId  = null;
 
+// ── Fuzzy tool confirm state (Tier 2 — fuzzy recovery) ────────────────────────
+let _fuzzyConfirmPending = false;
+let _fuzzyPendingTool    = null;
+let _fuzzyTimeoutId      = null;
+
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const starlingEl  = document.getElementById('starling');
 const chatInner   = document.getElementById('chat-inner');
@@ -779,6 +846,10 @@ let _startShutdownAnim = function () {
 // Fallbacks fire the completion callbacks directly when Three.js is unavailable.
 let _startSleepAnim = function () { _onSleepAnimationComplete(); };
 let _startWakeAnim  = function () { _onWakeAnimationComplete();  };
+
+// ── Dev-only animation replays (overwritten by initSphere(); gated on ?dev=1) ──
+let _replayBootAnim      = function () {};
+let _previewShutdownAnim = function () {};
 
 // ── Sleep mode state ──────────────────────────────────────────────────────────
 let _isSleeping           = false;   // true while sleep overlay is showing
@@ -1387,9 +1458,10 @@ function initSphere() {
   const canvas = document.getElementById('sphere-canvas');
   if (!canvas) return;
 
-  const SIZE = 210;
+  const RING_SIZE = 210;
+  let _currentRenderSize = RING_SIZE;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-  renderer.setSize(SIZE, SIZE);
+  renderer.setSize(_currentRenderSize, _currentRenderSize);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   if (THREE.SRGBColorSpace) renderer.outputColorSpace = THREE.SRGBColorSpace;
 
@@ -1397,18 +1469,120 @@ function initSphere() {
   const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
   camera.position.z = 6.2;
 
+  // ── Reduced-motion preference ──────────────────────────────────────────────
+  // When the OS requests reduced motion we play a short plain dolly for each
+  // lifecycle phase and skip the screen-fill expansion entirely.
+  const _prefersReducedMotion =
+    window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ── Render-size helper ──────────────────────────────────────────────────────
+  function _setRenderSize(px) {
+    _currentRenderSize = px;
+    renderer.setSize(px, px);
+    camera.aspect = 1;
+    camera.updateProjectionMatrix();
+  }
+
+  // ── Lifecycle choreography config ──────────────────────────────────────────
+  // Tunable parameters per phase — designers can adjust here without touching
+  // the animate() branches. See plan/feature-lifecycle-animations-2.md §2.
+  const BOOT_CHOREO = {
+    camStartZ: 95, camEndZ: 6.2,
+    lateralAmpStart: 6.0, lateralAmpEnd: 0.0,
+    swirlFreq: 4.2, sphereSpinTurns: 1.4,
+    orbRadiusStart: 3.4, orbRadiusEnd: 1.65,
+    orbSpeedStart: 0.35, orbSpeedEnd: 1.0,
+  };
+  const SHUTDOWN_CHOREO = {
+    camStartZ: 6.2, camEndZ: 110,
+    lateralSweep: 22, verticalSweep: 14,
+    sphereTumbleTurns: 0.9,
+    orbRadiusEnd: 3.2, orbOpacityEnd: 0.0, fadeStart: 0.55,
+  };
+  const SLEEP_CHOREO = {
+    camStartZ: 6.2, camEndZ: 14,
+    lateralDrift: 8, verticalDrift: 3,
+    sphereTiltX: 0.85,
+    orbSpeedScale: 0.35, orbOpacityEnd: 0.45,
+  };
+  const WAKE_CHOREO = {
+    camStartZ: 14, camEndZ: 6.2,
+    lateralDriftStart: 8, verticalDriftStart: 1.8,
+    sphereTiltStart: 0.85,
+    orbSpeedStart: 0.35, orbOpacityStart: 0.45,
+  };
+
+  // ── Runtime animation offsets (driven by the lifecycle choreography) ───────
+  // These modulate steady-state orbit behaviour without mutating orbDefs.
+  let _orbRadiusMult = 1.0;   // scales each orb's orbit radius
+  let _orbOpacity    = 1.0;   // applied to orb material opacity + light intensity
+  let _sphereSpinY   = 0;     // sphere/rim spin about Y
+  let _sphereTiltX   = 0;     // sphere/rim tilt about X
+  let _devShutdownPreview = false;   // when true, shutdown anim restores instead of going offline
+
+  // ── Screen-fill expand / restore plumbing ──────────────────────────────────
+  let _stagePlaceholder = null;   // div holding the empty slot in .ring-wrap
+
+  /** Re-parent the canvas to <body> and expand it to ~80vmin (cap 1100 px). */
+  function _expandCanvasForLifecycle() {
+    if (_prefersReducedMotion) return;        // skip expansion under reduced motion
+    if (_stagePlaceholder) return;            // already expanded
+    const parent = canvas.parentElement;
+    if (!parent) return;
+    // Measure the canvas box before detaching so the placeholder matches exactly.
+    const rect = canvas.getBoundingClientRect();
+    _stagePlaceholder = document.createElement('div');
+    _stagePlaceholder.className = 'sphere-stage-placeholder';
+    if (rect.width && rect.height) {
+      _stagePlaceholder.style.width  = `${Math.round(rect.width)}px`;
+      _stagePlaceholder.style.height = `${Math.round(rect.height)}px`;
+    }
+    parent.insertBefore(_stagePlaceholder, canvas);
+    document.body.appendChild(canvas);
+    canvas.classList.add('sphere-canvas--expanded');
+    starlingEl.classList.add('is-lifecycle-animating');
+    // Cap pixel ratio lower during expansion to protect frame rate (RISK-004).
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    const px = Math.min(Math.round(Math.min(window.innerWidth, window.innerHeight) * 0.80), 1100);
+    _setRenderSize(px);
+  }
+
+  /** Reverse _expandCanvasForLifecycle(): restore canvas to the 210 px ring. */
+  function _restoreCanvasToRing() {
+    if (!_stagePlaceholder) return;           // not expanded
+    canvas.classList.remove('sphere-canvas--expanded');
+    const parent = _stagePlaceholder.parentElement;
+    if (parent) parent.insertBefore(canvas, _stagePlaceholder);
+    _stagePlaceholder.remove();
+    _stagePlaceholder = null;
+    starlingEl.classList.remove('is-lifecycle-animating');
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    _setRenderSize(RING_SIZE);
+  }
+
+  // Keep the expanded canvas fitted to the viewport on resize (TASK-009).
+  window.addEventListener('resize', () => {
+    if (_currentRenderSize !== RING_SIZE) {
+      const px = Math.min(Math.round(Math.min(window.innerWidth, window.innerHeight) * 0.80), 1100);
+      _setRenderSize(px);
+    }
+  });
+
+
   // ── Boot / shutdown animation state ───────────────────────────────────────
   // Camera starts far away for the boot approach; _animPhase drives the animate() block.
   let _animPhase = 'booting';
   let _animStart = Date.now();
   _sphereAnimPhase = 'booting';
   camera.position.z = 80;   // override — boot animation will travel to 6.2
+  _expandCanvasForLifecycle();   // boot plays screen-filling (TASK-007)
 
   // Allow startShutdown() (outside this closure) to trigger the retreat animation.
   _startShutdownAnim = function () {
     _animPhase       = 'shutting_down';
     _animStart       = Date.now();
     _sphereAnimPhase = 'shutting_down';
+    _expandCanvasForLifecycle();
   };
 
   // Allow enterSleepMode() to trigger the sleep retreat animation.
@@ -1416,6 +1590,7 @@ function initSphere() {
     _animPhase       = 'sleeping';
     _animStart       = Date.now();
     _sphereAnimPhase = 'sleeping';
+    _expandCanvasForLifecycle();
   };
 
   // Allow wakeSleepMode() to trigger the wake approach animation.
@@ -1423,13 +1598,49 @@ function initSphere() {
     _animPhase       = 'waking';
     _animStart       = Date.now();
     _sphereAnimPhase = 'waking';
+    _expandCanvasForLifecycle();
   };
+
+  // Dev-only: replay the boot choreography (Ctrl+Shift+B with ?dev=1).
+  _replayBootAnim = function () {
+    if (_sphereAnimPhase !== 'none') return;
+    _resetAnimOffsets();
+    _animPhase       = 'booting';
+    _animStart       = Date.now();
+    _sphereAnimPhase = 'booting';
+    camera.position.z = 80;
+    [micBtn, sendBtn, textInput, powerBtn].forEach(el => el && (el.disabled = true));
+    _expandCanvasForLifecycle();
+  };
+
+  // Dev-only: preview the shutdown choreography WITHOUT POSTing /system/shutdown
+  // (Ctrl+Shift+X with ?dev=1). Restores the ring instead of going offline.
+  _previewShutdownAnim = function () {
+    if (_sphereAnimPhase !== 'none') return;
+    _devShutdownPreview = true;
+    _animPhase       = 'shutting_down';
+    _animStart       = Date.now();
+    _sphereAnimPhase = 'shutting_down';
+    _expandCanvasForLifecycle();
+  };
+
+  /** Reset all runtime animation offsets to their steady-state values. */
+  function _resetAnimOffsets() {
+    _orbRadiusMult = 1.0;
+    _orbOpacity    = 1.0;
+    _sphereSpinY   = 0;
+    _sphereTiltX   = 0;
+    sphereMesh.rotation.set(0, 0, 0);
+    rimMesh.rotation.set(0, 0, 0);
+  }
 
   /** Called once the boot animation finishes. Re-enables all interactive controls. */
   function _onBootAnimationComplete() {
     _animPhase       = 'none';
     _sphereAnimPhase = 'none';
     camera.position.set(0, 0, 6.2);
+    _restoreCanvasToRing();
+    _resetAnimOffsets();
     setState('idle');
     [micBtn, sendBtn, textInput, powerBtn].forEach(el => el && (el.disabled = false));
   }
@@ -1438,6 +1649,16 @@ function initSphere() {
   function _onShutdownAnimationComplete() {
     _animPhase       = 'done';
     _sphereAnimPhase = 'none';
+    if (_devShutdownPreview) {
+      // Dev preview — do NOT shut the system down; restore the ring instead.
+      _devShutdownPreview = false;
+      _animPhase = 'none';
+      camera.position.set(0, 0, 6.2);
+      _restoreCanvasToRing();
+      _resetAnimOffsets();
+      return;
+    }
+    // Restore skipped — the offline overlay covers everything (TASK-008).
     _triggerSystemShutdown();
   }
   scene.add(new THREE.AmbientLight(0xffffff, 0.025));
@@ -1453,6 +1674,7 @@ function initSphere() {
   const ORB_GREEN    = new THREE.Color(0x88ffaa);  // green — thinking / transcribing
   const ORB_AGITATED = new THREE.Color(0xff8888);  // light red — cursor proximity
   const ORB_AWARE    = new THREE.Color(0xaaccff);  // pale blue — UI hover
+  const ORB_COOLWHITE = new THREE.Color(0xddeeff); // cool-white — shutdown / sleep tint
 
   const orbDefs = [
     { r: 1.65, speed: 0.19, phase: 0.0, tiltX:  0.30, tiltZ:  0.00 },
@@ -1472,7 +1694,14 @@ function initSphere() {
   const orbs = orbDefs.map((_, i) => {
     // Vary orb mesh sizes — gives depth and hierarchy to the assembly
     const orbSizes = [0.075, 0.055, 0.085, 0.048, 0.068, 0.042, 0.078];
-    const mat   = new THREE.MeshBasicMaterial({ color: ORB_WHITE.clone() });
+    // transparent + depthWrite:false so _orbOpacity fades cleanly during
+    // shutdown/sleep without render-order flicker against the dark sphere.
+    const mat   = new THREE.MeshBasicMaterial({
+      color: ORB_WHITE.clone(),
+      transparent: true,
+      depthWrite: false,
+      depthTest: true,
+    });
     const mesh  = new THREE.Mesh(new THREE.SphereGeometry(orbSizes[i] ?? 0.065, 10, 10), mat);
     const light = new THREE.PointLight(0xffffff, 3.5, 0, 0);
     scene.add(mesh);
@@ -1527,101 +1756,157 @@ function initSphere() {
     const isThinking   = state === 'thinking' || state === 'transcribing';
     const isSpeaking   = state === 'speaking';
 
-    // ── Boot animation — sphere approaches from deep space ───────────────────
+    // ── Lifecycle choreography (boot / shutdown / sleep / wake) ──────────────
+    // Each phase drives camera + sphere rotation + per-orb offsets, then FALLS
+    // THROUGH to the shared orb-update / deformation / render code below so the
+    // orbs keep orbiting the entire time (REQ-001). No early return.
+    const lifecycleActive = _animPhase !== 'none' && _animPhase !== 'done';
+    let _lifecycleSpeedMult = null;   // when set, overrides targetSpeedMult
+    let _lifecycleColor     = null;   // when set, overrides orbColorTarget
+    const REDUCED_MS = 800;           // short plain dolly under reduced motion
+
     if (_animPhase === 'booting') {
-      const p = Math.min((Date.now() - _animStart) / BOOT_ANIMATION_MS, 1);
-      const eased = 1 - Math.pow(1 - p, 3);                   // ease-out cubic
-      camera.position.z = 80 + (6.2 - 80) * eased;
-      const amp = (1 - eased) * 2.8;
-      camera.position.x = amp * Math.sin(p * Math.PI * 6);
-      camera.position.y = amp * 0.45 * Math.cos(p * Math.PI * 4.7 + 0.9);
-      if (p >= 1) _onBootAnimationComplete();
-      renderer.render(scene, camera);
-      return;  // skip normal per-frame logic while booting
+      const C = BOOT_CHOREO;
+      if (_prefersReducedMotion) {
+        const p = Math.min((Date.now() - _animStart) / REDUCED_MS, 1);
+        camera.position.set(0, 0, THREE.MathUtils.lerp(C.camStartZ, C.camEndZ, easeOutCubic(p)));
+        if (p >= 1) _onBootAnimationComplete();
+      } else {
+        const p = Math.min((Date.now() - _animStart) / BOOT_ANIMATION_MS, 1);
+        const easedDolly  = easeOutCubic(p);
+        const easedSwirl  = easeInOutQuad(p);
+        const easedSettle = easeOutBack(p);
+        camera.position.z = THREE.MathUtils.lerp(C.camStartZ, C.camEndZ, easedDolly);
+        camera.position.x = C.lateralAmpStart * (1 - easedDolly) * Math.sin(p * Math.PI * C.swirlFreq);
+        camera.position.y = C.lateralAmpStart * 0.5 * (1 - easedDolly) * Math.cos(p * Math.PI * C.swirlFreq * 0.78 + 0.9);
+        _sphereSpinY        = C.sphereSpinTurns * Math.PI * 2 * (1 - easedSettle);
+        _sphereTiltX        = 0;
+        _orbRadiusMult      = THREE.MathUtils.lerp(C.orbRadiusStart / C.orbRadiusEnd, 1.0, easedSettle);
+        _orbOpacity         = 1.0;
+        _lifecycleSpeedMult = THREE.MathUtils.lerp(C.orbSpeedStart, C.orbSpeedEnd, easedSwirl);
+        if (p >= 1) _onBootAnimationComplete();
+      }
+    } else if (_animPhase === 'shutting_down') {
+      const C = SHUTDOWN_CHOREO;
+      _lifecycleColor = ORB_COOLWHITE;
+      if (_prefersReducedMotion) {
+        const p = Math.min((Date.now() - _animStart) / REDUCED_MS, 1);
+        camera.position.set(0, 0, THREE.MathUtils.lerp(C.camStartZ, C.camEndZ, easeInCubic(p)));
+        if (p >= 1) _onShutdownAnimationComplete();
+      } else {
+        const p = Math.min((Date.now() - _animStart) / SHUTDOWN_ANIMATION_MS, 1);
+        const easedDolly = easeInCubic(p);
+        camera.position.z = THREE.MathUtils.lerp(C.camStartZ, C.camEndZ, easedDolly);
+        camera.position.x = C.lateralSweep * Math.sin(p * Math.PI * 1.7) * easeInOutQuad(p);
+        camera.position.y = C.verticalSweep * (p - 0.5) * easeInCubic(Math.max(0, (p - 0.3) / 0.7));
+        _sphereSpinY   = C.sphereTumbleTurns * Math.PI * 2 * easeInCubic(p);
+        _sphereTiltX   = 0.6 * easeInCubic(p);
+        _orbRadiusMult = THREE.MathUtils.lerp(1.0, C.orbRadiusEnd / 1.65, easeInCubic(p));
+        _orbOpacity    = p < C.fadeStart ? 1.0 : THREE.MathUtils.lerp(1.0, C.orbOpacityEnd, (p - C.fadeStart) / (1 - C.fadeStart));
+        if (p >= 1) _onShutdownAnimationComplete();
+      }
+    } else if (_animPhase === 'sleeping') {
+      const C = SLEEP_CHOREO;
+      _lifecycleColor = ORB_COOLWHITE;
+      if (_prefersReducedMotion) {
+        const p = Math.min((Date.now() - _animStart) / REDUCED_MS, 1);
+        camera.position.set(0, 0, THREE.MathUtils.lerp(C.camStartZ, C.camEndZ, easeInOutSine(p)));
+        if (p >= 1) {
+          _animPhase = 'none'; _sphereAnimPhase = 'none';
+          _restoreCanvasToRing(); _resetAnimOffsets();
+          _onSleepAnimationComplete();
+        }
+      } else {
+        const p = Math.min((Date.now() - _animStart) / SLEEP_ANIMATION_MS, 1);
+        const easedDrift = easeInOutSine(p);
+        camera.position.z = THREE.MathUtils.lerp(C.camStartZ, C.camEndZ, easedDrift);
+        camera.position.x = C.lateralDrift * easedDrift;
+        camera.position.y = C.verticalDrift * Math.sin(p * Math.PI) * 0.6;
+        _sphereTiltX        = C.sphereTiltX * easedDrift;
+        _sphereSpinY        = 0.3 * Math.PI * easedDrift;
+        _lifecycleSpeedMult = THREE.MathUtils.lerp(1.0, C.orbSpeedScale, easedDrift);
+        _orbOpacity         = THREE.MathUtils.lerp(1.0, C.orbOpacityEnd, easedDrift);
+        _orbRadiusMult      = 1.0;
+        if (p >= 1) {
+          _animPhase = 'none'; _sphereAnimPhase = 'none';
+          // Restore the canvas to the ring right before the sleep overlay reveals.
+          _restoreCanvasToRing();
+          _resetAnimOffsets();
+          _onSleepAnimationComplete();
+        }
+      }
+    } else if (_animPhase === 'waking') {
+      const C = WAKE_CHOREO;
+      if (_prefersReducedMotion) {
+        const p = Math.min((Date.now() - _animStart) / REDUCED_MS, 1);
+        camera.position.set(0, 0, THREE.MathUtils.lerp(C.camStartZ, C.camEndZ, easeOutCubic(p)));
+        if (p >= 1) {
+          camera.position.set(0, 0, 6.2);
+          _animPhase = 'none'; _sphereAnimPhase = 'none';
+          _restoreCanvasToRing(); _resetAnimOffsets();
+          _onWakeAnimationComplete();
+        }
+      } else {
+        const p = Math.min((Date.now() - _animStart) / WAKE_ANIMATION_MS, 1);
+        const easedRise = easeOutCubic(p);
+        camera.position.z = THREE.MathUtils.lerp(C.camStartZ, C.camEndZ, easedRise);
+        camera.position.x = C.lateralDriftStart * (1 - easedRise);
+        camera.position.y = C.verticalDriftStart * (1 - easedRise);
+        _sphereTiltX        = C.sphereTiltStart * (1 - easedRise);
+        _sphereSpinY        = 0.3 * Math.PI * (1 - easedRise);
+        _lifecycleSpeedMult = THREE.MathUtils.lerp(C.orbSpeedStart, 1.0, easedRise);
+        _orbOpacity         = THREE.MathUtils.lerp(C.orbOpacityStart, 1.0, easedRise);
+        _orbRadiusMult      = 1.0;
+        if (p >= 1) {
+          camera.position.set(0, 0, 6.2);
+          _animPhase = 'none'; _sphereAnimPhase = 'none';
+          _restoreCanvasToRing();
+          _resetAnimOffsets();
+          _onWakeAnimationComplete();
+        }
+      }
     }
 
-    // ── Shutdown animation — sphere retreats off into space ──────────────────
-    if (_animPhase === 'shutting_down') {
-      const p = Math.min((Date.now() - _animStart) / SHUTDOWN_ANIMATION_MS, 1);
-      const eased = Math.pow(p, 3);                            // ease-in cubic
-      camera.position.z = 6.2 + (80 - 6.2) * eased;
-      camera.position.x = 2.4 * Math.sin(p * Math.PI * 5);
-      camera.position.y = 0;
-      if (p > 0.75) {
-        const tail = (p - 0.75) / 0.25;
-        camera.position.x += tail * 18;
-        camera.position.y  = tail * 10;
-      }
-      if (p >= 1) _onShutdownAnimationComplete();
-      renderer.render(scene, camera);
-      return;  // skip normal per-frame logic while shutting down
-    }
-
-    // ── Sleep animation — same retreat path as shutdown ────────────────────
-    if (_animPhase === 'sleeping') {
-      const p = Math.min((Date.now() - _animStart) / SLEEP_ANIMATION_MS, 1);
-      const eased = p * p;                                     // ease-in quad
-      camera.position.z = 6.2 + (80 - 6.2) * eased;
-      camera.position.x = 2.4 * Math.sin(p * Math.PI * 5);
-      camera.position.y = 0;
-      if (p > 0.75) {
-        const tail = (p - 0.75) / 0.25;
-        camera.position.x += tail * 18;
-        camera.position.y  = tail * 10;
-      }
-      if (p >= 1) {
-        _animPhase       = 'none';
-        _sphereAnimPhase = 'none';
-        _onSleepAnimationComplete();
-      }
-      renderer.render(scene, camera);
-      return;
-    }
-
-    // ── Wake animation — same approach path as boot ────────────────────────
-    if (_animPhase === 'waking') {
-      const p = Math.min((Date.now() - _animStart) / WAKE_ANIMATION_MS, 1);
-      const eased = 1 - Math.pow(1 - p, 3);                   // ease-out cubic
-      camera.position.z = 80 + (6.2 - 80) * eased;
-      const amp = (1 - eased) * 2.8;
-      camera.position.x = amp * Math.sin(p * Math.PI * 6);
-      camera.position.y = amp * 0.45 * Math.cos(p * Math.PI * 4.7 + 0.9);
-      if (p >= 1) {
-        camera.position.set(0, 0, 6.2);
-        _animPhase       = 'none';
-        _sphereAnimPhase = 'none';
-        _onWakeAnimationComplete();
-      }
-      renderer.render(scene, camera);
-      return;
-    }
+    // Apply sphere/rim rotation offsets once per frame (kept in sync — RISK-002).
+    sphereMesh.rotation.set(_sphereTiltX, _sphereSpinY, 0);
+    rimMesh.rotation.copy(sphereMesh.rotation);
 
     // ── Mouse proximity computation (once per frame) ─────────────────────────
-    const rect           = renderer.domElement.getBoundingClientRect();
-    const cxPx           = rect.left + rect.width  * 0.5;
-    const cyPx           = rect.top  + rect.height * 0.5;
-    const sphereRadiusPx = Math.min(rect.width, rect.height) * 0.5 * 0.55;
-    const distPx         = Math.hypot(_mouseX - cxPx, _mouseY - cyPx);
-    // Ramp starts at 8× sphere radius (~half a typical screen) so the gradient
-    // is visible from far across the viewport, peaking when the cursor is on the sphere
-    const PROX_RAMP_START = sphereRadiusPx * 8;
-    const rawProx = 1 - Math.min(1, Math.max(0, (distPx - sphereRadiusPx) / (PROX_RAMP_START - sphereRadiusPx)));
-    proximityVal += (rawProx - proximityVal) * 0.06;
+    // Skipped during lifecycle animations — the cursor's position relative to
+    // the expanded canvas is meaningless mid-choreography (TASK-012).
+    let proxCurved = 0;
+    if (!lifecycleActive) {
+      const rect           = renderer.domElement.getBoundingClientRect();
+      const cxPx           = rect.left + rect.width  * 0.5;
+      const cyPx           = rect.top  + rect.height * 0.5;
+      const sphereRadiusPx = Math.min(rect.width, rect.height) * 0.5 * 0.55;
+      const distPx         = Math.hypot(_mouseX - cxPx, _mouseY - cyPx);
+      // Ramp starts at 8× sphere radius (~half a typical screen) so the gradient
+      // is visible from far across the viewport, peaking when the cursor is on the sphere
+      const PROX_RAMP_START = sphereRadiusPx * 8;
+      const rawProx = 1 - Math.min(1, Math.max(0, (distPx - sphereRadiusPx) / (PROX_RAMP_START - sphereRadiusPx)));
+      proximityVal += (rawProx - proximityVal) * 0.06;
+      // Use a power curve so the red tint is faint at distance and intensifies sharply near the sphere
+      proxCurved = Math.pow(proximityVal, 1.8);
+    }
 
-    // ── Orb colour target — speech state overrides proximity ─────────────────
-    // Use a power curve so the red tint is faint at distance and intensifies sharply near the sphere
-    const proxCurved = Math.pow(proximityVal, 1.8);
+    // ── Orb colour target — lifecycle override → speech state → proximity ────
     let orbColorTarget;
-    if (isListening)              orbColorTarget = ORB_BLUE;
+    if (lifecycleActive) {
+      // Shutdown/sleep tint to cool-white; boot/wake settle to plain white.
+      orbColorTarget = _lifecycleColor || ORB_WHITE;
+    }
+    else if (isListening)              orbColorTarget = ORB_BLUE;
     else if (isThinking)          orbColorTarget = ORB_GREEN;
     else if (isSpeaking)          orbColorTarget = ORB_YELLOW;
     else if (proximityVal > 0.01) orbColorTarget = ORB_AGITATED.clone().lerp(ORB_WHITE, 1 - proxCurved);
     else if (_uiHovered)          orbColorTarget = ORB_AWARE;
     else                          orbColorTarget = ORB_WHITE;
 
-    // Smoothly ramp orbit speed up during active states
+    // Smoothly ramp orbit speed — lifecycle choreography overrides state logic
     let targetSpeedMult;
-    if (isListening)              targetSpeedMult = 1.9;
+    if (lifecycleActive)          targetSpeedMult = _lifecycleSpeedMult !== null ? _lifecycleSpeedMult : 1.0;
+    else if (isListening)              targetSpeedMult = 1.9;
     else if (isThinking)          targetSpeedMult = 0.2;
     else if (isSpeaking)          targetSpeedMult = 2.2;
     else if (proximityVal > 0.01) targetSpeedMult = 1.0 + proxCurved * 0.8;  // up to 1.8× at sphere edge
@@ -1633,9 +1918,10 @@ function initSphere() {
     // ── Update orb positions and colours ────────────────────────────────────
     orbDefs.forEach((p, i) => {
       const angle = p.speed * orbTimeAccum + p.phase;
-      // Point on circle in local XY plane
-      const lx = p.r * Math.cos(angle);
-      const ly = p.r * Math.sin(angle);
+      // Point on circle in local XY plane — radius modulated by lifecycle offset
+      const r  = p.r * _orbRadiusMult;
+      const lx = r * Math.cos(angle);
+      const ly = r * Math.sin(angle);
       // Rotate around X axis by tiltX
       const mx = lx;
       const my = ly * Math.cos(p.tiltX);
@@ -1654,13 +1940,15 @@ function initSphere() {
       orb.mat.color.copy(orb.color);
       orb.light.color.copy(orb.color);
 
-      // Slightly higher intensity while listening
-      orb.light.intensity = isListening ? 6 : isSpeaking ? 5 : 3.5;
+      // Base intensity by state, scaled by the lifecycle opacity offset.
+      const baseIntensity = isListening ? 6 : isSpeaking ? 5 : 3.5;
+      orb.light.intensity = baseIntensity * _orbOpacity;
+      orb.mat.opacity     = _orbOpacity;
     });
 
     // ── Sphere surface deformation (audio-driven in listening mode) ──────────
     const positions = sphereGeo.attributes.position.array;
-    if (isListening && sphereAnalyserRef.an && sphereAnalyserRef.data) {
+    if (isListening && !lifecycleActive && sphereAnalyserRef.an && sphereAnalyserRef.data) {
       sphereAnalyserRef.an.getByteFrequencyData(sphereAnalyserRef.data);
       const audioData = sphereAnalyserRef.data;
       const dataLen   = audioData.length;
@@ -2454,11 +2742,282 @@ function detectToolkitMenuTrigger(text) {
   );
 }
 
+// ── Fuzzy tool confirm helpers (Tier 2) ──────────────────────────────────────
+
+/** Reset all fuzzy-confirm state and hide the banner. */
+function _clearFuzzyConfirmState() {
+  _fuzzyConfirmPending = false;
+  _fuzzyPendingTool    = null;
+  if (_fuzzyTimeoutId !== null) {
+    clearTimeout(_fuzzyTimeoutId);
+    _fuzzyTimeoutId = null;
+  }
+  const banner = document.getElementById('fuzzy-confirm-banner');
+  if (banner) banner.classList.add('hidden');
+}
+
+/**
+ * Raise the "Did you mean to open <tool>?" confirmation banner and arm a
+ * 15-second auto-dismiss. The next utterance is interpreted as yes/no by the
+ * fuzzy confirm intercept at the top of _routeInput().
+ */
+function _enterFuzzyConfirmState(toolName) {
+  _clearFuzzyConfirmState();
+  _fuzzyConfirmPending = true;
+  _fuzzyPendingTool    = toolName;
+
+  const nameEl = document.getElementById('fcb-tool-name');
+  if (nameEl) nameEl.textContent = toolName;
+  const banner = document.getElementById('fuzzy-confirm-banner');
+  if (banner) banner.classList.remove('hidden');
+
+  const spoken = `Did you mean to open ${toolName}? Say yes or no.`;
+  enqueueSpeak(spoken);
+
+  _fuzzyTimeoutId = setTimeout(() => {
+    _clearFuzzyConfirmState();
+    enqueueSpeak("Okay, I'll cancel that.");
+  }, 15000);
+}
+
+/**
+ * Re-dispatch a tool after the user confirms a fuzzy match. Mirrors the real
+ * canonical handlers in _routeInput() below.
+ *
+ * CO-CHANGE NOTE: When adding a tool here, also add a matching entry to
+ * FUZZY_TOOL_MAP in fuzzy-tool-detect.js and a handler in _routeInput().
+ */
+async function _retriggerTool(toolName, originalTranscript) {
+  switch (toolName) {
+    case 'Dossier': {
+      enqueueSpeak('Which subject would you like a dossier on? Say: tell me about, followed by a name.');
+      setState('idle');
+      return;
+    }
+
+    case 'Timer': {
+      enqueueSpeak('How long should I set the timer for?');
+      setState('idle');
+      return;
+    }
+
+    case 'Time / Date': {
+      setState('idle');
+      handleTimeQuery(originalTranscript);
+      return;
+    }
+
+    case 'Weather': {
+      closeBrowserPanel();
+      setState('thinking');
+      const wxResult = await openWeatherPanel();
+      if (wxResult && typeof wxResult === 'object' && wxResult._wxErr) {
+        const { txt } = appendMessage('assistant', wxResult._wxErr);
+        enqueueSpeak(wxResult._wxErr, () => { txt.textContent = wxResult._wxErr; });
+        setState('idle');
+      } else if (wxResult) {
+        await sendToOllama(
+          'Give a spoken weather briefing using only the weather data in your context — do not estimate or invent any values. ' +
+          'Start with current conditions and how it feels outside, then the upcoming forecast using the exact high temperatures listed. ' +
+          'Keep it to three or four natural sentences.',
+          {
+            ephemeralMessages: [
+              {
+                role: 'system',
+                content: SYSTEM_PROMPT + '\n\n[WEATHER DATA — use only these values, do not hallucinate temperatures]\n' + wxResult,
+              },
+            ],
+          }
+        );
+        _playbackChain.then(() => { /* panel stays open for follow-ups */ });
+      } else {
+        await sendToOllama(getPrompt('TOOL_WEATHER_UNAVAILABLE'));
+      }
+      fetchSystemStatus();
+      return;
+    }
+
+    case 'News': {
+      closeBrowserPanel();
+      setState('thinking');
+      const newsContext = await openNewsPanel('top');
+      if (newsContext) {
+        enterNewsMode();
+        await sendToOllama(
+          'Deliver a concise spoken news briefing based on the headlines provided. ' +
+          'Pick the four or five most significant stories and summarise each in one sentence. ' +
+          'Keep the whole briefing under sixty seconds when spoken aloud.',
+          {
+            ephemeralMessages: [
+              { role: 'system', content: SYSTEM_PROMPT },
+              { role: 'system', content: `${_currentTimeContext()}\n${newsContext}` },
+            ],
+          }
+        );
+      } else {
+        await sendToOllama(getPrompt('TOOL_NEWS_UNAVAILABLE'));
+      }
+      fetchSystemStatus();
+      return;
+    }
+
+    case 'Stocks & Market': {
+      closeBrowserPanel();
+      setState('thinking');
+      const mktContext = await openMarketPanel('all');
+      if (mktContext) {
+        enterMarketMode();
+        await sendToOllama(
+          'Deliver a concise spoken market briefing. Cover both equities and crypto briefly. ' +
+          'Highlight any significant movers. Keep it under thirty seconds when spoken aloud.',
+          {
+            ephemeralMessages: [
+              { role: 'system', content: SYSTEM_PROMPT },
+              { role: 'system', content: `${_currentTimeContext()}\n${mktContext}` },
+            ],
+          }
+        );
+      } else {
+        await sendToOllama(getPrompt('TOOL_MARKET_UNAVAILABLE'));
+      }
+      fetchSystemStatus();
+      return;
+    }
+
+    case 'Browser': {
+      enqueueSpeak('What website would you like to open? Say: open the browser to, followed by a site.');
+      setState('idle');
+      return;
+    }
+
+    case 'Ideas Vault': {
+      enterIdeasMode();
+      const spoken = 'Ready. Press the mic and speak your idea.';
+      const { txt } = appendMessage('assistant', spoken);
+      enqueueSpeak(spoken, () => { txt.textContent = spoken; });
+      return;
+    }
+
+    case 'Voice Journal': {
+      enterJournalMode();
+      const spoken = 'Journal entry started. Speak your entry — each mic press adds a segment. Say submit when finished.';
+      const { txt } = appendMessage('assistant', spoken);
+      enqueueSpeak(spoken, () => { txt.textContent = spoken; });
+      return;
+    }
+
+    case 'Wikipedia RAG': {
+      enqueueSpeak('What topic should I look up? Say: search local Wikipedia for, followed by a topic.');
+      setState('idle');
+      return;
+    }
+
+    case 'Calendar': {
+      closeBrowserPanel();
+      setState('thinking');
+      const calContext = await openCalendarPanel(false);
+      if (calContext) {
+        await sendToOllama(
+          'Deliver a natural spoken calendar briefing based only on the events listed in your context. ' +
+          'Do not invent, assume, or embellish any events. Start with today, then mention upcoming events using accurate relative time. ' +
+          'Keep it to three or four sentences.',
+          {
+            ephemeralMessages: [
+              { role: 'system', content: SYSTEM_PROMPT + '\n\n' + calContext },
+            ],
+          }
+        );
+      } else {
+        await sendToOllama('Inform the user that the calendar could not be reached right now. One sentence.');
+      }
+      fetchSystemStatus();
+      return;
+    }
+
+    case 'Mail': {
+      closeBrowserPanel();
+      setState('thinking');
+      const mailCtx = await openMailPanel();
+      if (mailCtx) {
+        enterMailMode();
+        logEvent('mail_inbox_snapshot', { llm_context: mailCtx });
+        await sendToOllama(
+          getPrompt('MAIL_INBOX_SUMMARY') + '\n\n' + mailCtx,
+          { ephemeralMessages: [{ role: 'system', content: SYSTEM_PROMPT }] }
+        );
+      } else {
+        await sendToOllama('Inform the user that the mail inbox could not be reached right now. One sentence.');
+      }
+      fetchSystemStatus();
+      return;
+    }
+
+    case 'YouTube': {
+      closeBrowserPanel();
+      setState('thinking');
+      enterYouTubeMode();
+      const ytContext = await openYouTubePanel({});
+      if (ytContext) {
+        await sendToOllama(
+          "Give me a brief spoken summary of what's new on my YouTube feed. " +
+          'For each channel, mention the one or two most interesting recent videos. ' +
+          'Keep the whole summary under forty-five seconds when spoken aloud.',
+          {
+            ephemeralMessages: [
+              { role: 'system', content: SYSTEM_PROMPT },
+              { role: 'system', content: `${_currentTimeContext()}\n${ytContext}` },
+            ],
+          }
+        );
+      } else {
+        exitYouTubeMode();
+        await sendToOllama('Inform the user that the YouTube feed could not be reached right now. One sentence.');
+      }
+      fetchSystemStatus();
+      return;
+    }
+
+    case 'Reddit': {
+      closeBrowserPanel();
+      setState('thinking');
+      const redditContext = await openRedditPanel({});
+      if (redditContext) {
+        enterRedditMode();
+        await sendToOllama(
+          "Deliver a concise spoken summary of what's trending on Reddit right now. " +
+          'For each subreddit, pick the one or two most interesting posts and describe them in one sentence. ' +
+          'Keep the whole briefing under forty-five seconds when spoken aloud.',
+          {
+            ephemeralMessages: [
+              { role: 'system', content: SYSTEM_PROMPT },
+              { role: 'system', content: `${_currentTimeContext()}\n${redditContext}` },
+            ],
+          }
+        );
+      } else {
+        await sendToOllama('Inform the user that the Reddit feed could not be reached right now. One sentence.');
+      }
+      fetchSystemStatus();
+      return;
+    }
+
+    case 'Toolkit Menu': {
+      openToolkitPanel();
+      setState('idle');
+      return;
+    }
+
+    default: {
+      setState('idle');
+      return;
+    }
+  }
+}
+
 // ── Unified input router ──────────────────────────────────────────────────────
 // Handles all trigger intercepts; falls through to the LLM for unmatched input.
 // Called by both handleSend (text path) and mediaRecorder.onstop (voice path).
-async function _routeInput(text) {
-  // ── Toolkit confirm intercept (position 1 — must be first) ────────────────
+async function _routeInput(text) {  // ── Toolkit confirm intercept (position 1 — must be first) ────────────────
   if (_toolkitConfirmPending) {
     const t = text.trim().toLowerCase();
     if (/\b(?:yes|yeah|yep|sure|do it|activate|open it|confirm)\b/.test(t)) {
@@ -2468,6 +3027,34 @@ async function _routeInput(text) {
     if (/\b(?:no|nope|cancel|never mind|nevermind|back|go back|close)\b/.test(t)) {
       window.dispatchEvent(new CustomEvent('toolkit:confirm', { detail: { confirmed: false } }));
       return;
+    }
+  }
+
+  // ── Fuzzy tool confirm intercept (Tier 2) ─────────────────────────────────
+  // While a fuzzy "did you mean …?" banner is showing, the next utterance is
+  // interpreted as a yes/no answer. Guarded so it never interferes with the
+  // dedicated conversational modes (journal / interview / wiki / ideas).
+  if (_fuzzyConfirmPending && !journalMode && !interviewMode && !wikiMode && !ideasMode) {
+    const t = text.trim().toLowerCase();
+    if (/\b(?:yes|yeah|yep|yup|sure|do it|open it|confirm|correct|right)\b/.test(t)) {
+      const tool = _fuzzyPendingTool;
+      _clearFuzzyConfirmState();
+      if (tool) {
+        appendMessage('user', text);
+        logEvent('fuzzy_tool_confirmed', { tool, trigger_phrase: text });
+        await _retriggerTool(tool, text);
+      }
+      return;
+    }
+    if (/\b(?:no|nope|nah|cancel|never mind|nevermind|wrong|incorrect)\b/.test(t)) {
+      const tool = _fuzzyPendingTool;
+      _clearFuzzyConfirmState();
+      logEvent('fuzzy_tool_rejected', { tool, trigger_phrase: text });
+      // Fall through to normal handling so the user's actual words still reach
+      // the LLM if they weren't simply answering the prompt.
+    } else {
+      // Ambiguous reply — dismiss the banner and let the input route normally.
+      _clearFuzzyConfirmState();
     }
   }
 
@@ -3078,6 +3665,19 @@ async function _routeInput(text) {
     return;
   }
 
+  // ── Fuzzy tool recovery (Tier 2 — final intercept before LLM fallback) ────
+  // No canonical trigger matched. Score the transcript against known tools; if
+  // a near-miss is found, raise a confirmation banner instead of guessing. Only
+  // active outside the dedicated conversational modes (already returned above).
+  const _fuzzyMatch = detectFuzzyToolIntent(text, []);
+  if (_fuzzyMatch) {
+    logEvent('fuzzy_tool_detected', { tool: _fuzzyMatch.toolName, confidence: _fuzzyMatch.confidence, trigger_phrase: text });
+    appendMessage('user', text);
+    _enterFuzzyConfirmState(_fuzzyMatch.toolName);
+    setState('idle');
+    return;
+  }
+
   appendMessage('user', text);
   let _extraContext = null;
   if (isBrowserPanelOpen()) {
@@ -3127,6 +3727,7 @@ clearBtn.addEventListener('click', () => {
   clearAudioQueue();
   dismissAllToolPanels();    // calls exitJournalMode() which resets journalMode
   _pendingJournalStatusTxt = null;
+  _clearFuzzyConfirmState();
   exitPresMode();
   conversationHistory = [{ role: 'system', content: SYSTEM_PROMPT }];
   chatInner.innerHTML = '';
@@ -3294,7 +3895,8 @@ async function warmupModels(greetingEl) {
       whisper_device: footerWhisperDevice?.textContent?.trim() || 'CUDA',
       kokoro_device:  footerKokoroDevice?.textContent?.trim()  || 'CUDA',
       llm_device:     footerLlmDevice?.textContent?.trim()     || 'CUDA',
-    });
+    }) +
+    ' ' + TOOLKIT_MANIFEST_BLOCK;
   // Augment SYSTEM_PROMPT with the current soul content (fetched from /soul).
   // This runs after the prompt is fully built with real device values so the soul
   // is always appended to the final version, not the initial fallback.
@@ -3317,6 +3919,29 @@ initYouTubePanel({ enqueueSpeak, sendToOllama, interruptSpeech });
 initNewsPanel({ enqueueSpeak, sendToOllama, interruptSpeech, onClose: exitNewsMode });
 initToolkitPanel(TOOLKIT_REGISTRY);
 initSystemPanel();
+
+// ── Fuzzy confirm banner button wiring (Tier 2) ───────────────────────────────
+const _fcbYes = document.getElementById('fcb-yes');
+const _fcbNo  = document.getElementById('fcb-no');
+if (_fcbYes) {
+  _fcbYes.addEventListener('click', async () => {
+    if (!_fuzzyConfirmPending) return;
+    const tool = _fuzzyPendingTool;
+    _clearFuzzyConfirmState();   // clear state before acting (SEC-001)
+    if (tool) {
+      logEvent('fuzzy_tool_confirmed', { tool, trigger_phrase: '[button]' });
+      await _retriggerTool(tool, '');
+    }
+  });
+}
+if (_fcbNo) {
+  _fcbNo.addEventListener('click', () => {
+    if (!_fuzzyConfirmPending) return;
+    const tool = _fuzzyPendingTool;
+    _clearFuzzyConfirmState();
+    logEvent('fuzzy_tool_rejected', { tool, trigger_phrase: '[button]' });
+  });
+}
 // Disable interactive controls during boot animation.
 // _onBootAnimationComplete() (called from animate()) re-enables them.
 // If Three.js fails to init, _sphereAnimPhase stays 'none' and we re-enable immediately below.
@@ -3325,6 +3950,19 @@ initSphere();
 // If sphere didn't start a boot animation (Three.js unavailable), enable controls now.
 if (_sphereAnimPhase === 'none') {
   [micBtn, sendBtn, textInput, powerBtn].forEach(el => el && (el.disabled = false));
+}
+
+// ── Dev-only lifecycle animation hotkeys (gated on ?dev=1) ────────────────────
+// Ctrl+Shift+B → replay boot · Ctrl+Shift+S → sleep (wake via activity) ·
+// Ctrl+Shift+X → preview shutdown choreography without POSTing /system/shutdown.
+if (new URLSearchParams(window.location.search).get('dev') === '1') {
+  window.addEventListener('keydown', (e) => {
+    if (!e.ctrlKey || !e.shiftKey) return;
+    const key = e.key.toLowerCase();
+    if (key === 'b')      { e.preventDefault(); _replayBootAnim(); }
+    else if (key === 's') { e.preventDefault(); enterSleepMode(); }
+    else if (key === 'x') { e.preventDefault(); _previewShutdownAnim(); }
+  });
 }
 statModel.textContent = MODEL;
 _applyTtsMode();

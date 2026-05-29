@@ -1,653 +1,243 @@
-# S.T.A.R.L.I.N.G. — Speech‑Triggered Autonomous Reasoning & Local Intelligence Node Generator
+<div align="center">
 
-A voice-driven AI interface powered entirely by a local LLM running on your GPU. No cloud APIs. No subscriptions. No Ollama wrapper. Just your hardware.
+# S.T.A.R.L.I.N.G.
+
+*Speech-Triggered Autonomous Reasoning & Local Intelligence Node Generator*
+
+A fully local, voice-driven AI assistant powered by your own GPU — no cloud APIs, no subscriptions, no telemetry.
+
+![Python](https://img.shields.io/badge/Python-3.11+-3776ab?style=flat-square&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-backend-009688?style=flat-square&logo=fastapi&logoColor=white)
+![llama.cpp](https://img.shields.io/badge/llama.cpp-local%20LLM-ff6600?style=flat-square)
+![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)
+
+[Overview](#overview) • [Features](#features) • [Quickstart](#quickstart) • [Configuration](#configuration) • [Voice Tools](#voice-tools) • [API](#api-reference)
+
+![S.T.A.R.L.I.N.G. UI](assets/images/Starling_UI_example.png)
+
+</div>
+
+## Overview
+
+S.T.A.R.L.I.N.G. is a self-hosted voice assistant that runs the entire speech pipeline on your own machine:
 
 ```
 Microphone → Speech-to-Text → llama-server (LLM on GPU) → Text-to-Speech → Browser UI
 ```
 
-![S.T.A.R.L.I.N.G. UI](assets/images/Starling_UI_example.png)
+Speech is transcribed with faster-whisper, reasoned over by a local LLM via llama-server (llama.cpp), and spoken back with Kokoro TTS — all GPU-accelerated, typically under three seconds end to end. The browser UI renders a living black sphere that reacts to your voice, alongside a suite of voice-activated tools for weather, news, markets, calendar, mail, and more.
 
----
+> [!NOTE]
+> Nothing leaves your machine. No external API keys are required for core functionality. Cloud-backed tools like Calendar and Mail use your own credentials, stored locally.
 
 ## Features
 
-- 🎙 **Voice input** via browser MediaRecorder API → local faster-whisper (Whisper)
-- 🧠 **Local LLM inference** directly via llama-server (llama.cpp) — no Ollama wrapper; Ollama kept as a switchable fallback
-- ⚡ **Sub-3-second end-to-end latency** — typical voice → LLM → first TTS audio in under 3 s; all three pipelines (Whisper, Kokoro, llama-server) run on GPU
-- 🔊 **Text-to-speech** via Kokoro TTS (local, GPU-accelerated) or browser SpeechSynthesis
-- 📡 **Sentence-chunked streaming** — each sentence is synthesised and played as it arrives
-- 💬 **Multi-turn conversation** with persistent context
-- 🌑 **Living black sphere** — Three.js scene with 7 orbiting light orbs; reacts to audio input and shifts colour/speed per state (idle / listening / thinking / speaking)
-- ⚡ **Model warm-up on load** — Kokoro and Whisper CUDA sessions are pre-heated at startup; UI shows `INITIALISING…` and GPU badges populate before the user speaks
-- 📊 **LLM metrics bar** — live prompt tokens, generation speed (t/s), total time, and context window fill percentage after every response
-- 🔒 **Fully local** — no data leaves your machine
-- 🗄️ **RAG memory system** — ChromaDB + BM25/vector fusion retrieval; drop `.md` or `.txt` files into `memory/input/` and run `make rag-ingest` to index them
-- 🖼️ **Dynamic dossier / presentation mode** — say `"pull up the dossier on [name]"` to trigger a full UI reconfiguration with image panel, structured subject profile, and automatic LLM spoken briefing
-- 🕒 **Time & date queries** — instant voice responses ("what time is it?", "what day is it?") with a live clock panel; zero backend, sub-200 ms
-- ⏱️ **Voice-activated timers** — set, cancel, and list multiple named timers entirely in-browser; Web Audio API chime on completion
-- 🌤️ **Weather panel** — 7-day forecast from Open-Meteo (free, no API key); named-location queries via Nominatim geocoding; disk-cached with 1-hour TTL; LLM spoken summary
-- 📰 **News briefing panel** — RSS headlines with background LLM synthesis; category filtering (tech, sports, world, finance, etc.)
-- 📈 **Stocks & crypto panel** — live market data via Yahoo Finance; equities, crypto, and indices; filter tabs; OPEN/CLOSED market badge; LLM spoken briefing
-- 🌐 **In-UI browser panel** — say `"look up [topic] on Wikipedia"`, `"open browser [url]"`, or `"browser search for [query]"` to open an embedded iframe; page text is extracted server-side and injected as LLM context for on-page Q&A and summarisation; JS-rendered SPAs are detected and reported; Wikipedia sections can be summarised on demand with `"summarize section [name]"`
-- 💡 **Ideas vault** — say `"store idea in the vault"` to enter single-press capture mode; ideas are LLM-tagged and saved locally; retrieve with `"open ideas vault"`, search with `"search the vault for [topic]"`, or discard the last with `"discard the last idea from the vault"`
-- 📓 **Voice journal** — say `"start journal entry"` to begin multi-segment dictation or `"interviewer mode"` for a guided Q&A session; on submit the LLM silently generates a summary and tags; confirm or re-record before saving; read back entries and search by keyword or date
-- 📺 **YouTube feed panel** — say `"open YouTube feed"` to open a tile-grid panel of recent videos from configured channels via public RSS; filter by video type (All / Long / Shorts) and channel; in-panel modal for immediate playback; LLM spoken briefing; no API key required
-- 🟠 **Reddit social feed panel** — say `"open Reddit social"` to open a post feed from configured subreddits via the public JSON API; per-subreddit filter tabs; LLM spoken briefing; no login required
-- 🧰 **Toolkit menu** — say `"show tools"` or `"open toolkit"` to browse every active Starling tool by name and description; click any tool for a spoken LLM briefing, then confirm by voice or click to activate it directly
-
-> Tool panel screenshots and full trigger phrase reference: [`toolkit/README.md`](./toolkit/README.md)
-
----
-
-## Voice Tool Kit
-
-A suite of voice-activated tools built as self-contained dispatch intercepts — none modify
-the core chat pipeline.
-
-| # | Tool | Backend | Status |
-|---|---|---|---|---|
-| 1 | Time & Date | None | ✅ Done |
-| 2 | Timers | None | ✅ Done |
-| 3 | Weather | Open-Meteo (free, no key) | ✅ Done |
-| 4 | News Briefing | RSS / feedparser (free) | ✅ Done |
-| 5 | Stocks & Crypto | yfinance (unofficial) | ✅ Done |
-| 6 | Wake Word & Interrupt | None | 🔲 Planned |
-| 7 | In-UI Browser Panel | None | ✅ Done |
-| 8 | Ideas Tracker | Local JSON file | ✅ Done |
-| 9 | Voice Journal | Local JSON files | ✅ Done |
-| 10 | Wikipedia RAG | ChromaDB + fastembed | ✅ Done |
-| 11 | Reddit Social Feed | Reddit JSON API (no auth) | ✅ Done |
-| 12 | YouTube Feed | YouTube Atom RSS (no key) | ✅ Done |
-| 13 | Toolkit Menu | None (frontend only) | ✅ Done |
-| 14 | iCloud Calendar | CalDAV (stdlib only, Apple ID) | ✅ Done |
-| 15 | Apple Mail Inbox | IMAP (stdlib only, Apple ID) | ✅ Done |
-
-See [`toolkit/README.md`](./toolkit/README.md) for screenshots, trigger phrase reference,
-and per-tool documentation. Implementation plans for upcoming features are in [`plan/`](./plan/).
-
----
+- **Voice in, voice out** — browser MediaRecorder → faster-whisper STT; Kokoro TTS (or browser SpeechSynthesis) with sentence-chunked streaming playback.
+- **Local LLM** — direct llama-server (llama.cpp) inference on GPU; Ollama kept as a switchable fallback.
+- **Low latency** — voice → LLM → first audio in under ~3 seconds with all pipelines on GPU.
+- **Living sphere UI** — Three.js scene with orbiting light orbs that react to audio and shift colour/speed per state (idle / listening / thinking / speaking), plus cinematic boot, shutdown, sleep, and wake animations.
+- **RAG memory** — ChromaDB with BM25/vector fusion retrieval; drop `.md`/`.txt` files into `memory/input/` and ingest.
+- **Persistent soul** — an evolving personality file updated by a session-end "dream state" reflection pipeline.
+- **Self-awareness** — boot snapshot, tool inventory, live GPU/process telemetry, and a static system-prompt block so the assistant can describe its own state.
+- **Voice tool kit** — 15 self-contained voice tools (see [Voice Tools](#voice-tools)).
 
 ## Requirements
 
-- **OS:** Linux, macOS, or Windows
-- **GPU:** NVIDIA GPU with 6 GB+ VRAM (CUDA 12+), or DirectX 12-capable GPU (DirectML)
+- **OS:** Windows, Linux, or macOS
+- **GPU:** NVIDIA 6 GB+ VRAM (CUDA 12+) or a DirectX 12 GPU (DirectML); CPU fallback supported
 - **Python:** 3.11+
-- **Node.js:** 18+ (only if using the React/Vite frontend)
-- **Browser:** Chrome or Edge (required for MediaRecorder / Web Speech API fallback)
+- **Browser:** Chrome or Edge (required for MediaRecorder / Web Speech API)
+- **llama-server** from [llama.cpp releases](https://github.com/ggml-org/llama.cpp/releases/latest)
 
-### Recommended GPU / model pairings
+### Recommended model by VRAM
 
-Model files are read directly from the GGUF format. The easiest source is your existing Ollama blob cache (`%USERPROFILE%\.ollama\models\blobs\`) — no re-download needed.
-
-| GPU VRAM | Recommended model | GGUF quant |
+| GPU VRAM | Model | Quant |
 |---|---|---|
 | 4–6 GB | Gemma 3 4B, Phi-4 Mini, Llama 3.2 3B | Q4_K_M |
 | 6–8 GB | Llama 3.1 8B, Mistral 7B, Qwen 2.5 7B | Q4_K_M |
 | 10–16 GB | Llama 3.1 13B, Mistral 12B | Q4_K_M |
 | 40 GB+ | Llama 3.1 70B | Q4_K_M |
 
-### Currently installed models
-
-| Model | Size | Notes |
-|---|---|---|
-| `llama3.1:8b` | 4.9 GB | Strong general purpose |
-| `mistral:7b` | 4.4 GB | Fast, good instruction following |
-| `qwen2.5:7b` | 4.7 GB | Strong coding and reasoning |
-| `gemma3:4b` | 3.3 GB | Lightweight, good for low VRAM |
-| `llama3.2:3b` | 2.0 GB | **Default** — fastest response times |
-| `phi4-mini` | 2.5 GB | Microsoft, strong reasoning for its size |
-| `nomic-embed-text` | 274 MB | Embedding model — no longer required; RAG uses fastembed in-process |
-
-These are available as Ollama blobs at `%USERPROFILE%\.ollama\models\blobs\`. Point `start_llama_server.bat` at the relevant blob path or copy and rename to a `models/` directory.
-
----
-
-## Project Structure
-
-```
-llm-speech-UI/
-├── frontend/               # UI — HTML/CSS/JS + Three.js
-│   ├── index.html
-│   ├── style.css
-│   ├── config.js           # Shared config (BACKEND_BASE)
-│   ├── app.js              # Main application logic and voice dispatch router
-│   ├── browser-panel.js    # Tool: in-UI browser panel
-│   ├── ideas-panel.js      # Tool: ideas vault
-│   ├── interrupt-phrases.js  # Interrupt / barge-in phrase list
-│   ├── journal-panel.js    # Tool: voice journal
-│   ├── log-dashboard.html  # Session activity log dashboard
-│   ├── news-panel.js       # Tool: news briefing panel
-│   ├── reddit-panel.js     # Tool: Reddit social feed panel
-│   ├── stocks-panel.js     # Tool: stocks & crypto panel
-│   ├── timer-panel.js      # Tool: voice-activated timers
-│   ├── toolkit-panel.js    # Tool: toolkit browsing & activation menu
-│   ├── weather-panel.js    # Tool: weather forecast panel
-│   ├── wiki-panel.js       # Tool: Wikipedia RAG Q&A
-│   └── youtube-panel.js    # Tool: YouTube feed panel
-├── backend/                # FastAPI server
-│   ├── main.py             # App entry point, router registration, system-status
-│   ├── stt.py              # Speech-to-text via faster-whisper
-│   ├── tts.py              # Text-to-speech via Kokoro ONNX
-│   ├── llama_server.py     # llama-server streaming relay (DEFAULT, LLM_BACKEND=llama)
-│   ├── ollama.py           # Ollama streaming relay (fallback, LLM_BACKEND=ollama)
-│   ├── rag.py              # RAG module — ingest, retrieve, format, status
-│   ├── browser.py          # Browser page-text extraction endpoint
-│   ├── ideas_routes.py     # Ideas vault endpoints
-│   ├── journal_routes.py   # Voice journal endpoints
-│   ├── log_routes.py       # Session activity log endpoints
-│   ├── news.py             # News briefing endpoint (RSS / feedparser)
-│   ├── reddit.py           # Reddit social feed endpoint (public JSON API)
-│   ├── session_log.py      # Session event recording
-│   ├── stocks.py           # Stocks & crypto market data endpoint (yfinance)
-│   ├── weather.py          # Weather forecast endpoint (Open-Meteo)
-│   ├── wikipedia_rag.py    # Wikipedia RAG — session, retrieval, prompt builder
-│   ├── youtube.py          # YouTube feed endpoint (Atom RSS)
-│   └── memory/             # Runtime data — caches, JSON stores, and ChromaDB
-│       ├── chroma_db/      # Vector store (auto-created on first ingest)
-│       ├── journal/        # Journal entry files (JSON, one per entry)
-│       ├── ideas.json      # Ideas vault store
-│       ├── watchlist.json  # Stocks watchlist
-│       └── weather_cache.json  # Weather API response cache
-├── assets/
-│   ├── images/
-│   │   └── manifest.json           # Subject → image / dossier mapping for presentation mode
-│   ├── dossier_images/             # Subject portrait images
-│   ├── dossier_descriptions/       # Structured subject profiles (.md files)
-│   ├── wikipedia/                  # Cached Wikipedia article data
-│   ├── ui_mockup.html              # UI design mockup reference
-│   └── archived/                   # Completed and archived implementation guides (git-ignored)
-│       └── complete/               # Guides for fully implemented features
-├── plan/                   # Implementation plans for upcoming features
-│
-├── toolkit/                # Voice trigger reference and tool documentation
-│   ├── README.md           # Per-tool screenshots, trigger phrases, and implementation notes
-│   └── TRIGGER_PHRASES.md  # Full voice command reference with dispatch priority order
-├── models/                 # Local model files (e.g., kokoro-v1.0.onnx)
-├── scripts/
-│   ├── setup.sh                # One-shot install script
-│   ├── download_models.py      # Download Kokoro model files
-│   ├── ingest_wikipedia.py     # Ingest Wikipedia articles into vector store
-│   ├── launch.py               # Cross-platform process launcher
-│   ├── start_llama_server.bat  # Launch llama-server on Windows (CUDA)
-│   ├── stop.py                 # Stop all running processes
-│   └── test_integration.py     # End-to-end integration test
-├── start.bat               # Windows one-click launcher (llama-server + backend)
-├── stop.bat                # Windows one-click shutdown
-├── Makefile                # make up / down / backend / frontend / rag-ingest / lint
-├── .env.example            # Environment variable template
-├── requirements.txt        # Python dependencies
-└── README.md
-```
-
----
+> [!TIP]
+> GGUF model files can be reused directly from your existing Ollama blob cache (`%USERPROFILE%\.ollama\models\blobs\`) — no re-download needed. Point `scripts/start_llama_server.bat` at the relevant blob.
 
 ## Quickstart
-
-### 1. Download llama-server and a model
-
-```powershell
-# Download llama-server (Windows CUDA 12) from:
-# https://github.com/ggml-org/llama.cpp/releases/latest
-# Extract to C:\llama.cpp\ and add to PATH
-
-# Model files can be reused from your Ollama blob cache:
-# %USERPROFILE%\.ollama\models\blobs\sha256-<hash>
-# Point start_llama_server.bat at the relevant blob and run it.
-```
-
-### 2. Clone the repo
 
 ```bash
 git clone https://github.com/danielbsimpson/llm-speech-UI.git
 cd llm-speech-UI
-```
 
-### 3a. Frontend only (easiest — no Python needed)
-
-Open `frontend/index.html` directly in Chrome. The UI talks to Ollama at `http://localhost:11434` via `fetch()`. Uses browser-native STT and TTS.
-
-```bash
-# Optional: use a local dev server for cleaner DX
-npx live-server frontend/
-```
-
-### 3b. Full stack (Whisper STT + Kokoro TTS)
-
-```bash
-# Create a virtual environment
+# 1. Create and activate a virtual environment
 python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\Activate.ps1
+source .venv/bin/activate        # Windows: .venv\Scripts\Activate.ps1
 
-# Install dependencies
+# 2. Install dependencies and download the Kokoro TTS model (~330 MB)
 pip install -r requirements.txt
-
-# Download Kokoro model files (~330 MB)
 python scripts/download_models.py
 
-# Copy and configure environment variables
-cp .env.example .env
-# Edit .env — set LLM_BACKEND=llama and configure LLAMA_SERVER_URL / LLAMA_MODEL
+# 3. Configure environment
+cp .env.example .env             # then set LLM_BACKEND, LLAMA_SERVER_URL, LLAMA_MODEL
 ```
 
-**Start everything with one command:**
+Start everything (llama-server + FastAPI backend) with one command:
 
 ```bash
-make up        # starts llama-server + FastAPI backend, streams combined output
+make up          # or, on Windows: start.bat
 ```
 
-```bat
-start.bat      # Windows double-click alternative (same as make up)
-```
+Then open **http://localhost:8000** in Chrome or Edge. The UI shows `INITIALISING…` while Kokoro and Whisper warm up; once the GPU badges appear, you can speak.
 
 To stop:
 
 ```bash
-make down      # sends termination signals to both processes, removes PID file
+make down        # or, on Windows: stop.bat
 ```
 
-```bat
-stop.bat       # Windows double-click alternative (same as make down)
-```
+> [!TIP]
+> Press **Ctrl+C** in the `make up` terminal to shut down both processes at once.
 
-> `make up` reads config from `.env` (falling back to the same defaults as
-> `start_llama_server.bat`). Press **Ctrl+C** in the terminal to stop both
-> processes at once.
+### Manual start (for iterating on the backend)
 
----
-
-**Manual start (two terminals — for iterating on the backend):**
-
-```bat
+```powershell
 # Terminal 1 — LLM
-.\scripts\start_llama_server.bat
+.\scripts\start_llama_server.bat        # wait for "server is listening on http://127.0.0.1:8080"
 
-# In a second terminal: start the FastAPI backend (must run from backend/ directory)
-cd backend
-uvicorn main:app --reload --port 8000
-
-# Open the frontend
-start http://localhost:8000
+# Terminal 2 — backend
+make backend                            # or: cd backend && uvicorn main:app --reload --port 8000
 ```
 
-### Adding a Phase 11 tool
+### Activate RAG (optional)
 
-Each tool in the planned toolkit follows the same pattern. To add, say, Weather:
+Set `RAG_ENABLED=true` in `.env`, then after the backend is running:
 
-1. Install the required Python package: `pip install httpx`
-2. Create `backend/weather.py` and register its router in `backend/main.py`
-3. Create `frontend/weather-panel.js` and add the intercept block to `app.js`
-4. Add the panel HTML and CSS to `index.html` / `style.css`
-
-See [`WEATHER.md`](./assets/archived/complete/WEATHER.md) for the full step-by-step guide.
-Every other tool has its own equivalent guide in [`assets/archived/complete/`](./assets/archived/complete/).
-
----
-
-## STARLING Soul
-
-STARLING maintains a persistent personality file at `backend/memory/soul/SOUL.md`. This Markdown document encodes STARLING's accumulated identity: relationship with the user, communication style, recurring interests, and developing philosophy.
-
-### How it works
-
-**Session injection** — On every startup, `SOUL.md` is read and appended to the system prompt for all LLM calls (`ollama.py`, `llama_server.py`, `wikipedia_rag.py`). The soul is fetched per-request in the backend, so a soul updated during shutdown is automatically present in the next session without a server restart. The frontend also fetches `/soul` during warmup and appends it to `SYSTEM_PROMPT`.
-
-**Pass 4 Soul Reviewer** — When STARLING shuts down, the dream state pipeline runs four passes. Pass 4 (Soul Reviewer) reads the session reflection from `thoughts.md` alongside the current `SOUL.md` and asks the LLM whether the soul should be updated. If the session revealed something genuinely new or enduring, a full updated `SOUL.md` is written and the previous version is archived to `backend/memory/soul/SOUL_<session_id>.md`. Routine sessions that add nothing new produce `NO_CHANGE` — the soul file is left untouched.
-
-**Default soul** — If `SOUL.md` does not exist at startup, the backend recreates it from the hardcoded default defined in `backend/soul.py`. The default covers identity, relationship with Daniel, communication style, and placeholders for interests and philosophy.
-
-### Soul API endpoints
-
-| Endpoint | Method | Description |
-|---|---|---|
-| `/soul` | GET | Return the current `SOUL.md` content as `text/plain` |
-| `/soul/history` | GET | List all archived soul versions as JSON `[{session_id, archived_at, path_str}]` |
-| `/soul/diff/{session_id}` | GET | Unified diff between the archived version and the version that followed it |
-| `/soul/restore/{session_id}` | POST | Roll back `SOUL.md` to an archived version (localhost only) |
-
-### Manual editing
-
-`SOUL.md` is a plain Markdown file. Open it in any text editor to add, remove, or rewrite sections. Changes take effect on the next LLM request — no server restart needed. The five core section headers (`## Identity`, `## Relationship with Daniel`, `## Communication Style`, `## Interests & Recurring Patterns`, `## Personal Philosophy`) should be preserved so Pass 4 can update them correctly.
-
-The **Soul Panel** in the UI (`VIEW / EDIT SOUL` button in the toolkit) provides an in-app editor for inspecting and editing `SOUL.md` directly.
-
----
-
-## Running the Project (Windows — PowerShell)
-
-> These are the exact commands to get everything running from scratch each session.
-
-### Prerequisites
-- Virtual environment already created and dependencies installed (see **Quickstart → 3b** above)
-- `llama-server.exe` path configured in `.env` or `scripts\start_llama_server.bat`
-
----
-
-### One-command start (recommended)
-
-```powershell
-make up
-# or: .\start.bat   (double-click in Explorer)
+```bash
+make rag-ingest      # indexes .md/.txt files in memory/input/
+make rag-status      # verify chunk_count > 0
 ```
 
-Both processes start in a single terminal. Combined output is streamed with
-`[llama]` / `[backend]` prefixes. Press **Ctrl+C** to shut down cleanly.
-
-To stop from a different terminal (or script):
-
-```powershell
-make down
-# or: .\stop.bat
-```
-
----
-
-### Manual start (two terminals — useful when iterating on backend code)
-
-#### Terminal 1 — LLM
-
-```powershell
-.\scripts\start_llama_server.bat
-```
-
-Wait until you see:
-
-```
-main: server is listening on http://127.0.0.1:8080
-```
-
-Leave this terminal running.
-
-#### Terminal 2 — Backend
-
-```powershell
-make backend
-# or manually:
-.venv\Scripts\activate
-cd backend
-uvicorn main:app --reload --port 8000
-```
-
-Wait until you see:
-
-```
-Application startup complete.
-```
-
-Leave this terminal running.
-
----
-
-### Step 2b — Activate RAG (optional, first time only)
-
-If you have set `RAG_ENABLED=true` in `.env`, index your documents after the backend is running:
-
-```powershell
-make rag-ingest
-# or: curl -X POST http://localhost:8000/rag/ingest
-```
-
-On first run, fastembed will download the embedding model (~33 MB) from HuggingFace and cache it locally. No Ollama or extra server required.
-
-Verify indexing:
-
-```powershell
-make rag-status
-```
-
-You should see `chunk_count > 0`. Add `.md` or `.txt` files to `memory/input/` and re-run `rag-ingest` to expand the knowledge base.
-
----
-
-### Step 3 — Open the UI
-
-Open **Chrome** or **Edge** and navigate to:
-
-```
-http://localhost:8000
-```
-
-The UI will display `INITIALISING…` while Kokoro and Whisper warm up on the GPU. Once the GPU badges appear, you are ready to speak.
-
----
-
-### Stopping the project
-
-- Press `Ctrl + C` in Terminal 2 to stop the FastAPI backend.
-- Press `Ctrl + C` in Terminal 1 to stop llama-server.
-
----
+On first run, fastembed downloads its embedding model (~33 MB) from HuggingFace and caches it locally.
 
 ## Configuration
 
-Copy `.env.example` to `.env` and edit as needed:
+Copy `.env.example` to `.env` and edit. Key settings:
 
-```env
-# LLM backend selector
-LLM_BACKEND=llama          # "llama" = llama-server (default) | "ollama" = Ollama fallback
+| Variable | Default | Description |
+|---|---|---|
+| `LLM_BACKEND` | `llama` | `llama` (llama-server) or `ollama` (fallback) |
+| `LLAMA_SERVER_URL` | `http://localhost:8080` | llama-server endpoint |
+| `LLAMA_MODEL` | `llama3.2-3b` | Must match the `--alias` passed to llama-server |
+| `BACKEND_PORT` | `8000` | FastAPI port |
+| `WHISPER_MODEL_SIZE` | `base` | `tiny` / `base` / `small` / `medium` / `large-v3` |
+| `WHISPER_DEVICE` | `cuda` | Set to `cpu` if CUDA is unavailable |
+| `ONNX_PROVIDER` | `CUDAExecutionProvider` | Or `DmlExecutionProvider` / `CPUExecutionProvider` |
+| `RAG_ENABLED` | `false` | Enable retrieval-augmented generation |
 
-# llama-server (LLM_BACKEND=llama)
-LLAMA_SERVER_URL=http://localhost:8080
-LLAMA_MODEL=llama3.2-3b    # must match --alias passed to llama-server
-LLAMA_TEMPERATURE=0.7
+> [!NOTE]
+> Tool-specific settings (Weather, News, Stocks, Calendar, Mail, etc.) are also configured in `.env`. Calendar and Mail credentials can instead be entered through the in-app toolkit login panel. See `.env.example` for the full list.
 
-# Ollama fallback (LLM_BACKEND=ollama)
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=llama3.2:3b
-OLLAMA_TEMPERATURE=0.7
+Switching back to Ollama is instant: set `LLM_BACKEND=ollama` and restart the backend. Both servers can run simultaneously.
 
-# Backend
-BACKEND_PORT=8000
+## Voice Tools
 
-# STT — faster-whisper
-WHISPER_MODEL_SIZE=base   # tiny | base | small | medium | large-v3
-WHISPER_DEVICE=cuda       # set to cpu if CUDA unavailable
+Each tool is a self-contained dispatch intercept — none modify the core chat pipeline. Say the trigger phrase to activate.
 
-# TTS — Kokoro ONNX
-ONNX_PROVIDER=CUDAExecutionProvider   # or DmlExecutionProvider / CPUExecutionProvider
+| # | Tool | Backend | Status |
+|---|---|---|---|
+| 1 | Time & Date | None | ✅ |
+| 2 | Timers | None | ✅ |
+| 3 | Weather | Open-Meteo (free, no key) | ✅ |
+| 4 | News Briefing | RSS / feedparser | ✅ |
+| 5 | Stocks & Crypto | yfinance | ✅ |
+| 6 | In-UI Browser Panel | None | ✅ |
+| 7 | Ideas Vault | Local JSON | ✅ |
+| 8 | Voice Journal | Local JSON | ✅ |
+| 9 | Wikipedia RAG | ChromaDB + fastembed | ✅ |
+| 10 | Reddit Social Feed | Reddit JSON API | ✅ |
+| 11 | YouTube Feed | YouTube Atom RSS | ✅ |
+| 12 | Toolkit Menu | None (frontend) | ✅ |
+| 13 | iCloud Calendar | CalDAV (Apple ID) | ✅ |
+| 14 | Apple Mail Inbox | IMAP (Apple ID) | ✅ |
+| 15 | System Awareness | Local introspection | ✅ |
+| — | Wake Word & Interrupt | None | 🔲 Planned |
 
-# RAG / memory system
-RAG_ENABLED=false              # set to true to activate retrieval-augmented generation
-RAG_INPUT_FOLDER=memory/input  # drop .md/.txt docs here for ingestion
-RAG_CHROMA_PATH=memory/chroma_db
-RAG_EMBED_MODEL=BAAI/bge-small-en-v1.5
-RAG_CHUNK_SIZE=200
-RAG_TOP_K=4
-RAG_MAX_CONTEXT_TOKENS=400
+See [`toolkit/README.md`](./toolkit/README.md) for screenshots and the full [trigger phrase reference](./toolkit/TRIGGER_PHRASES.md).
 
-# ── Phase 11 tools (add as each tool is implemented) ──────────────────────────
-# Weather (Tool 3)
-WEATHER_LOCATION=Framingham,Massachusetts
-WEATHER_UNITS=fahrenheit
+## STARLING Soul
 
-# Path to on-disk JSON cache file (relative to backend working dir)
-WEATHER_CACHE_FILE=memory/weather_cache.json
+STARLING maintains a persistent personality file at `backend/memory/soul/SOUL.md` that evolves session to session.
 
-# Max hourly snapshots retained per location (~1 week at hourly cadence)
-WEATHER_HISTORY_MAX=168
+- **Session injection** — `SOUL.md` is read per request and appended to the system prompt for all LLM calls, so soul updates take effect without a restart.
+- **Dream state** — on shutdown, a four-pass reflection pipeline processes the session transcript; Pass 4 (Soul Reviewer) decides whether to rewrite `SOUL.md`, archiving the prior version. Routine sessions produce `NO_CHANGE`.
+- **Editing** — `SOUL.md` is plain Markdown, editable directly or via the in-app **Soul Panel** (`VIEW / EDIT SOUL` in the toolkit). Preserve the five core section headers so the reviewer can update them.
 
-# Panel label shown for the default home location
-WEATHER_DEFAULT_LABEL=Framingham
+| Endpoint | Method | Description |
+|---|---|---|
+| `/soul` | GET | Current `SOUL.md` as plain text |
+| `/soul/history` | GET | List archived soul versions |
+| `/soul/diff/{session_id}` | GET | Unified diff against the following version |
+| `/soul/restore/{session_id}` | POST | Roll back to an archived version (localhost only) |
 
-# News (Tool 4)
-NEWS_FEEDS=https://feeds.bbci.co.uk/news/rss.xml,https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml
-NEWS_MAX_ITEMS=10
-NEWS_CACHE_SECONDS=120
+## Project Structure
 
-# Stocks (Tool 5)
-STOCKS_WATCHLIST=NVDA,AAPL,MSFT,SPY,QQQ
-CRYPTO_WATCHLIST=BTC-USD,ETH-USD
-STOCKS_CACHE_SECONDS=300
-STOCKS_CURRENCY_SYMBOL=$
-
-# Ideas Tracker (Tool 8)
-# IDEAS_FILE=memory/ideas.json
-# IDEAS_MAX_RETURN=100
-
-# Journal (Tool 9)
-# JOURNAL_DIR=memory/journal
-# JOURNAL_MAX_ENTRIES=500
-
-# iCloud Calendar — CalDAV (Tool 14)
-# Configure via the in-app toolkit login panel or set here directly.
-# CALDAV_URL=https://caldav.icloud.com
-# CALDAV_USERNAME=you@icloud.com
-# CALDAV_PASSWORD=xxxx-xxxx-xxxx-xxxx   # App-Specific Password
-# CALENDAR_CACHE_SECONDS=3600
-
-# Apple Mail — IMAP (Tool 15)
-# IMAP_HOST=imap.mail.me.com
-# IMAP_PORT=993
-# IMAP_USERNAME=you@icloud.com
-# IMAP_PASSWORD=xxxx-xxxx-xxxx-xxxx     # App-Specific Password
-# MAIL_MAX_UNREAD=20
-# MAIL_CACHE_SECONDS=300
+```
+frontend/        UI — HTML/CSS/JS + Three.js sphere and tool panels
+backend/         FastAPI server — STT, TTS, LLM relays, RAG, tool routes, soul
+  memory/        Runtime data — caches, JSON stores, ChromaDB, soul files
+assets/          Images, dossier data, cached Wikipedia, archived guides
+plan/            Implementation plans for upcoming features
+toolkit/         Voice trigger reference and per-tool documentation
+scripts/         Setup, model download, launch/stop, integration test
+tests/           pytest suite
+models/          Local model files (e.g. kokoro-v1.0.onnx)
 ```
 
----
+## API Reference
 
-## STT Options
-
-| Engine | Setup | Accuracy | Latency | Privacy |
-|---|---|---|---|---|
-| Web Speech API | Zero | Good | Fast | ⚠️ Sent to Google |
-| faster-whisper | `pip install faster-whisper` | Excellent | Medium | ✅ Fully local |
-
-To use Whisper, set `STT_ENGINE=whisper` in `.env` and ensure the FastAPI backend is running. The frontend will POST audio blobs to `/transcribe`.
-
----
-
-## TTS Options
-
-| Engine | Setup | Quality | Latency |
-|---|---|---|---|
-| SpeechSynthesis | Zero (browser built-in) | OK | Instant |
-| Kokoro TTS | `pip install kokoro-onnx` | Excellent | Low |
-| Piper TTS | Download binary + voice model | Good | Very low |
-
----
-
-## API Reference (FastAPI backend)
+Core endpoints (FastAPI backend):
 
 | Endpoint | Method | Description |
 |---|---|---|
 | `/chat` | POST | Send a message, stream LLM response (NDJSON) |
-| `/chat/context-limit` | GET | Return the model's `n_ctx` from llama-server `/props` |
-| `/transcribe` | POST | Upload audio blob, returns transcript |
-| `/synthesize` | POST | Send text, returns WAV audio |
+| `/transcribe` | POST | Upload audio blob → transcript |
+| `/synthesize` | POST | Send text → WAV audio |
 | `/synthesize/voices` | GET | List available Kokoro voices |
-| `/health` | GET | Check backend status |
-| `/system-status` | GET | Per-model device report (GPU/CPU/IDLE/OFFLINE) + active backend info |
-| `/rag/ingest` | POST | Index documents in `memory/input/` (runs as a background task) |
-| `/rag/status` | GET | Returns `{enabled, chunk_count, collection, embed_model}` |
-| `/rag/manifest` | GET | Returns the subject manifest from `assets/images/manifest.json` |
-| `/dossier/{key}` | GET | Parses `assets/dossier_descriptions/{key}.md` → `{title, body, meta}` |
+| `/health` | GET | Backend status |
+| `/system/status` | GET | Boot snapshot, tool inventory, live telemetry (localhost only) |
+| `/rag/ingest` | POST | Index documents in `memory/input/` (background task) |
+| `/rag/status` | GET | RAG status `{enabled, chunk_count, collection, embed_model}` |
 
-**Phase 11 endpoints** (added as each tool is implemented):
-
-| Endpoint | Method | Tool |
-|---|---|---|
-| `/weather` | GET | Weather forecast + current conditions (Open-Meteo); optional `location` and `force` params |
-| `/weather/history` | GET | Cached historical weather snapshots; optional `location` filter |
-| `/news` | GET | News headlines (RSS) |
-| `/stocks` | GET | Live price data for configured watchlist (equities + crypto); 5-min cache |
-| `/stocks/cache` | DELETE | Bust the stocks cache for an immediate re-fetch |
-| `/api/browser/page-text` | POST | Extract plain text from a URL for LLM context injection |
-| `/api/browser/wiki-section` | GET | Fetch a named Wikipedia section as plain text |
-| `/ideas/add` | POST | Save a new idea |
-| `/ideas` | GET / DELETE | List or clear all ideas |
-| `/ideas/{id}` | DELETE | Delete one idea by id |
-| `/ideas/search` | GET | Full-text search across ideas |
-| `/journal/entry` | POST | Save a journal entry (summary + raw transcript + tags) |
-| `/journal/entries` | GET | List journal entries (newest first) |
-| `/journal/search` | GET | Search journal entries by keyword |
-| `/journal/entry/{id}` | DELETE | Delete a journal entry |
-| `/wiki/start` | POST | Wikipedia RAG — start a local article Q&A session |
-| `/wiki/status` | GET | Wikipedia RAG — active session and index status |
-| `/wiki/clear` | POST | Wikipedia RAG — end the active session |
-| `/wiki/chat` | POST | Wikipedia RAG — guardrailed article Q&A (streams NDJSON) |
-| `/calendar` | GET | iCloud CalDAV events (today + week); optional `force` param |
-| `/calendar/cache` | DELETE | Bust the calendar cache for an immediate re-fetch |
-| `/calendar/credentials` | GET / POST / DELETE | Manage iCloud App-Specific Password for CalDAV |
-| `/mail/unread` | GET | Most recent unread Apple Mail IMAP messages (headers only) |
-| `/mail/cache` | DELETE | Bust the mail cache for an immediate re-fetch |
-| `/mail/credentials` | GET / POST / DELETE | Manage Apple Mail IMAP App-Specific Password |
-
-### Example: stream a chat response
+Tool endpoints (weather, news, stocks, journal, ideas, wiki, calendar, mail, reddit, youtube, soul) are documented in [`toolkit/README.md`](./toolkit/README.md).
 
 ```bash
+# Example: stream a chat response
 curl -X POST http://localhost:8000/chat \
   -H "Content-Type: application/json" \
   -d '{"message": "What is the speed of light?", "history": []}'
 ```
 
----
-
 ## Troubleshooting
 
-**llama-server not found**
-Make sure `llama-server.exe` is either on your PATH or the full path is set in `scripts/start_llama_server.bat`. Download from the [llama.cpp releases page](https://github.com/ggml-org/llama.cpp/releases/latest) — use the `win-cuda-12.x` build.
+> [!WARNING]
+> **llama-server not found** — ensure `llama-server.exe` is on PATH or its full path is set in `scripts/start_llama_server.bat`. Use the `win-cuda-12.x` build.
 
-**Switching back to Ollama**
-Set `LLM_BACKEND=ollama` in `.env` and restart the FastAPI backend. Both Ollama (`:11434`) and llama-server (`:8080`) can run simultaneously — the switch is instant.
-
-**LLM not using my GPU**
-Run `nvidia-smi` while the model is loaded. If VRAM usage is 0, check that `--n-gpu-layers` is set to a high value (999 offloads all layers) in `start_llama_server.bat`.
-
-**Web Speech API not working**
-Chrome and Edge only — Firefox does not support `webkitSpeechRecognition`. Also requires HTTPS or `localhost`.
-
-**Model responses are slow**
-Try a smaller model or increase `--n-gpu-layers`. The metrics bar shows live t/s so you can confirm GPU acceleration is active.
-
-**Audio not playing after TTS**
-Browsers enforce an autoplay policy that blocks `audio.play()` until the user has made a gesture on the page. TTS playback is triggered by the user's mic press or send button, which satisfies the policy.
-
----
+- **LLM not using GPU** — run `nvidia-smi` while loaded; if VRAM usage is 0, raise `--n-gpu-layers` (999 offloads all layers) in `start_llama_server.bat`.
+- **Web Speech API not working** — Chrome/Edge only; requires `localhost` or HTTPS.
+- **Slow responses** — try a smaller model or increase `--n-gpu-layers`; the metrics bar shows live tokens/sec.
+- **No audio after TTS** — browsers block autoplay until a user gesture; the mic/send action satisfies this.
 
 ## Roadmap
 
-See [`TODO.md`](./TODO.md) for the full list of planned enhancements with links to implementation plans.
+See [`TODO.md`](./TODO.md) for the full enhancement list with links to implementation plans. Upcoming highlights:
 
-High-level milestones:
-- [x] Project scaffolding and documentation
-- [x] Ollama integration with streaming responses
-- [x] **llama.cpp migration** — replaced Ollama relay with direct llama-server (OpenAI-compatible); noticeable speed gains confirmed; Ollama kept as a one-line fallback
-- [x] Push-to-talk voice input (MediaRecorder → Whisper STT on GPU)
-- [x] Kokoro TTS with 16 curated voices, sentence-chunked playback, and mode toggle
-- [x] Living black sphere (Three.js) — 7 orbiting light orbs, audio-driven deformation, 4-state machine
-- [x] Per-model GPU/CPU device reporting in footer (`/system-status`)
-- [x] Model warm-up on page load — Kokoro + Whisper pre-heated, GPU badges populated before first mic press
-- [x] LLM metrics bar — prompt tokens, generation speed, time, and context window fill percentage
-- [x] **Voice-triggered dossier / presentation mode** — voice trigger intercept, neon border animation, four-zone layout reconfiguration, manifest-driven image + structured text loading, LLM auto-briefing via sentence-chunked TTS
-- [x] **RAG memory system** — ChromaDB + BM25/vector fusion; `make rag-ingest` indexes any `.md`/`.txt` files dropped into `memory/input/`
-- [x] **Voice tool kit (Tools 1–5, 7–10)** — Time & date, timers, weather (Open-Meteo), news briefing (RSS + LLM synthesis), stocks & crypto (Yahoo Finance / yfinance), in-UI browser panel, ideas vault, voice journal, Wikipedia RAG
-- [ ] **Wake word & interrupt** — "Hey Starling" always-on listener + mid-speech interrupt; see [`plan/feature-wake-word-1.md`](./plan/feature-wake-word-1.md)
-- [x] **iCloud Calendar & Apple Mail** — CalDAV calendar panel and IMAP inbox panel (stdlib only, App-Specific Password auth)
-- [ ] **Electron desktop app** — standalone installer for Windows/macOS/Linux; see [`plan/feature-electron-packaging-1.md`](./plan/feature-electron-packaging-1.md)
-- [ ] **Dream state / soul / sleep mode** — session-end LLM reflection, persistent personality file, inactivity retreat; see [`plan/`](./plan/)
-- [ ] **Cross-platform & macOS Apple Silicon** — hardware auto-detect, CPU fallback, M4 Mac Mini support; see [`plan/`](./plan/)
+- **Wake word & interrupt** — "Hey Starling" always-on listener + mid-speech barge-in
+- **RAG memory manager** — in-UI upload, preview, and delete of ingested sources
+- **Electron desktop app** — standalone installers for Windows/macOS/Linux
+- **Cross-platform auto-detect** — CUDA/DirectML/Metal/CPU selection at launch; Apple Silicon (M4) support
 
 ---
 
-## Contributing
+<div align="center">
 
-Pull requests welcome. Please open an issue first to discuss major changes. Keep PRs focused — one feature or fix per PR.
+*"At your service."*
 
-```bash
-# Run the backend in dev mode (must run from backend/ directory)
-cd backend && uvicorn main:app --reload --port 8000
-
-# Lint Python
-pip install ruff && ruff check backend/
-```
-
----
-
-## License
-
-MIT — do whatever you want, no warranty implied.
-
----
-
-> *"At your service."*
+</div>

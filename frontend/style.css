@@ -425,6 +425,32 @@ html, body {
   position: relative; z-index: 1;
 }
 
+/* ── Sphere lifecycle expansion ──────────────────────────────────────────── */
+/* During boot/shutdown/sleep/wake the canvas is re-parented to <body> and
+   expanded to fill the viewport. Sits above .toolkit-panel (z-index 80) but
+   below .sleep-overlay (8000) and .offline-overlay (9999). pointer-events:none
+   so it never blocks the underlying UI mid-animation. */
+.sphere-canvas--expanded {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  margin: auto;
+  z-index: 200;
+  pointer-events: none;
+}
+/* Holds the empty 210 px slot in .ring-wrap while the canvas is detached. */
+.sphere-stage-placeholder {
+  width: 210px;
+  height: 210px;
+}
+/* Fade the small halo out before the canvas expands — it would look wrong
+   floating in the centre of a screen-filling animation. */
+.starling.is-lifecycle-animating .sphere-halo {
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
 /* ── Radial fog halo — sits behind the canvas, shifts colour with state ─── */
 .sphere-halo {
   position: absolute;
@@ -5885,4 +5911,13 @@ a.news-story-source-title:hover {
 .system-static-block { background: #050b13; color: #d9e8f5; padding: 10px; font-size: 11px; white-space: pre-wrap; border: 1px solid #1d3a55; }
 .system-status-open-btn { display: block; width: 100%; background: transparent; border: 1px solid #2c5e8a; color: #6cd3ff; padding: 8px; margin-bottom: 6px; cursor: pointer; font-family: 'Share Tech Mono', monospace; letter-spacing: 2px; }
 .system-status-open-btn:hover { background: #112a44; }
+
+/* ── Fuzzy tool confirmation banner (Tier 2 — fuzzy recovery) ─────────────── */
+#fuzzy-confirm-banner { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: #0d0d0d; border: 1px solid #333; padding: 10px 18px; border-radius: 4px; font-family: monospace; font-size: 0.75rem; color: #aaa; z-index: 9999; display: flex; align-items: center; gap: 8px; }
+#fuzzy-confirm-banner.hidden { display: none; }
+#fuzzy-confirm-banner .fcb-tool { color: #fff; letter-spacing: 0.05em; }
+#fuzzy-confirm-banner .fcb-buttons { display: flex; gap: 8px; }
+#fcb-yes, #fcb-no { padding: 3px 10px; border: 1px solid #555; background: transparent; color: #ccc; cursor: pointer; font-family: monospace; font-size: 0.7rem; border-radius: 3px; }
+#fcb-yes:hover, #fcb-no:hover { border-color: #fff; color: #fff; }
+
 
