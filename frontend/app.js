@@ -1459,9 +1459,8 @@ function initSphere() {
   if (!canvas) return;
 
   const RING_SIZE = 210;
-  let _currentRenderSize = RING_SIZE;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-  renderer.setSize(_currentRenderSize, _currentRenderSize);
+  renderer.setSize(RING_SIZE, RING_SIZE);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   if (THREE.SRGBColorSpace) renderer.outputColorSpace = THREE.SRGBColorSpace;
 
@@ -1471,17 +1470,9 @@ function initSphere() {
 
   // ── Reduced-motion preference ──────────────────────────────────────────────
   // When the OS requests reduced motion we play a short plain dolly for each
-  // lifecycle phase and skip the screen-fill expansion entirely.
+  // lifecycle phase.
   const _prefersReducedMotion =
     window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-  // ── Render-size helper ──────────────────────────────────────────────────────
-  function _setRenderSize(px) {
-    _currentRenderSize = px;
-    renderer.setSize(px, px);
-    camera.aspect = 1;
-    camera.updateProjectionMatrix();
-  }
 
   // ── Lifecycle choreography config ──────────────────────────────────────────
   // Tunable parameters per phase — designers can adjust here without touching
@@ -1520,53 +1511,27 @@ function initSphere() {
   let _sphereTiltX   = 0;     // sphere/rim tilt about X
   let _devShutdownPreview = false;   // when true, shutdown anim restores instead of going offline
 
-  // ── Screen-fill expand / restore plumbing ──────────────────────────────────
-  let _stagePlaceholder = null;   // div holding the empty slot in .ring-wrap
+  // ── Lifecycle in-place flag ─────────────────────────────────────────────────
+  // The lifecycle choreography (boot/shutdown/sleep/wake) plays in the sphere's
+  // normal ring location — it is NOT re-parented to a full-viewport overlay, so
+  // the orb animates exactly where Starling lives instead of jumping to a
+  // separate centred panel. The flag only drives the halo fade.
+  let _lifecycleStaged = false;
 
-  /** Re-parent the canvas to <body> and expand it to ~80vmin (cap 1100 px). */
+  /** Mark the lifecycle animation as active (fades the ring halo). */
   function _expandCanvasForLifecycle() {
-    if (_prefersReducedMotion) return;        // skip expansion under reduced motion
-    if (_stagePlaceholder) return;            // already expanded
-    const parent = canvas.parentElement;
-    if (!parent) return;
-    // Measure the canvas box before detaching so the placeholder matches exactly.
-    const rect = canvas.getBoundingClientRect();
-    _stagePlaceholder = document.createElement('div');
-    _stagePlaceholder.className = 'sphere-stage-placeholder';
-    if (rect.width && rect.height) {
-      _stagePlaceholder.style.width  = `${Math.round(rect.width)}px`;
-      _stagePlaceholder.style.height = `${Math.round(rect.height)}px`;
-    }
-    parent.insertBefore(_stagePlaceholder, canvas);
-    document.body.appendChild(canvas);
-    canvas.classList.add('sphere-canvas--expanded');
+    if (_prefersReducedMotion) return;        // skip under reduced motion
+    if (_lifecycleStaged) return;             // already staged
+    _lifecycleStaged = true;
     starlingEl.classList.add('is-lifecycle-animating');
-    // Cap pixel ratio lower during expansion to protect frame rate (RISK-004).
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-    const px = Math.min(Math.round(Math.min(window.innerWidth, window.innerHeight) * 0.80), 1100);
-    _setRenderSize(px);
   }
 
-  /** Reverse _expandCanvasForLifecycle(): restore canvas to the 210 px ring. */
+  /** Reverse _expandCanvasForLifecycle(): clear the lifecycle-active state. */
   function _restoreCanvasToRing() {
-    if (!_stagePlaceholder) return;           // not expanded
-    canvas.classList.remove('sphere-canvas--expanded');
-    const parent = _stagePlaceholder.parentElement;
-    if (parent) parent.insertBefore(canvas, _stagePlaceholder);
-    _stagePlaceholder.remove();
-    _stagePlaceholder = null;
+    if (!_lifecycleStaged) return;            // not staged
+    _lifecycleStaged = false;
     starlingEl.classList.remove('is-lifecycle-animating');
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    _setRenderSize(RING_SIZE);
   }
-
-  // Keep the expanded canvas fitted to the viewport on resize (TASK-009).
-  window.addEventListener('resize', () => {
-    if (_currentRenderSize !== RING_SIZE) {
-      const px = Math.min(Math.round(Math.min(window.innerWidth, window.innerHeight) * 0.80), 1100);
-      _setRenderSize(px);
-    }
-  });
 
 
   // ── Boot / shutdown animation state ───────────────────────────────────────

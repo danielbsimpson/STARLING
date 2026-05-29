@@ -62,9 +62,11 @@ async def _stream_as_ndjson(payload: dict):
                     yield json.dumps({"message": {"content": ""}, "done": True}) + "\n"
                     # Emit metrics line using timings from the stop chunk +
                     # usage from the dedicated usage chunk (if llama-server sent one).
-                    if last_chunk:
+                    if last_chunk or usage_chunk:
                         metrics: dict = {}
-                        timings = last_chunk.get("timings", {})
+                        # llama-server may attach `timings` to either the stop chunk or
+                        # the dedicated usage chunk depending on version — check both.
+                        timings = last_chunk.get("timings") or usage_chunk.get("timings") or {}
                         # Prefer usage from the dedicated usage chunk; fall back to the stop chunk.
                         usage   = usage_chunk.get("usage") or last_chunk.get("usage", {})
                         if timings:

@@ -425,27 +425,10 @@ html, body {
   position: relative; z-index: 1;
 }
 
-/* ── Sphere lifecycle expansion ──────────────────────────────────────────── */
-/* During boot/shutdown/sleep/wake the canvas is re-parented to <body> and
-   expanded to fill the viewport. Sits above .toolkit-panel (z-index 80) but
-   below .sleep-overlay (8000) and .offline-overlay (9999). pointer-events:none
-   so it never blocks the underlying UI mid-animation. */
-.sphere-canvas--expanded {
-  position: fixed;
-  inset: 0;
-  width: 100vw;
-  height: 100vh;
-  margin: auto;
-  z-index: 200;
-  pointer-events: none;
-}
-/* Holds the empty 210 px slot in .ring-wrap while the canvas is detached. */
-.sphere-stage-placeholder {
-  width: 210px;
-  height: 210px;
-}
-/* Fade the small halo out before the canvas expands — it would look wrong
-   floating in the centre of a screen-filling animation. */
+/* ── Sphere lifecycle animation ──────────────────────────────────────────── */
+/* The boot/shutdown/sleep/wake choreography plays in the sphere's normal ring
+   location (not a re-parented full-viewport overlay). The halo fades out while
+   the orb performs its travelling animation so the glow doesn't lag behind. */
 .starling.is-lifecycle-animating .sphere-halo {
   opacity: 0;
   transition: opacity 0.4s ease;
