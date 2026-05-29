@@ -17,6 +17,20 @@ import pytest
 import llm_rag_injection
 
 
+@pytest.fixture(autouse=True)
+def _reset_system_state_snapshot():
+    """system_state holds module-level boot snapshot. Other test files may
+    populate it; reset to None so render_static_prompt_block() returns ''
+    and existing assertions still hold."""
+    try:
+        import system_state
+        system_state._BOOT_SNAPSHOT = None
+        system_state._STATIC_PROMPT_BLOCK = None
+    except Exception:
+        pass
+    yield
+
+
 def _install_fake_rag(monkeypatch, *, rag_enabled: bool, mem_enabled: bool,
                      ctx_block: str = "", mem_block: str = "",
                      raise_in: str | None = None) -> None:
@@ -113,3 +127,20 @@ def test_missing_rag_module_is_noop(monkeypatch):
     msgs = _base_messages()
     llm_rag_injection.inject_rag_and_memory(msgs)
     assert msgs == _base_messages()
+
+
+def test_inject_system_state_inserts_before_rag(monkeypatch):
+    """When system_state.render_static_prompt_block returns content, it must
+    be inserted at index 1, before RAG/memory blocks."""
+    import importlib
+    import system_state as ss
+    importlib.reload(ss)
+    ss.build_boot_snapshot()
+    ss.build_tool_inventory()
+    _install_fake_rag(monkeypatch, rag_enabled=True, mem_enabled=False,
+                      ctx_block='DOC CONTEXT')
+    msgs = _base_messages()
+    llm_rag_injection.inject_rag_and_memory(msgs)
+    # Expect: [soul, system_state, DOC CONTEXT, user]
+    assert msgs[1]['content'].startswith('[SYSTEM STATE]')
+    assert any(m.get('content') == 'DOC CONTEXT' for m in msgs)

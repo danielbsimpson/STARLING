@@ -450,4 +450,17 @@ def _run_pipeline(session_id: str, from_ts: Optional[str] = None) -> DreamResult
             result.errors.append(f"Checkpoint write failed: {exc}")
 
     result.duration_s = round(time.monotonic() - t_start, 2)
+    try:
+        import system_state as _system_state
+        _system_state.record_event(
+            "dream",
+            duration_s=result.duration_s,
+            metadata={
+                "completed_passes": list(result.completed_passes),
+                "errors":           len(result.errors),
+                "memory_ingested":  result.memory_ingested,
+            },
+        )
+    except Exception:
+        pass
     return result

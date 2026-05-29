@@ -5858,3 +5858,31 @@ a.news-story-source-title:hover {
 .soul-diff-pre .diff-del  { color: rgba(255,100,100,0.85); }
 .soul-diff-pre .diff-meta { color: rgba(120,160,220,0.6); }
 
+
+/* ===== System awareness panel ===== */
+.system-panel { position: fixed; inset: 4vh 6vw; background: rgba(8,14,22,0.96); border: 1px solid #2c5e8a; z-index: 9000; display: flex; flex-direction: column; color: #d9e8f5; font-family: 'Share Tech Mono', monospace; overflow: hidden; }
+.system-panel.hidden { display: none; }
+.system-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 18px; border-bottom: 1px solid #2c5e8a; background: #0e1c2c; }
+.system-title { font-size: 14px; letter-spacing: 3px; color: #6cd3ff; }
+.system-header-controls { display: flex; gap: 8px; }
+.system-refresh-btn, .system-close-btn { background: transparent; border: 1px solid #2c5e8a; color: #6cd3ff; padding: 4px 10px; cursor: pointer; font-family: inherit; letter-spacing: 1px; }
+.system-refresh-btn:hover, .system-close-btn:hover { background: #112a44; }
+.system-body { padding: 14px 18px; overflow-y: auto; flex: 1; }
+.system-section { margin-bottom: 18px; }
+.system-section-label { font-size: 11px; letter-spacing: 2px; color: #6cd3ff; margin-bottom: 6px; border-bottom: 1px dashed #1d3a55; padding-bottom: 3px; }
+.system-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 4px 14px; font-size: 12px; }
+.system-kv { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; border-bottom: 1px dotted #182a3d; }
+.system-kv-k { color: #8fb3d6; }
+.system-kv-v { color: #e5f1fa; text-align: right; }
+.system-tool-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 4px 12px; font-size: 12px; }
+.system-tool { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+.system-tool-badge { display: inline-block; min-width: 32px; text-align: center; font-size: 10px; padding: 1px 4px; letter-spacing: 1px; }
+.system-tool-badge.on { background: #0a4d2c; color: #7be0a6; border: 1px solid #1a8a4f; }
+.system-tool-badge.off { background: #4d1a1a; color: #ff9a9a; border: 1px solid #8a2c2c; }
+.system-tool-id { color: #e5f1fa; }
+.system-tool-reason { color: #ff9a9a; font-size: 10px; }
+.system-empty, .system-error { color: #6cd3ff; font-size: 12px; padding: 4px 0; }
+.system-static-block { background: #050b13; color: #d9e8f5; padding: 10px; font-size: 11px; white-space: pre-wrap; border: 1px solid #1d3a55; }
+.system-status-open-btn { display: block; width: 100%; background: transparent; border: 1px solid #2c5e8a; color: #6cd3ff; padding: 8px; margin-bottom: 6px; cursor: pointer; font-family: 'Share Tech Mono', monospace; letter-spacing: 2px; }
+.system-status-open-btn:hover { background: #112a44; }
+

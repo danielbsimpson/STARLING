@@ -231,6 +231,7 @@ async def get_calendar():
     Return today's events plus a lookahead window.
     Served from disk cache for up to CALENDAR_CACHE_SECONDS (default 1 hour).
     """
+    _t0 = time.time()
     tz        = _tz()
     today_key = datetime.now(tz).strftime("%Y-%m-%d")
     cache_key = f"cal_{today_key}"
@@ -277,6 +278,15 @@ async def get_calendar():
     # Persist to disk (keep only the latest key to avoid unbounded growth)
     _save_cache({cache_key: new_entry})
 
+    try:
+        import system_state
+        system_state.record_event(
+            "calendar_fetch",
+            duration_s=round(time.time() - _t0, 3),
+            metadata={"today": len(today_events), "week": len(week_events), "cache_hit": False},
+        )
+    except Exception:
+        pass
     return data
 
 
@@ -324,6 +334,11 @@ async def save_calendar_credentials(body: _CalendarCredentials):
     # Bust calendar cache so next fetch uses the new credentials
     _mem_cache.clear()
     _save_cache({})
+    try:
+        import system_state
+        system_state.refresh_tool_inventory()
+    except Exception:
+        pass
     return {"status": "saved", "username": username}
 
 
@@ -335,4 +350,9 @@ async def delete_calendar_credentials():
     _apply_credentials({})
     _mem_cache.clear()
     _save_cache({})
+    try:
+        import system_state
+        system_state.refresh_tool_inventory()
+    except Exception:
+        pass
     return {"status": "removed"}

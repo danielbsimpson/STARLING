@@ -67,9 +67,11 @@ import session_log
 import prompts
 import soul as _soul
 import dream as _dream
+import system_state
 from prompt_routes import router as prompts_router
 from soul_routes import router as soul_router
 from dream_routes import router as dream_router
+from system_routes import router as system_router
 from rag import ingest as _rag_ingest, get_status as _rag_get_status, INPUT_FOLDER as _RAG_INPUT_FOLDER
 from rag import (
     ingest_memory_catchup  as _memory_catchup,
@@ -105,6 +107,21 @@ app.include_router(mail_router)
 app.include_router(prompts_router)
 app.include_router(soul_router)
 app.include_router(dream_router)
+app.include_router(system_router)
+
+
+# ── Request / error counter middleware ───────────────────────────────────────
+@app.middleware("http")
+async def _system_state_counter_middleware(request, call_next):
+    system_state.increment_request()
+    try:
+        response = await call_next(request)
+    except Exception:
+        system_state.increment_error()
+        raise
+    if response.status_code >= 500:
+        system_state.increment_error()
+    return response
 
 
 # ── Startup warm-up ───────────────────────────────────────────────────────────
@@ -118,6 +135,11 @@ async def startup_event():
     prompts.load_overrides()
     _soul._ensure_default()
     _log.info(f"Soul loaded: {len(_soul.get())} chars")
+    try:
+        system_state.build_boot_snapshot()
+        system_state.build_tool_inventory()
+    except Exception as exc:
+        _log.warning(f"system_state: boot snapshot/inventory failed (non-fatal) \u2014 {exc}")
     try:
         # Run blocking model load in a thread so it doesn't block the event loop.
         # The 30-second timeout ensures the server always finishes starting even if
@@ -141,6 +163,11 @@ async def startup_event():
         _log.info("Memory: startup catch-up complete")
     except Exception:
         pass  # best-effort: memory catch-up failure must never block startup
+
+    try:
+        system_state.mark_boot_complete()
+    except Exception as exc:
+        _log.warning(f"system_state: mark_boot_complete failed \u2014 {exc}")
 
 
 @app.on_event("shutdown")

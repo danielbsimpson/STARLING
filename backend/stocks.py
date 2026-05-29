@@ -502,6 +502,15 @@ async def get_stocks():
         "duration_ms":   round((time.time() - _t0) * 1000),
         "result_summary": f"tickers={[t['symbol'] for t in flat]}, failed={failed}",
     })
+    try:
+        import system_state
+        system_state.record_event(
+            "stocks_fetch",
+            duration_s=round(time.time() - _t0, 3),
+            metadata={"tickers": len(flat), "failed": len(failed), "market_open": market_open},
+        )
+    except Exception:
+        pass
     return _result
 
 

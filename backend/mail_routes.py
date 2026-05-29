@@ -243,6 +243,7 @@ async def get_mail_inbox():
     Results are persisted to disk and served from cache for up to
     MAIL_CACHE_SECONDS (default 5 min) to avoid hammering IMAP.
     """
+    _t0 = time.monotonic()
     creds = _load_credentials()
     if not creds["username"] or not creds["password"]:
         raise HTTPException(
@@ -282,6 +283,15 @@ async def get_mail_inbox():
         "llm_context":  llm_context,
     }
     _save_cache(data)
+    try:
+        import system_state
+        system_state.record_event(
+            "mail_fetch",
+            duration_s=round(time.monotonic() - _t0, 3),
+            metadata={"unread": unread_count, "total": len(messages), "cache_hit": False},
+        )
+    except Exception:
+        pass
     return data
 
 
@@ -322,6 +332,11 @@ async def save_mail_credentials(body: _MailCredentials, request: Request):
     tmp.write_text(json.dumps(creds, ensure_ascii=False, indent=2), encoding="utf-8")
     os.replace(tmp, _MAIL_CRED_FILE)
     _invalidate_cache()
+    try:
+        import system_state
+        system_state.refresh_tool_inventory()
+    except Exception:
+        pass
     return {"status": "saved"}
 
 
@@ -334,5 +349,10 @@ async def delete_mail_credentials(request: Request):
     if _MAIL_CRED_FILE.exists():
         _MAIL_CRED_FILE.unlink()
     _invalidate_cache()
+    try:
+        import system_state
+        system_state.refresh_tool_inventory()
+    except Exception:
+        pass
     return {"status": "removed"}
 

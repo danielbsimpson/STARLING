@@ -116,6 +116,7 @@ def ingest(folder: str = INPUT_FOLDER) -> dict:
     Uses upsert so re-running is idempotent (chunk ID is a hash of filepath + index + content).
     Returns a summary dict: {"ingested": N, "skipped": N, "collection": str}.
     """
+    _t0 = time.monotonic()
     try:
         import chromadb
     except ImportError:
@@ -162,6 +163,15 @@ def ingest(folder: str = INPUT_FOLDER) -> dict:
         except Exception:
             skipped += 1
 
+    try:
+        import system_state
+        system_state.record_event(
+            "rag_ingest",
+            duration_s=round(time.monotonic() - _t0, 3),
+            metadata={"ingested": ingested, "skipped": skipped, "files": len(filepaths)},
+        )
+    except Exception:
+        pass
     return {"ingested": ingested, "skipped": skipped, "collection": COLLECTION}
 
 

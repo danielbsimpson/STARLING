@@ -9,6 +9,7 @@ import { detectMarketTrigger, openMarketPanel, closeMarketPanel, setSendToOllama
 import { detectCalendarTrigger, openCalendarPanel, closeCalendarPanel, isCalendarPanelOpen } from './calendar-panel.js';
 import { detectMailTrigger, openMailPanel, closeMailPanel, isMailPanelOpen } from './mail-panel.js';
 import { detectBrowserTrigger, detectBrowserClose, detectWikiSectionTrigger, isBrowserPanelOpen, openBrowserPanel, closeBrowserPanel, getBrowserPageText, ensureBrowserPageText, getBrowserPageUrl, getBrowserJsRendered } from './browser-panel.js';
+import { detectSystemStatusTrigger, handleSystemStatusTrigger, initSystemPanel, showSystemPanel } from './system-panel.js';
 import { getInterruptPhrase } from './interrupt-phrases.js';
 import {
   wikiMode,
@@ -2722,6 +2723,19 @@ async function _routeInput(text) {
     return;
   }
 
+  // System status voice trigger — answers via spoken summary of /system/status.
+  if (detectSystemStatusTrigger(text)) {
+    logEvent('tool_dispatch', { tool: 'system_status', trigger_phrase: text });
+    appendMessage('user', text);
+    setState('thinking');
+    await handleSystemStatusTrigger((spoken) => {
+      const { txt } = appendMessage('assistant', spoken);
+      enqueueSpeak(spoken, () => { txt.textContent = spoken; });
+    });
+    setState('idle');
+    return;
+  }
+
   // ── Ideas capture trigger — enter single-press capture mode ───────────────
   if (detectIdeaCaptureTrigger(text)) {
     logEvent('tool_dispatch', { tool: 'ideas', trigger_phrase: text });
@@ -3302,6 +3316,7 @@ initRedditPanel({ enqueueSpeak, sendToOllama, interruptSpeech });
 initYouTubePanel({ enqueueSpeak, sendToOllama, interruptSpeech });
 initNewsPanel({ enqueueSpeak, sendToOllama, interruptSpeech, onClose: exitNewsMode });
 initToolkitPanel(TOOLKIT_REGISTRY);
+initSystemPanel();
 // Disable interactive controls during boot animation.
 // _onBootAnimationComplete() (called from animate()) re-enables them.
 // If Three.js fails to init, _sphereAnimPhase stays 'none' and we re-enable immediately below.
@@ -3345,6 +3360,11 @@ document.getElementById('prompt-registry-open-btn')?.addEventListener('click', (
 // ── Soul "VIEW / EDIT SOUL" button ────────────────────────────────────────────
 document.getElementById('soul-open-btn')?.addEventListener('click', () => {
   openSoulPanel();
+});
+
+// ── System Status "SYSTEM STATUS" button ─────────────────────────────────────
+document.getElementById('system-status-open-btn')?.addEventListener('click', () => {
+  showSystemPanel();
 });
 
 // ── Soul verbal protests (fired by soul-panel.js via CustomEvent) ─────────────

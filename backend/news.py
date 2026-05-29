@@ -670,6 +670,15 @@ async def get_news(
         "duration_ms":   round((time.time() - _t0) * 1000),
         "result_summary": f"total={len(all_items)}, first={_first_hl}",
     })
+    try:
+        import system_state
+        system_state.record_event(
+            "news_fetch",
+            duration_s=round(time.time() - _t0, 3),
+            metadata={"category": category, "headlines": len(all_items), "cache_hit": False},
+        )
+    except Exception:
+        pass
     return data
 
 

@@ -731,3 +731,32 @@ Regex: `/\b(?:open|show|edit)\b.{0,20}\bprompt(?:s)?\b.{0,20}\b(?:editor|registr
 ### Also accessible via
 
 - The **MENU** panel → **PROMPT REGISTRY** section → **OPEN EDITOR** button
+
+
+---
+
+## 27 · System Status (System Awareness)
+
+Speaks a short summary of Starling's current runtime state: LLM/STT/TTS
+backends, available tools, boot duration, and GPU VRAM usage. Backed by
+`GET /system/status` (localhost-only).
+
+### Trigger phrases
+
+| Pattern (regex, case-insensitive) | Example phrases |
+|-----------------------------------|-----------------|
+| `\bsystem\s+status\b`           | `system status` |
+| `\bhow\s+are\s+you\s+running\b` | `how are you running` |
+| `\bwhat'?s\s+your\s+status\b`   | `what's your status` |
+| `\bare\s+you\s+healthy\b`       | `are you healthy` |
+| `\bself[-\s]?diagnostic\b`      | `self diagnostic` / `self-diagnostic` |
+
+### Also accessible via
+
+- The **MENU** panel -> **SYSTEM** section -> **SYSTEM STATUS** button (opens the full panel with boot snapshot, tool inventory, last-event metrics, live runtime telemetry, and the injected static prompt block).
+
+### Endpoints
+
+- `GET  /system/status`        - Full payload (localhost only)
+- `GET  /system/health`        - Minimal public health probe
+- `POST /system/refresh-tools` - Re-probe tool credentials (localhost only)

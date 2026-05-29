@@ -25,6 +25,7 @@ All implementation plans live in [`plan/`](./plan/). Completed feature guides ha
 | iCloud Calendar | [`assets/archived/complete/CALENDAR.md`](./assets/archived/complete/CALENDAR.md) | ✅ Done | CalDAV calendar panel sourced from iCloud; today's and the coming week's events; Apple ID + App-Specific Password auth; 1-hour disk cache |
 | Apple Mail Inbox | [`assets/archived/feature-apple-mail-inbox-1.md`](./assets/archived/feature-apple-mail-inbox-1.md) | ✅ Done | IMAP inbox panel showing recent unread messages (headers only, never body content); Apple ID + App-Specific Password auth; 5-minute in-memory cache |
 | Tool Awareness & Fuzzy Recovery | [`plan/feature-tool-awareness-1.md`](./plan/feature-tool-awareness-1.md) | 🔲 Pending | Injects a structured tool manifest into the system prompt so Starling can describe her own capabilities; fuzzy-intent layer at the tail of the intercept chain catches near-miss transcripts and asks for confirmation before opening a tool |
+| System Awareness | [`plan/feature-system-awareness-1.md`](./plan/feature-system-awareness-1.md) | ✅ Done | Single-source runtime introspection: boot snapshot, tool inventory, last-event metrics, live process/GPU telemetry, and a deterministic static prompt block injected into every LLM call. Voice trigger ("system status") + SYSTEM STATUS panel + localhost-only `/system/status`, `/system/health`, `/system/refresh-tools` endpoints. |
 
 ---
 

@@ -346,6 +346,15 @@ async def get_weather(
         "duration_ms":   _elapsed_ms,
         "result_summary": f"condition={data.get('current', {}).get('condition', '?')}, temp={data.get('current', {}).get('temp', '?')}",
     })
+    try:
+        import system_state
+        system_state.record_event(
+            "weather_fetch",
+            duration_s=round(_elapsed_ms / 1000.0, 3),
+            metadata={"location": resolved_name, "cache_hit": False},
+        )
+    except Exception:
+        pass
     return data
 
 
