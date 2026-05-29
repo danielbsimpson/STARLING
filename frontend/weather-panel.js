@@ -28,15 +28,29 @@ const wxFeels        = document.getElementById('weather-feels');
 const wxHumidity     = document.getElementById('weather-humidity');
 const wxWind         = document.getElementById('weather-wind');
 const wxCloud        = document.getElementById('weather-cloud');
+const wxUv           = document.getElementById('weather-uv');
+const wxUvLabel      = document.getElementById('weather-uv-label');
+const wxAqi          = document.getElementById('weather-aqi');
+const wxAqiLabel     = document.getElementById('weather-aqi-label');
 const wxSunrise      = document.getElementById('weather-sunrise');
 const wxSunset       = document.getElementById('weather-sunset');
 const wxForecast     = document.getElementById('weather-forecast');
 const ftrWxBadge     = document.getElementById('ftr-wx-location');
+// ── Flip-view DOM refs ────────────────────────────────────────────────────────
+const wxFlip          = document.getElementById('weather-flip');
+const wxFlipBack      = document.getElementById('weather-flip-back');
+const wxBackWeeklyBtn = document.getElementById('wx-back-weekly-btn');
+const wxFlipDayLabel  = document.getElementById('wx-flip-day-label');
+const wxDayTempCanvas  = document.getElementById('wx-day-temp');
+const wxDayPrecipCanvas = document.getElementById('wx-day-precip');
 
 // ── Last-opened location (for Refresh button) ─────────────────────────────────
 let _lastLocationOverride = null;
 // ── Last weather context string (for LLM follow-up injection) ──────────────
 let _currentWeatherContext = null;
+// ── Full weather response + active hourly Chart.js instances ─────────────────
+let _weatherData = null;
+let _wxCharts = { dayTemp: null, dayPrecip: null };
 // ── WMO code → emoji icon mapping ────────────────────────────────────────────
 const WMO_ICON = {
   0: '☀️',  1: '🌤', 2: '⛅', 3: '☁️',
@@ -74,6 +88,19 @@ export function initWeatherPanel() {
   if (wxCloseBtn) {
     wxCloseBtn.addEventListener('click', () => closeWeatherPanel());
   }
+
+  // "Back to Weekly" → flip back and tear down day charts
+  if (wxBackWeeklyBtn) {
+    wxBackWeeklyBtn.addEventListener('click', () => _flipToWeekly());
+  }
+
+  // Keep day charts sized with the responsive panel while flipped
+  window.addEventListener('resize', () => {
+    if (wxFlip?.classList.contains('flipped')) {
+      _wxCharts.dayTemp?.resize?.();
+      _wxCharts.dayPrecip?.resize?.();
+    }
+  });
 }
 
 // ── Trigger detection ─────────────────────────────────────────────────────────
@@ -154,6 +181,7 @@ export async function openWeatherPanel(locationOverride = null, force = false) {
   }
 
   _renderPanel(data);
+  _weatherData = data;
   wxPanel.classList.remove('hidden');
   _starlingEl.classList.add('weather-mode');
   wxPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -185,6 +213,8 @@ export function closeWeatherPanel() {
   clearTimeout(_autoDismissTimer);
   _autoDismissTimer = null;
   _currentWeatherContext = null;
+  _destroyWxCharts();
+  if (wxFlip) wxFlip.classList.remove('flipped');
   _starlingEl.classList.remove('weather-mode');
   wxPanel.classList.add('hidden');
 }
@@ -245,25 +275,150 @@ function _renderPanel(data) {
   wxWind.textContent      = `${c.wind_speed} ${c.unit_wind} ${c.wind_dir}`;
   wxCloud.textContent     = `${c.cloud_cover}%`;
 
+  // UV index + air quality tiles
+  if (wxUv)      wxUv.textContent      = c.uv_index != null ? `${c.uv_index}` : '—';
+  if (wxUvLabel) wxUvLabel.textContent = c.uv_label || '—';
+  if (wxAqi)      wxAqi.textContent      = c.us_aqi != null ? `${c.us_aqi}` : '—';
+  if (wxAqiLabel) wxAqiLabel.textContent = c.aqi_label || '—';
+
   // Sunrise / sunset from today's forecast
   if (forecast.length) {
     wxSunrise.textContent = forecast[0].sunrise || '—';
     wxSunset.textContent  = forecast[0].sunset  || '—';
   }
 
-  // 7-day forecast strip
+  // 10-day vertical forecast — one clickable row per day
   wxForecast.innerHTML = '';
-  forecast.forEach(day => {
+  forecast.forEach((day, i) => {
     const icon = WMO_ICON[day.weather_code] ?? '—';
     const card = document.createElement('div');
     card.className = 'forecast-day';
+    card.dataset.dayIndex = i;
     card.innerHTML = `
       <div class="forecast-day-name">${day.day.slice(0, 3).toUpperCase()}</div>
       <div class="forecast-day-icon">${icon}</div>
-      <div class="forecast-day-high">${day.high}${c.unit_temp}</div>
-      <div class="forecast-day-low">${day.low}${c.unit_temp}</div>
       <div class="forecast-day-cond">${day.condition}</div>
+      <div class="forecast-day-temps">
+        <span class="forecast-day-high">${day.high}${c.unit_temp}</span>
+        <span class="forecast-day-low">${day.low}${c.unit_temp}</span>
+      </div>
     `;
+    card.addEventListener('click', () => _flipToDay(i));
     wxForecast.appendChild(card);
   });
+}
+
+// ── Hourly flip view ──────────────────────────────────────────────────────────
+
+/** Destroy any active hourly Chart.js instances and reset references. */
+function _destroyWxCharts() {
+  for (const key of Object.keys(_wxCharts)) {
+    _wxCharts[key]?.destroy?.();
+    _wxCharts[key] = null;
+  }
+}
+
+/**
+ * Chart.js options mirroring the stocks panel's `_tileChartOptions`: dark theme,
+ * minimal axes, no animation. When `max` is provided the y-axis is pinned to
+ * 0–`max` (precip %); otherwise it auto-scales so temperature variation is
+ * visible instead of being flattened against a forced 0 baseline.
+ */
+function _wxChartOptions(yLabel, { max } = {}) {
+  const yScale = max != null
+    ? { min: 0, max, ticks: { color: '#666', font: { size: 9 }, stepSize: 25 },
+        grid: { color: 'rgba(255,255,255,0.04)' } }
+    : { ticks: { color: '#666', font: { size: 9 }, maxTicksLimit: 5 },
+        grid: { color: 'rgba(255,255,255,0.04)' } };
+  return {
+    responsive:          true,
+    maintainAspectRatio: false,
+    animation:           false,
+    interaction:         { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#111', titleColor: '#aaa', bodyColor: '#eee',
+        borderColor: '#333', borderWidth: 1,
+        callbacks: { label: item => ` ${item.formattedValue} ${yLabel}` },
+      },
+    },
+    scales: {
+      x: {
+        ticks: { color: '#666', font: { size: 9 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 },
+        grid:  { color: 'rgba(255,255,255,0.04)' },
+      },
+      y: yScale,
+    },
+  };
+}
+
+/** Build the temperature + precipitation-probability charts for one hourly entry. */
+function _renderHourlyCharts(hourlyEntry, unitTemp) {
+  _destroyWxCharts();
+  if (typeof Chart === 'undefined' || !hourlyEntry) return;
+
+  const labels = hourlyEntry.time;
+
+  if (wxDayTempCanvas) {
+    _wxCharts.dayTemp = new Chart(wxDayTempCanvas, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          data:            hourlyEntry.temperature,
+          borderColor:     '#f0a500',
+          borderWidth:     1.5,
+          backgroundColor: 'rgba(240, 165, 0, 0.12)',
+          fill:            true,
+          pointRadius:     0,
+          tension:         0.3,
+        }],
+      },
+      options: _wxChartOptions(unitTemp || ''),
+    });
+  }
+
+  if (wxDayPrecipCanvas) {
+    _wxCharts.dayPrecip = new Chart(wxDayPrecipCanvas, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          data:            hourlyEntry.precip_probability,
+          borderColor:     '#4a9eff',
+          borderWidth:     1.5,
+          backgroundColor: 'rgba(74, 158, 255, 0.12)',
+          fill:            true,
+          pointRadius:     0,
+          tension:         0.3,
+        }],
+      },
+      options: _wxChartOptions('%', { max: 100 }),
+    });
+  }
+}
+
+/** Flip the forecast region to show the hourly charts for forecast day `i`. */
+async function _flipToDay(i) {
+  clearTimeout(_autoDismissTimer);  // CON-001: don't auto-close mid-interaction
+  _autoDismissTimer = null;
+
+  // A response cached before the hourly feature shipped won't have `hourly`.
+  // Force a fresh fetch once so the charts can render instead of silently failing.
+  if (!_weatherData?.hourly?.length) {
+    await openWeatherPanel(_lastLocationOverride, /* force */ true);
+  }
+
+  const entry = _weatherData?.hourly?.[i];
+  if (!entry) return;
+  if (wxFlipDayLabel) wxFlipDayLabel.textContent = _weatherData.forecast?.[i]?.day || '';
+  _renderHourlyCharts(entry, _weatherData.current?.unit_temp);
+  wxFlip?.classList.add('flipped');
+}
+
+/** Flip back to the weekly forecast and tear down the day charts. */
+function _flipToWeekly() {
+  wxFlip?.classList.remove('flipped');
+  _destroyWxCharts();
 }

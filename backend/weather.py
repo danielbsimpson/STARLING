@@ -91,6 +91,21 @@ def _loc_key(lat: float, lon: float) -> str:
     return f"{round(lat, 2)}_{round(lon, 2)}"
 
 
+def _is_stale_schema(data: dict) -> bool:
+    """True if a cached response predates the current response schema.
+
+    Forces a refetch for entries that lack the 10-day forecast or the
+    UV-index / air-quality fields added in the panel redesign.
+    """
+    if not isinstance(data, dict):
+        return True
+    if "uv_label" not in data.get("current", {}):
+        return True
+    if len(data.get("forecast", [])) < 10:
+        return True
+    return False
+
+
 # ── Geocoding ─────────────────────────────────────────────────────────────────
 
 async def _geocode_open_meteo(location: str) -> tuple[float, float, str]:
@@ -152,7 +167,11 @@ def _resolve_location_sync(query: str, home_lat: float, home_lon: float) -> tupl
 # ── Weather fetch ──────────────────────────────────────────────────────────────
 
 async def _fetch_weather(lat: float, lon: float) -> dict:
-    """Call Open-Meteo for current conditions + 7-day daily forecast."""
+    """Call Open-Meteo for current conditions + 10-day daily forecast.
+
+    Also fetches US Air Quality Index from the separate air-quality API and
+    merges `us_aqi` into the returned `current` block.
+    """
     temp_unit   = "fahrenheit" if _UNITS == "fahrenheit" else "celsius"
     wind_unit   = "mph"        if _UNITS == "fahrenheit" else "kmh"
     precip_unit = "inch"       if _UNITS == "fahrenheit" else "mm"
@@ -163,27 +182,89 @@ async def _fetch_weather(lat: float, lon: float) -> dict:
         "current": ",".join([
             "temperature_2m", "apparent_temperature", "relative_humidity_2m",
             "wind_speed_10m", "wind_direction_10m", "weather_code",
-            "cloud_cover", "precipitation", "is_day",
+            "cloud_cover", "precipitation", "is_day", "uv_index",
         ]),
         "daily": ",".join([
             "weather_code", "temperature_2m_max", "temperature_2m_min",
             "precipitation_sum", "wind_speed_10m_max", "sunrise", "sunset",
         ]),
+        "hourly": ",".join([
+            "temperature_2m", "precipitation_probability",
+        ]),
         "temperature_unit":   temp_unit,
         "wind_speed_unit":    wind_unit,
         "precipitation_unit": precip_unit,
         "timezone":           "auto",
-        "forecast_days":      7,
+        "forecast_days":      10,
+    }
+    aqi_params = {
+        "latitude":  lat,
+        "longitude": lon,
+        "current":   "us_aqi",
+        "timezone":  "auto",
     }
     async with httpx.AsyncClient(timeout=15.0) as client:
-        resp = await client.get("https://api.open-meteo.com/v1/forecast", params=params)
-        resp.raise_for_status()
-        return resp.json()
+        forecast_task = client.get("https://api.open-meteo.com/v1/forecast", params=params)
+        aqi_task = client.get(
+            "https://air-quality-api.open-meteo.com/v1/air-quality", params=aqi_params
+        )
+        forecast_resp, aqi_resp = await asyncio.gather(
+            forecast_task, aqi_task, return_exceptions=True
+        )
+
+    if isinstance(forecast_resp, Exception):
+        raise forecast_resp
+    forecast_resp.raise_for_status()
+    data = forecast_resp.json()
+
+    # Air quality is best-effort — never let an AQI failure break the forecast.
+    if not isinstance(aqi_resp, Exception):
+        try:
+            aqi_resp.raise_for_status()
+            data.setdefault("current", {})["us_aqi"] = (
+                aqi_resp.json().get("current", {}).get("us_aqi")
+            )
+        except (httpx.HTTPError, ValueError, KeyError):
+            pass
+
+    return data
 
 
 def _wind_direction_label(degrees: float) -> str:
     dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
     return dirs[round(degrees / 45) % 8]
+
+
+def _uv_label(uv: Optional[float]) -> str:
+    """Map a UV index value to its standard risk category."""
+    if uv is None:
+        return "—"
+    if uv < 3:
+        return "Low"
+    if uv < 6:
+        return "Moderate"
+    if uv < 8:
+        return "High"
+    if uv < 11:
+        return "Very High"
+    return "Extreme"
+
+
+def _aqi_label(aqi: Optional[float]) -> str:
+    """Map a US AQI value to its EPA category."""
+    if aqi is None:
+        return "—"
+    if aqi <= 50:
+        return "Good"
+    if aqi <= 100:
+        return "Moderate"
+    if aqi <= 150:
+        return "Unhealthy (Sensitive)"
+    if aqi <= 200:
+        return "Unhealthy"
+    if aqi <= 300:
+        return "Very Unhealthy"
+    return "Hazardous"
 
 
 def _build_response(raw: dict, location_name: str, is_default: bool) -> dict:
@@ -205,6 +286,10 @@ def _build_response(raw: dict, location_name: str, is_default: bool) -> dict:
         "cloud_cover":   cur["cloud_cover"],
         "precipitation": cur["precipitation"],
         "is_day":        bool(cur["is_day"]),
+        "uv_index":      round(cur["uv_index"]) if cur.get("uv_index") is not None else None,
+        "uv_label":      _uv_label(cur.get("uv_index")),
+        "us_aqi":        cur.get("us_aqi"),
+        "aqi_label":     _aqi_label(cur.get("us_aqi")),
         "unit_temp":     unit_temp,
         "unit_wind":     unit_wind,
         "unit_precip":   unit_precip,
@@ -225,6 +310,28 @@ def _build_response(raw: dict, location_name: str, is_default: bool) -> dict:
             "sunrise":      daily["sunrise"][i].split("T")[1] if "T" in daily["sunrise"][i] else daily["sunrise"][i],
             "sunset":       daily["sunset"][i].split("T")[1] if "T" in daily["sunset"][i] else daily["sunset"][i],
         })
+
+    # Per-day hourly series (temperature + precipitation probability), grouped
+    # by calendar date from the flat Open-Meteo hourly arrays. Capped at 10 days.
+    hourly: list[dict] = []
+    h = raw.get("hourly")
+    if h and h.get("time"):
+        h_time   = h["time"]
+        h_temp   = h.get("temperature_2m", [])
+        h_precip = h.get("precipitation_probability", [])
+        by_date: dict[str, dict] = {}
+        for idx, ts in enumerate(h_time):
+            date_part, _, time_part = ts.partition("T")
+            entry = by_date.get(date_part)
+            if entry is None:
+                entry = {"date": date_part, "time": [], "temperature": [], "precip_probability": []}
+                by_date[date_part] = entry
+            entry["time"].append(time_part[:5] if time_part else "")
+            temp_val = h_temp[idx] if idx < len(h_temp) else None
+            entry["temperature"].append(round(temp_val) if temp_val is not None else 0)
+            precip_val = h_precip[idx] if idx < len(h_precip) else None
+            entry["precip_probability"].append(int(precip_val) if precip_val is not None else 0)
+        hourly = list(by_date.values())[:10]
 
     f0 = forecast[0]  # today
     today_label = datetime.now().strftime("%A, %B %d, %Y")
@@ -255,6 +362,7 @@ def _build_response(raw: dict, location_name: str, is_default: bool) -> dict:
         "is_default_location": is_default,
         "current":             current,
         "forecast":            forecast,
+        "hourly":              hourly,
         "llm_context":         llm_context,
         "fetched_at":          datetime.now(timezone.utc).isoformat(),
         "units":               _UNITS,
@@ -311,7 +419,7 @@ async def get_weather(
                 datetime.now(timezone.utc)
                 - datetime.fromisoformat(last["fetched_at"])
             ).total_seconds()
-            if age_s < _CACHE_TTL_S:
+            if age_s < _CACHE_TTL_S and not _is_stale_schema(last["data"]):
                 data = dict(last["data"])
                 data["source"]            = "cache"
                 data["cache_age_seconds"] = int(age_s)

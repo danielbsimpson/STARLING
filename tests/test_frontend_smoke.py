@@ -33,3 +33,19 @@ def test_frontend_module_parses(module_path: Path):
     assert result.returncode == 0, (
         f"Syntax error in {module_path.name}:\n{result.stderr}"
     )
+
+
+def test_weather_flip_markup_and_symbols_present():
+    """Weather hourly-graph flip feature wires specific element ids + JS symbols."""
+    index_html = (_FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
+    for el_id in (
+        "weather-flip", "weather-flip-back",
+        "wx-back-weekly-btn", "wx-day-temp", "wx-day-precip",
+        "weather-metrics", "weather-uv", "weather-aqi",
+    ):
+        assert el_id in index_html, f"missing element id '{el_id}' in index.html"
+
+    panel_js = (_FRONTEND_DIR / "weather-panel.js").read_text(encoding="utf-8")
+    for symbol in ("_renderHourlyCharts", "_flipToDay"):
+        assert symbol in panel_js, f"missing symbol '{symbol}' in weather-panel.js"
+

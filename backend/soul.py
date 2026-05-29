@@ -19,6 +19,7 @@ initialised at import time) and the atomic write pattern from ideas_routes.py
 
 import difflib
 import os
+import re
 import sys
 import threading
 from datetime import datetime, timezone
@@ -28,6 +29,16 @@ from pathlib import Path
 _SOUL_DIR  = Path(os.getenv("SOUL_DIR", str(Path(__file__).parent / "memory" / "soul")))
 _SOUL_PATH = _SOUL_DIR / "SOUL.md"
 MAX_SOUL_CHARS = 32_000
+
+# Section headings that must never appear in SOUL.md — these belong to the RAG
+# memory / reflection pipeline, not the lean personality guideline. If the soul
+# evolution pass echoes them back, they are stripped before writing.
+_FORBIDDEN_SECTIONS = {
+    "session reflection",
+    "extracted facts",
+    "about the user",
+    "about the world",
+}
 
 # ── Thread safety ─────────────────────────────────────────────────────────────
 _lock = threading.Lock()
@@ -86,6 +97,49 @@ def _ensure_default() -> None:
 _ensure_default()
 
 
+def _sanitize_soul(content: str) -> str:
+    """Strip session-log artefacts so SOUL.md stays a lean personality guideline.
+
+    Removes any ``## `` section whose heading is in ``_FORBIDDEN_SECTIONS``
+    (e.g. session reflections or extracted facts the evolution pass may echo
+    back), drops stray ``<!-- session: ... -->`` comment lines, and collapses
+    duplicate headings to the first occurrence. Best-effort: on any error the
+    original content is returned unchanged.
+    """
+    try:
+        lines = content.splitlines()
+        out: list[str] = []
+        seen_headings: set[str] = set()
+        skipping = False
+        for line in lines:
+            heading_match = re.match(r"^(#{1,6})\s+(.*\S)\s*$", line)
+            if heading_match:
+                title = heading_match.group(2).strip().lower()
+                # Drop the whole section if its heading is forbidden.
+                if title in _FORBIDDEN_SECTIONS:
+                    skipping = True
+                    continue
+                # Collapse a duplicate heading: skip until the next heading.
+                if title in seen_headings:
+                    skipping = True
+                    continue
+                seen_headings.add(title)
+                skipping = False
+                out.append(line)
+                continue
+            # Drop session-marker comment lines anywhere in the file.
+            if re.match(r"^\s*<!--\s*session:", line):
+                continue
+            if not skipping:
+                out.append(line)
+        # Collapse 3+ consecutive blank lines down to a single blank line.
+        cleaned = re.sub(r"\n{3,}", "\n\n", "\n".join(out)).strip()
+        return cleaned + "\n"
+    except Exception as exc:  # noqa: BLE001 — sanitising must never break a soul write
+        print(f"[soul] WARNING: sanitise failed ({exc}); writing content as-is", file=sys.stderr)
+        return content
+
+
 # ── Public API ─────────────────────────────────────────────────────────────────
 
 def get() -> str:
@@ -107,8 +161,11 @@ def update(new_content: str, session_id: str) -> Path:
     """Archive the current SOUL.md and write new_content.
 
     Returns the path of the newly created archive file.
-    Content exceeding MAX_SOUL_CHARS is silently truncated with a warning.
+    Content is sanitised (forbidden session-log sections and duplicate headings
+    removed) and content exceeding MAX_SOUL_CHARS is silently truncated.
     """
+    new_content = _sanitize_soul(new_content)
+
     if len(new_content) > MAX_SOUL_CHARS:
         print(
             f"[soul] WARNING: new soul content ({len(new_content)} chars) exceeds "

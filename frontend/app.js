@@ -1030,6 +1030,7 @@ powerBtn && powerBtn.addEventListener('click', () => {
     clearTimeout(_shutdownConfirmTimer);
     powerBtn.classList.remove('confirming');
     powerBtn.textContent = 'SHUTDOWN';
+    closeToolkitPanel();   // close the menu so the orb exit animation is visible
     startShutdown();
   } else {
     powerBtn.classList.add('confirming');
@@ -1486,7 +1487,7 @@ function initSphere() {
   };
   const SHUTDOWN_CHOREO = {
     camStartZ: 6.2, camEndZ: 110,
-    lateralSweep: 22, verticalSweep: 14,
+    lateralSweep: 9, verticalSweep: 5,
     sphereTumbleTurns: 0.9,
     orbRadiusEnd: 3.2, orbOpacityEnd: 0.0, fadeStart: 0.55,
   };
@@ -1524,6 +1525,7 @@ function initSphere() {
     if (_lifecycleStaged) return;             // already staged
     _lifecycleStaged = true;
     starlingEl.classList.add('is-lifecycle-animating');
+    _applyFullscreenView();
   }
 
   /** Reverse _expandCanvasForLifecycle(): clear the lifecycle-active state. */
@@ -1531,7 +1533,45 @@ function initSphere() {
     if (!_lifecycleStaged) return;            // not staged
     _lifecycleStaged = false;
     starlingEl.classList.remove('is-lifecycle-animating');
+    _restoreRingView();
   }
+
+  // ── Fullscreen lifecycle view ──────────────────────────────────────────────
+  // Expanding the canvas to the viewport removes the circular 210 px clip that
+  // otherwise cuts off the travelling orbs (the "black wall"). To avoid the
+  // sphere jumping to the screen centre, we keep its on-screen pixel size
+  // constant by widening the vertical FOV in proportion to the taller canvas,
+  // and use camera.setViewOffset to re-anchor the optical centre on the ring.
+  const _ORIG_FOV = 40;
+
+  function _applyFullscreenView() {
+    const ringWrap = document.querySelector('.ring-wrap');
+    if (!ringWrap) return;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const rect = ringWrap.getBoundingClientRect();
+    const rcx  = rect.left + rect.width / 2;
+    const rcy  = rect.top  + rect.height / 2;
+
+    const ratio = h / RING_SIZE;
+    const vFov  = THREE.MathUtils.radToDeg(
+      2 * Math.atan(ratio * Math.tan(THREE.MathUtils.degToRad(_ORIG_FOV) / 2))
+    );
+    camera.fov    = vFov;
+    camera.aspect = w / h;
+    camera.setViewOffset(w, h, w / 2 - rcx, h / 2 - rcy, w, h);
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+  }
+
+  function _restoreRingView() {
+    camera.clearViewOffset();
+    camera.fov    = _ORIG_FOV;
+    camera.aspect = 1;
+    camera.updateProjectionMatrix();
+    renderer.setSize(RING_SIZE, RING_SIZE);
+  }
+
 
 
   // ── Boot / shutdown animation state ───────────────────────────────────────

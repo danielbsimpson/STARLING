@@ -41,6 +41,14 @@ DREAM_DIR        = Path(os.getenv("DREAM_OUTPUT_DIR",  str(_BASE / "memory" / "d
 _RAG_INPUT_DIR   = Path(os.getenv("RAG_INPUT_FOLDER",  str(_BASE / "memory" / "input")))
 DREAM_TIMEOUT_S  = int(os.getenv("DREAM_TIMEOUT_S",    "300"))
 PASS_TIMEOUT_S   = int(os.getenv("DREAM_PASS_TIMEOUT_S", "90"))
+
+# Minimum session substance required before a dream state is worth running.
+# Guards against digesting trivial boot-then-shutdown sessions (e.g. a single
+# test query or no interaction at all). A session must contain at least
+# DREAM_MIN_USER_TURNS user messages AND DREAM_MIN_EXCHANGES total meaningful
+# exchanges (user turns + assistant responses + tool dispatches) to qualify.
+DREAM_MIN_USER_TURNS = int(os.getenv("DREAM_MIN_USER_TURNS", "3"))
+DREAM_MIN_EXCHANGES  = int(os.getenv("DREAM_MIN_EXCHANGES",  "6"))
 DREAM_MODEL      = os.getenv("DREAM_MODEL", "")
 LLM_BACKEND      = os.getenv("LLM_BACKEND", "ollama").lower()
 OLLAMA_BASE      = os.getenv("OLLAMA_BASE_URL",    "http://localhost:11434")
@@ -75,6 +83,8 @@ class DreamResult:
     duration_s:       float           = 0.0
     errors:           list[str]       = field(default_factory=list)
     memory_ingested:  int             = 0
+    skipped:          bool            = False
+    skip_reason:      Optional[str]   = None
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -197,6 +207,66 @@ def build_transcript(log_path: Path, from_ts: Optional[str] = None) -> str:
         )
 
     return transcript
+
+
+def count_session_signals(log_path: Path, from_ts: Optional[str] = None) -> dict:
+    """Tally meaningful interaction signals from a session log.
+
+    Returns a dict with:
+      user_turns       — count of user_speech + user_text events
+      assistant_turns  — count of llm_response events
+      tool_dispatches  — count of tool_dispatch events
+      exchanges        — sum of the three above (total meaningful exchanges)
+
+    from_ts mirrors build_transcript(): events before it are skipped so the
+    counts reflect only the slice that would actually be digested.
+    """
+    user_turns = assistant_turns = tool_dispatches = 0
+    try:
+        with open(log_path, encoding="utf-8") as fh:
+            for raw in fh:
+                raw = raw.strip()
+                if not raw:
+                    continue
+                try:
+                    record = json.loads(raw)
+                except json.JSONDecodeError:
+                    continue
+
+                ts = record.get("ts", "")
+                if from_ts and ts < from_ts:
+                    continue
+
+                event = record.get("event", "")
+                if event in ("user_speech", "user_text"):
+                    user_turns += 1
+                elif event == "llm_response":
+                    assistant_turns += 1
+                elif event == "tool_dispatch":
+                    tool_dispatches += 1
+    except FileNotFoundError:
+        pass
+
+    return {
+        "user_turns":      user_turns,
+        "assistant_turns": assistant_turns,
+        "tool_dispatches": tool_dispatches,
+        "exchanges":       user_turns + assistant_turns + tool_dispatches,
+    }
+
+
+def is_session_substantial(signals: dict) -> bool:
+    """Decide whether a session is worth digesting into a dream state.
+
+    A session qualifies only when it has enough back-and-forth to yield useful
+    memory — at least DREAM_MIN_USER_TURNS user messages and DREAM_MIN_EXCHANGES
+    total meaningful exchanges. This filters out trivial boot→single-query→
+    shutdown sessions that are almost always tests.
+    """
+    return (
+        signals.get("user_turns", 0)  >= DREAM_MIN_USER_TURNS
+        and signals.get("exchanges", 0) >= DREAM_MIN_EXCHANGES
+    )
 
 
 # ── Error / timeout notice writers ───────────────────────────────────────────
@@ -371,6 +441,26 @@ def _run_pipeline(session_id: str, from_ts: Optional[str] = None) -> DreamResult
     # Build transcript — empty means nothing to process
     transcript = build_transcript(log_path, from_ts)
     if not transcript:
+        return result
+
+    # Robustness gate — skip trivial boot→single-query→shutdown sessions that
+    # carry no memory worth digesting (almost always tests).
+    signals = count_session_signals(log_path, from_ts)
+    if not is_session_substantial(signals):
+        result.skipped = True
+        result.skip_reason = (
+            f"session below dream threshold "
+            f"(user_turns={signals['user_turns']}/{DREAM_MIN_USER_TURNS}, "
+            f"exchanges={signals['exchanges']}/{DREAM_MIN_EXCHANGES})"
+        )
+        try:
+            _session_log.log("dream_skipped", {
+                "session_id": session_id,
+                "reason":     "insufficient_session_substance",
+                **signals,
+            })
+        except Exception:
+            pass
         return result
 
     # ── Pass 1: Summary ───────────────────────────────────────────────────────

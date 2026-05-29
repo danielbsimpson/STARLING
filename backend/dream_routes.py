@@ -57,6 +57,8 @@ def dream_status():
         "duration_s":       r.duration_s,
         "errors":           r.errors,
         "memory_ingested":  r.memory_ingested,
+        "skipped":          r.skipped,
+        "skip_reason":      r.skip_reason,
     }
 
 

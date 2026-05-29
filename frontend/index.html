@@ -178,7 +178,6 @@
             <div class="sphere-halo" id="sphere-halo"></div>
             <canvas id="sphere-canvas" aria-hidden="true"></canvas>
           </div>
-          <div class="waveform" id="waveform" aria-hidden="true"></div>
           <div class="browser-read-warn hidden" id="browser-read-warn">⚠ CANNOT READ PAGE</div>
         </div>
         <!-- Chat panel — hidden in normal mode, slides in below sphere in pres-mode -->
@@ -241,21 +240,72 @@
             <button class="weather-refresh-btn" id="weather-refresh-btn" title="Refresh weather data">🔄</button>
           </div>
         </div>
-        <!-- Current conditions -->
-        <div class="weather-current" id="weather-current">
-          <div class="weather-temp" id="weather-temp">—</div>
-          <div class="weather-condition" id="weather-condition">—</div>
-          <div class="weather-detail-grid">
-            <span class="wd-lbl">FEELS LIKE</span><span class="wd-val" id="weather-feels">—</span>
-            <span class="wd-lbl">HUMIDITY</span><span class="wd-val" id="weather-humidity">—</span>
-            <span class="wd-lbl">WIND</span><span class="wd-val" id="weather-wind">—</span>
-            <span class="wd-lbl">CLOUD COVER</span><span class="wd-val" id="weather-cloud">—</span>
-            <span class="wd-lbl">SUNRISE</span><span class="wd-val" id="weather-sunrise">—</span>
-            <span class="wd-lbl">SUNSET</span><span class="wd-val" id="weather-sunset">—</span>
+        <!-- Body: metric tiles (left) + vertical forecast (right) -->
+        <div class="weather-body">
+          <!-- Left: current-conditions metric tiles -->
+          <div class="weather-metrics" id="weather-metrics">
+            <div class="wx-tile wx-tile-hero">
+              <div class="weather-temp" id="weather-temp">—</div>
+              <div class="weather-condition" id="weather-condition">—</div>
+            </div>
+            <div class="wx-tile">
+              <div class="wx-tile-lbl">FEELS LIKE</div>
+              <div class="wx-tile-val" id="weather-feels">—</div>
+            </div>
+            <div class="wx-tile">
+              <div class="wx-tile-lbl">HUMIDITY</div>
+              <div class="wx-tile-val" id="weather-humidity">—</div>
+            </div>
+            <div class="wx-tile">
+              <div class="wx-tile-lbl">WIND</div>
+              <div class="wx-tile-val" id="weather-wind">—</div>
+            </div>
+            <div class="wx-tile">
+              <div class="wx-tile-lbl">CLOUD COVER</div>
+              <div class="wx-tile-val" id="weather-cloud">—</div>
+            </div>
+            <div class="wx-tile">
+              <div class="wx-tile-lbl">UV INDEX</div>
+              <div class="wx-tile-val" id="weather-uv">—</div>
+              <div class="wx-tile-sub" id="weather-uv-label">—</div>
+            </div>
+            <div class="wx-tile">
+              <div class="wx-tile-lbl">AIR QUALITY</div>
+              <div class="wx-tile-val" id="weather-aqi">—</div>
+              <div class="wx-tile-sub" id="weather-aqi-label">—</div>
+            </div>
+            <div class="wx-tile">
+              <div class="wx-tile-lbl">SUNRISE</div>
+              <div class="wx-tile-val" id="weather-sunrise">—</div>
+            </div>
+            <div class="wx-tile">
+              <div class="wx-tile-lbl">SUNSET</div>
+              <div class="wx-tile-val" id="weather-sunset">—</div>
+            </div>
+          </div>
+          <!-- Right: vertical 10-day forecast — flippable to per-day hourly charts -->
+          <div class="weather-flip" id="weather-flip">
+            <div class="weather-flip-inner">
+              <div class="weather-flip-front">
+                <div class="weather-forecast" id="weather-forecast"></div>
+              </div>
+              <div class="weather-flip-back" id="weather-flip-back">
+                <div class="wx-flip-back-header">
+                  <div class="wx-flip-day-label" id="wx-flip-day-label"></div>
+                  <button class="wx-back-weekly-btn" id="wx-back-weekly-btn">↩ Back to Weekly</button>
+                </div>
+                <div class="wx-chart-box">
+                  <div class="wx-chart-title">HOURLY TEMP</div>
+                  <canvas id="wx-day-temp"></canvas>
+                </div>
+                <div class="wx-chart-box">
+                  <div class="wx-chart-title">HOURLY PRECIP %</div>
+                  <canvas id="wx-day-precip"></canvas>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-        <!-- 7-day forecast strip -->
-        <div class="weather-forecast" id="weather-forecast"></div>
       </div>
 
       <!-- Calendar Panel — hidden until calendar mode is active -->
@@ -709,6 +759,8 @@ Press SUBMIT when finished dictating.</span>
 
     <!-- Full-width bottom bar: LLM metrics + TTS settings + controls -->
     <div class="bottom-bar">
+      <!-- Audio waveform — spans the chat column, sits just above the metrics row -->
+      <div class="waveform" id="waveform" aria-hidden="true"></div>
       <!-- LLM performance + context metrics (single row, populated after each response) -->
       <div class="llm-metrics" id="llm-metrics">
         <span class="lm-item"><span class="lm-lbl">PROMPT</span><span class="lm-val" id="lm-prompt">—</span></span>
