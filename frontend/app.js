@@ -5,7 +5,7 @@ import { detectWeatherTrigger, openWeatherPanel, closeWeatherPanel, initWeatherP
 import { detectNewsTrigger, openNewsPanel, closeNewsPanel, initNewsPanel, isNewsPanelOpen, getActiveArticleContext } from './news-panel.js';
 import { detectRedditTrigger, openRedditPanel, closeRedditPanel, initRedditPanel } from './reddit-panel.js';
 import { detectYouTubeTrigger, openYouTubePanel, closeYouTubePanel, initYouTubePanel } from './youtube-panel.js';
-import { detectMarketTrigger, openMarketPanel, closeMarketPanel, setSendToOllama as _setMktSendToOllama, setOnClose as _setMktOnClose } from './stocks-panel.js';
+import { detectMarketTrigger, openMarketPanel, closeMarketPanel, openStockSettings, setSendToOllama as _setMktSendToOllama, setOnClose as _setMktOnClose } from './stocks-panel.js';
 import { detectCalendarTrigger, openCalendarPanel, closeCalendarPanel, isCalendarPanelOpen } from './calendar-panel.js';
 import { detectMailTrigger, openMailPanel, closeMailPanel, isMailPanelOpen } from './mail-panel.js';
 import { detectBrowserTrigger, detectBrowserClose, detectWikiSectionTrigger, isBrowserPanelOpen, openBrowserPanel, closeBrowserPanel, getBrowserPageText, ensureBrowserPageText, getBrowserPageUrl, getBrowserJsRendered } from './browser-panel.js';
@@ -288,11 +288,39 @@ function exitNewsMode() {
 
 function enterMarketMode() {
   starlingEl.classList.add('mkt-mode');
+  _injectPortfolioAnalystContext();
 }
 
 function exitMarketMode() {
   starlingEl.classList.remove('mkt-mode');
+  // Drop the analyst context so it doesn't linger in unrelated conversation.
+  conversationHistory = conversationHistory.filter(
+    m => !(m.role === 'system' && m.content.includes(STOCKS_ANALYST_MARKER))
+  );
   closeMarketPanel();
+}
+
+/**
+ * Fetch the portfolio analyst persona + live PORTFOLIO DATA block and inject it
+ * as a persistent system message so the user can discuss their holdings while the
+ * market panel is open. Fire-and-forget; failures are non-fatal.
+ */
+async function _injectPortfolioAnalystContext() {
+  try {
+    const res = await fetch(`${BACKEND_BASE}/stocks/portfolio/analysis`);
+    if (!res.ok) throw new Error(`/portfolio/analysis ${res.status}`);
+    const data = await res.json();
+    const ctx  = data && data.llm_context;
+    if (!ctx) return;
+
+    // Remove any stale analyst context before adding the fresh one.
+    conversationHistory = conversationHistory.filter(
+      m => !(m.role === 'system' && m.content.includes(STOCKS_ANALYST_MARKER))
+    );
+    conversationHistory.push({ role: 'system', content: ctx });
+  } catch (err) {
+    console.error('[app] portfolio analyst context:', err);
+  }
 }
 
 function enterMailMode() {
@@ -743,6 +771,14 @@ const TOOLKIT_REGISTRY = [
     ttsScript: 'The Market tool displays a live dashboard with equity and crypto prices, charts, and a spoken briefing. Say: show me the market.',
     phrases: ['show me the market', 'what are my stocks doing', 'crypto prices', 'show stocks', 'bitcoin price'],
     openFn: () => { openMarketPanel('all').then(ctx => { if (ctx) enterMarketMode(); }); },
+    renderExtraFn: (container) => {
+      const btn = document.createElement('button');
+      btn.className   = 'toolkit-settings-btn';
+      btn.textContent = '⚙ STOCK SETTINGS';
+      btn.title       = 'Edit tracked tickers and share counts';
+      btn.addEventListener('click', e => { e.stopPropagation(); openStockSettings(); });
+      container.appendChild(btn);
+    },
   },
   {
     id: 'browser',
@@ -807,6 +843,10 @@ const TOOLKIT_REGISTRY = [
 
 // ── Conversation state ────────────────────────────────────────────────────────
 let conversationHistory = [{ role: 'system', content: SYSTEM_PROMPT }];
+
+// Stable marker present in the injected portfolio analyst context; used to find
+// and remove stale copies when re-entering or leaving market mode.
+const STOCKS_ANALYST_MARKER = '[PORTFOLIO DATA';
 
 // Reference to the assistant message <p> element showing journal status text.
 // Kept here so confirm/discard/rerecord callbacks can update the same bubble.

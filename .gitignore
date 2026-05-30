@@ -57,6 +57,8 @@ backend/memory/calendar_cache.json
 backend/memory/calendar_credentials.json
 backend/memory/mail_credentials.json
 backend/memory/mail_cache.json
+backend/memory/stocks_history.json
+
 
 # Soul archive history (SOUL.md tracked; archived snapshots excluded)
 backend/memory/soul/SOUL_*.md

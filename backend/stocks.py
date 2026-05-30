@@ -58,7 +58,25 @@ _DEFAULT_WATCHLIST = {
         {"label": "Crypto",  "tickers": ["BTC-USD", "ETH-USD", "SOL-USD"]},
         {"label": "Personal","tickers": []},
     ],
+    "my_stocks": [
+        {"symbol": "AAPL", "shares": 10},
+        {"symbol": "MSFT", "shares": 5},
+        {"symbol": "NVDA", "shares": 8},
+    ],
+    "my_crypto": [
+        {"symbol": "BTC-USD", "shares": 0.25},
+        {"symbol": "ETH-USD", "shares": 2},
+    ],
+    "profile": {
+        "age":               "",
+        "risk_profile":      "Moderate",
+        "time_horizon":      "",
+        "primary_goal":      "",
+        "available_capital": "",
+    },
 }
+
+_PROFILE_FIELDS = ("age", "risk_profile", "time_horizon", "primary_goal", "available_capital")
 
 
 # ── Helpers — atomic file I/O ─────────────────────────────────────────────────
@@ -83,7 +101,50 @@ def _ensure_watchlist() -> None:
 
 def _load_watchlist() -> dict:
     _ensure_watchlist()
-    return _load_json(_WATCHLIST_FILE, _DEFAULT_WATCHLIST)
+    wl = _load_json(_WATCHLIST_FILE, _DEFAULT_WATCHLIST)
+    # Migrate older watchlist files that predate the My Stocks / My Crypto holdings.
+    changed = False
+    if "my_stocks" not in wl:
+        wl["my_stocks"] = _derive_holdings(wl, equity=True)
+        changed = True
+    if "my_crypto" not in wl:
+        wl["my_crypto"] = _derive_holdings(wl, equity=False)
+        changed = True
+    if "profile" not in wl or not isinstance(wl.get("profile"), dict):
+        wl["profile"] = dict(_DEFAULT_WATCHLIST["profile"])
+        changed = True
+    else:
+        for f in _PROFILE_FIELDS:
+            if f not in wl["profile"]:
+                wl["profile"][f] = _DEFAULT_WATCHLIST["profile"][f]
+                changed = True
+    if changed:
+        _atomic_write(_WATCHLIST_FILE, wl)
+    return wl
+
+
+def _derive_holdings(watchlist: dict, equity: bool) -> list:
+    """Seed holdings from existing watchlist tickers (shares default to 1)."""
+    out, seen = [], set()
+    for sym in _flat_tickers(watchlist):
+        is_crypto = _ticker_type(sym) == "crypto"
+        is_index  = _ticker_type(sym) == "index"
+        if is_index:
+            continue
+        if equity and is_crypto:
+            continue
+        if not equity and not is_crypto:
+            continue
+        if sym in seen:
+            continue
+        seen.add(sym)
+        out.append({"symbol": sym, "shares": 1})
+        if len(out) >= 8:
+            break
+    if out:
+        return out
+    fallback = "my_crypto" if not equity else "my_stocks"
+    return [dict(h) for h in _DEFAULT_WATCHLIST.get(fallback, [])]
 
 
 def _flat_tickers(watchlist: dict) -> list:
@@ -321,6 +382,60 @@ def _fetch_ticker(symbol: str) -> dict | None:
         return None
 
 
+# ── Fundamentals fetch (P/E, ROE, D/E, FCF) — disk cached ─────────────────────
+_FUNDAMENTALS_TTL = 86_400  # 24h — fundamentals change slowly
+
+
+def _cached_fundamentals(symbol: str) -> dict | None:
+    disk  = _load_quote_cache()
+    entry = disk.get("fundamentals", {}).get(symbol)
+    if entry and (time.time() - entry.get("fetched_ts", 0)) < _FUNDAMENTALS_TTL:
+        return entry["data"]
+    return None
+
+
+def _store_fundamentals(symbol: str, data: dict) -> None:
+    disk = _load_quote_cache()
+    disk.setdefault("fundamentals", {})[symbol] = {
+        "fetched_ts": time.time(),
+        "data":       data,
+    }
+    _save_quote_cache(disk)
+
+
+def _fetch_fundamentals(symbol: str) -> dict:
+    """Return P/E, ROE, D/E, FCF for an equity. Crypto/indices return empty.
+
+    Uses yfinance .info (slower than fast_info) and caches for 24h."""
+    if _ticker_type(symbol) != "equity":
+        return {}
+
+    cached = _cached_fundamentals(symbol)
+    if cached is not None:
+        return cached
+
+    fundamentals: dict = {}
+    try:
+        info = yf.Ticker(symbol).info or {}
+        pe   = info.get("trailingPE")
+        roe  = info.get("returnOnEquity")      # fraction, e.g. 0.45 → 45%
+        de   = info.get("debtToEquity")        # often expressed as percent, e.g. 195 → 1.95
+        fcf  = info.get("freeCashflow")
+
+        fundamentals = {
+            "pe":  round(float(pe), 2)                      if pe  is not None else None,
+            "roe": round(float(roe) * 100, 1)              if roe is not None else None,
+            "de":  round(float(de) / 100, 2)               if de  is not None else None,
+            "fcf": _fmt_large(float(fcf))                  if fcf is not None else None,
+        }
+    except Exception as exc:
+        print(f"[stocks] fundamentals fetch error {symbol}: {exc}")
+        fundamentals = {}
+
+    _store_fundamentals(symbol, fundamentals)
+    return fundamentals
+
+
 # ── LLM context builders ──────────────────────────────────────────────────────
 
 def _build_llm_context(tickers: list, market_open: bool) -> str:
@@ -451,7 +566,274 @@ async def put_watchlist(body: dict = Body(...)):
     return {"status": "saved", "groups": len(groups)}
 
 
-@router.get("/stocks")
+# ── Holdings (My Stocks / My Crypto) ──────────────────────────────────────────
+
+def _clean_holdings(items) -> list:
+    out, seen = [], set()
+    if not isinstance(items, list):
+        return out
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        sym = str(it.get("symbol", "")).strip().upper()
+        if not sym or sym in seen:
+            continue
+        try:
+            shares = float(it.get("shares", 0) or 0)
+        except (TypeError, ValueError):
+            shares = 0.0
+        if shares < 0:
+            shares = 0.0
+        seen.add(sym)
+        out.append({"symbol": sym, "shares": shares})
+    return out
+
+
+@router.get("/stocks/holdings")
+async def get_holdings():
+    wl = _load_watchlist()
+    return {
+        "my_stocks": wl.get("my_stocks", []),
+        "my_crypto": wl.get("my_crypto", []),
+        "profile":   wl.get("profile", dict(_DEFAULT_WATCHLIST["profile"])),
+        "currency_sym": _CURRENCY_SYM,
+    }
+
+
+def _clean_profile(raw) -> dict:
+    out = dict(_DEFAULT_WATCHLIST["profile"])
+    if isinstance(raw, dict):
+        for f in _PROFILE_FIELDS:
+            if f in raw and raw[f] is not None:
+                out[f] = str(raw[f]).strip()
+    return out
+
+
+@router.put("/stocks/holdings")
+async def put_holdings(body: dict = Body(...)):
+    wl = _load_watchlist()
+    if "my_stocks" in body:
+        wl["my_stocks"] = _clean_holdings(body.get("my_stocks"))
+    if "my_crypto" in body:
+        wl["my_crypto"] = _clean_holdings(body.get("my_crypto"))
+    if "profile" in body:
+        wl["profile"] = _clean_profile(body.get("profile"))
+    _atomic_write(_WATCHLIST_FILE, wl)
+    _atomic_write(_CACHE_FILE, {"quote": {}})  # force fresh quotes for any new symbols
+    return {
+        "status":    "saved",
+        "my_stocks": len(wl.get("my_stocks", [])),
+        "my_crypto": len(wl.get("my_crypto", [])),
+    }
+
+
+def _portfolio_series(holdings: list, window: str, force: bool = False) -> list:
+    """Combined value-over-time: sum(shares_i * price_i(t)) across holdings.
+
+    Timestamps are unioned; each ticker's last-known close is carried forward.
+    Leading timestamps are skipped until every holding has at least one price."""
+    per: dict = {}
+    for h in holdings:
+        sym    = h["symbol"]
+        shares = float(h.get("shares") or 0)
+        candles = _history_with_gap_fill(sym, window, force)
+        per[sym] = (shares, {c["t"]: c["c"] for c in candles})
+
+    if not per:
+        return []
+
+    all_ts = sorted({t for _, m in per.values() for t in m})
+    last   = {sym: None for sym in per}
+    out    = []
+    for t in all_ts:
+        for sym, (_, m) in per.items():
+            if t in m:
+                last[sym] = m[t]
+        if any(v is None for v in last.values()):
+            continue  # wait until every holding has a price
+        total = sum(shares * last[sym] for sym, (shares, _) in per.items())
+        out.append({"t": t, "c": round(total, 2)})
+    return out
+
+
+@router.get("/stocks/portfolio/history")
+async def get_portfolio_history(
+    kind:   str  = Query("stocks", description="'stocks' or 'crypto'"),
+    window: str  = Query("1m"),
+    force:  bool = Query(False),
+):
+    if window not in _WINDOW_MAP:
+        raise HTTPException(status_code=400, detail=f"Invalid window '{window}'")
+
+    wl       = _load_watchlist()
+    key      = "my_crypto" if kind == "crypto" else "my_stocks"
+    holdings = [h for h in wl.get(key, []) if float(h.get("shares") or 0) != 0]
+
+    loop    = asyncio.get_running_loop()
+    candles = await loop.run_in_executor(None, _portfolio_series, holdings, window, force)
+
+    # Current total value from live quotes.
+    quotes = await asyncio.gather(
+        *[loop.run_in_executor(None, _fetch_ticker, h["symbol"]) for h in holdings],
+        return_exceptions=True,
+    )
+    total = 0.0
+    for h, q in zip(holdings, quotes):
+        if isinstance(q, dict) and q.get("price") is not None:
+            total += float(h.get("shares") or 0) * q["price"]
+
+    chg = pct = None
+    if len(candles) >= 2 and candles[0]["c"]:
+        first, lastc = candles[0]["c"], candles[-1]["c"]
+        chg = lastc - first
+        pct = (chg / first * 100) if first else None
+
+    return {
+        "kind":       kind,
+        "window":     window,
+        "candles":    candles,
+        "count":      len(candles),
+        "total":      round(total, 2),
+        "total_fmt":  _fmt_price(total, _CURRENCY_SYM),
+        "change":     _fmt_change(chg, pct),
+        "holdings":   holdings,
+    }
+
+
+def _build_portfolio_analysis_context(
+    profile: dict,
+    rows: list,
+    grand_total: float,
+    market_open: bool,
+) -> str:
+    """Build the PORTFOLIO DATA block appended to the analyst persona prompt.
+
+    `rows` is a list of dicts: {symbol, type, shares, price, value, fundamentals}."""
+    import prompts
+
+    now_et   = datetime.now(_NYSE_TZ)
+    hour_str = str(now_et.hour % 12 or 12)
+    ampm     = "AM" if now_et.hour < 12 else "PM"
+    day_name = now_et.strftime("%A")
+    month    = now_et.strftime("%B")
+    day      = str(now_et.day)
+
+    persona = prompts.get("STOCKS_PORTFOLIO_ANALYST")
+
+    lines = [
+        f"[PORTFOLIO DATA — auto-generated from saved settings, "
+        f"{hour_str}:{now_et.strftime('%M')} {ampm} ET, {day_name} {month} {day}]",
+    ]
+
+    # Investor profile
+    lines.append("")
+    lines.append("INVESTOR PROFILE:")
+    lines.append(f"- Age: {profile.get('age') or 'not provided'}")
+    lines.append(f"- Risk Profile: {profile.get('risk_profile') or 'not provided'}")
+    lines.append(f"- Time Horizon: {profile.get('time_horizon') or 'not provided'}")
+    lines.append(f"- Primary Goal: {profile.get('primary_goal') or 'not provided'}")
+    lines.append(f"- Available Capital to Deploy: {profile.get('available_capital') or 'none right now'}")
+
+    # Holdings
+    lines.append("")
+    if grand_total > 0:
+        lines.append(f"CURRENT HOLDINGS (total portfolio value: {_fmt_price(grand_total, _CURRENCY_SYM)}):")
+    else:
+        lines.append("CURRENT HOLDINGS:")
+
+    if not rows:
+        lines.append("- (no holdings configured)")
+    for r in rows:
+        sym    = r["symbol"]
+        label  = sym.replace("-USD", "").replace("-USDT", "") if r["type"] == "crypto" else sym
+        atype  = "Crypto" if r["type"] == "crypto" else "Equity"
+        value  = r["value"]
+        pct    = (value / grand_total * 100) if grand_total > 0 else 0
+        shares = r["shares"]
+        price  = r["price"]
+        seg = (
+            f"- {label} | {atype} | {shares:g} units | "
+            f"price {_fmt_price(price, _CURRENCY_SYM) if price is not None else '—'} | "
+            f"value {_fmt_price(value, _CURRENCY_SYM)} | {pct:.1f}% of portfolio"
+        )
+        f = r.get("fundamentals") or {}
+        if r["type"] == "equity" and any(f.get(k) is not None for k in ("pe", "roe", "de", "fcf")):
+            metrics = []
+            if f.get("pe")  is not None: metrics.append(f"P/E {f['pe']}")
+            if f.get("roe") is not None: metrics.append(f"ROE {f['roe']}%")
+            if f.get("de")  is not None: metrics.append(f"D/E {f['de']}")
+            if f.get("fcf") is not None: metrics.append(f"FCF {_CURRENCY_SYM}{f['fcf']}")
+            seg += " | " + ", ".join(metrics)
+        elif r["type"] == "crypto":
+            seg += " | (equity fundamentals not applicable)"
+        lines.append(seg)
+
+    lines.append("")
+    lines.append(
+        "Market session: OPEN (live prices)." if market_open
+        else "Market session: CLOSED (equity prices are last-close; crypto trades 24/7)."
+    )
+
+    return f"{persona}\n\n{chr(10).join(lines)}"
+
+
+@router.get("/stocks/portfolio/analysis")
+async def get_portfolio_analysis(force: bool = Query(False)):
+    """Return the analyst persona prompt + a built PORTFOLIO DATA block for LLM injection."""
+    _t0 = time.time()
+    wl       = _load_watchlist()
+    profile  = wl.get("profile", dict(_DEFAULT_WATCHLIST["profile"]))
+    holdings = [
+        h for h in (wl.get("my_stocks", []) + wl.get("my_crypto", []))
+        if float(h.get("shares") or 0) != 0
+    ]
+
+    loop = asyncio.get_running_loop()
+
+    quotes = await asyncio.gather(
+        *[loop.run_in_executor(None, _fetch_ticker, h["symbol"]) for h in holdings],
+        return_exceptions=True,
+    )
+    fundamentals = await asyncio.gather(
+        *[loop.run_in_executor(None, _fetch_fundamentals, h["symbol"]) for h in holdings],
+        return_exceptions=True,
+    )
+
+    rows: list = []
+    grand_total = 0.0
+    for h, q, f in zip(holdings, quotes, fundamentals):
+        price  = q["price"] if isinstance(q, dict) and q.get("price") is not None else None
+        shares = float(h.get("shares") or 0)
+        value  = (price * shares) if price is not None else 0.0
+        grand_total += value
+        rows.append({
+            "symbol":       h["symbol"].upper(),
+            "type":         _ticker_type(h["symbol"]),
+            "shares":       shares,
+            "price":        price,
+            "value":        value,
+            "fundamentals": f if isinstance(f, dict) else {},
+        })
+
+    market_open = _is_us_market_open()
+    context = _build_portfolio_analysis_context(profile, rows, grand_total, market_open)
+
+    session_log.log("tool_result", {
+        "endpoint":       "/stocks/portfolio/analysis",
+        "status_code":    200,
+        "duration_ms":    round((time.time() - _t0) * 1000),
+        "result_summary": f"holdings={len(rows)}, total={round(grand_total, 2)}",
+    })
+
+    return {
+        "llm_context": context,
+        "profile":     profile,
+        "holdings":    rows,
+        "total":       round(grand_total, 2),
+        "total_fmt":   _fmt_price(grand_total, _CURRENCY_SYM),
+        "market_open": market_open,
+    }
+
 async def get_stocks():
     """Return live price data grouped by watchlist; backward-compat flat 'tickers' + 'llm_context' included."""
     _t0 = time.time()
@@ -462,6 +844,14 @@ async def get_stocks():
     })
     watchlist = _load_watchlist()
     symbols   = _flat_tickers(watchlist)
+
+    # Include My Stocks / My Crypto holdings so their quotes are available even
+    # when a holding ticker is not part of any watchlist group.
+    for key in ("my_stocks", "my_crypto"):
+        for h in watchlist.get(key, []):
+            sym = str(h.get("symbol", "")).strip().upper()
+            if sym and sym not in symbols:
+                symbols.append(sym)
 
     loop    = asyncio.get_running_loop()
     results = await asyncio.gather(

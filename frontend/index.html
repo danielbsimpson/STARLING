@@ -388,7 +388,10 @@
         <div class="mkt-header">
           <div class="mkt-title">MARKET WATCH</div>
           <div class="mkt-status" id="mkt-status">—</div>
-          <button class="mkt-close-btn" id="mkt-close-btn" title="Close market panel">✕</button>
+          <div class="mkt-header-actions">
+            <button class="mkt-settings-btn" id="mkt-settings-btn" title="Stock settings">⚙</button>
+            <button class="mkt-close-btn" id="mkt-close-btn" title="Close market panel">✕</button>
+          </div>
         </div>
 
         <!-- ── Dashboard view (default) ───────────────────────────────────── -->
@@ -496,6 +499,7 @@
                 <button class="spill active" data-w="1m" data-tile="4">1M</button>
                 <button class="spill" data-w="3m" data-tile="4">3M</button>
                 <button class="spill" data-w="1y" data-tile="4">1Y</button>
+                <button class="stocks-valtoggle hidden" data-tile="4" title="Toggle between share price and value of your holdings">VALUE</button>
               </div>
               <div class="stocks-canvas-wrap"><canvas id="sc-4"></canvas></div>
             </div>
@@ -516,6 +520,7 @@
                 <button class="spill active" data-w="1m" data-tile="5">1M</button>
                 <button class="spill" data-w="3m" data-tile="5">3M</button>
                 <button class="spill" data-w="1y" data-tile="5">1Y</button>
+                <button class="stocks-valtoggle hidden" data-tile="5" title="Toggle between unit price and value of your holdings">VALUE</button>
               </div>
               <div class="stocks-canvas-wrap"><canvas id="sc-5"></canvas></div>
             </div>

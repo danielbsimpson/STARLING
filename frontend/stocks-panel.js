@@ -38,6 +38,13 @@ let _sendToOllama   = null;
 let _onClose        = null;
 let _tilePeriod     = ['1m','1m','1m','1m','1m','1m'];
 
+// My Stocks (tile 4) / My Crypto (tile 5) holdings + view mode.
+// mode: 'portfolio' (combined total value) | 'price' (per-share price) | 'value' (shares × price)
+let _holdings   = { my_stocks: [], my_crypto: [] };
+let _profile    = { age: '', risk_profile: 'Moderate', time_horizon: '', primary_goal: '', available_capital: '' };
+let _tileMode   = { 4: 'portfolio', 5: 'portfolio' };
+const PORTFOLIO_VALUE = '__PORTFOLIO__';
+
 // Static tile config (tiles 0-3 are fixed)
 const TILE_SYMBOLS = ['^GSPC', '^IXIC', '^DJI', 'BTC-USD'];
 const TILE_COLORS  = ['#ffffff', '#88ddff', '#aaffaa', '#f7931a', '#88ddff', '#bb88ff'];
@@ -63,6 +70,9 @@ document.getElementById('mkt-close-btn')?.addEventListener('click', () => {
   else closeMarketPanel();
 });
 
+// ── Settings (gear) button ────────────────────────────────────────────────────
+document.getElementById('mkt-settings-btn')?.addEventListener('click', () => openStockSettings());
+
 // ── Back button & keyboard ────────────────────────────────────────────────────
 mktBackBtn?.addEventListener('click', closeDetailView);
 document.addEventListener('keydown', e => {
@@ -71,9 +81,20 @@ document.addEventListener('keydown', e => {
 
 // ── Window resize ─────────────────────────────────────────────────────────────
 window.addEventListener('resize', () => {
+  _resizeAllCharts();
+});
+
+// Re-fit charts once the panel finishes its width transition. Charts created
+// while the panel is still expanding from width:0 read a zero/partial container
+// size and render blank; resizing after the transition settles fixes that.
+mktPanel?.addEventListener('transitionend', e => {
+  if (e.propertyName === 'width') _resizeAllCharts();
+});
+
+function _resizeAllCharts() {
   Object.values(_tileCharts).forEach(c => c?.resize?.());
   _detailChart?.resize?.();
-});
+}
 
 // ── Tile pill clicks (event delegation) ──────────────────────────────────────
 document.getElementById('stocks-dashboard')?.addEventListener('click', e => {
@@ -93,19 +114,35 @@ document.getElementById('stocks-dashboard')?.addEventListener('click', e => {
   const tile = e.target.closest('.stocks-tile');
   if (!tile || e.target.closest('.stocks-tile-pills') || e.target.closest('.stocks-tile-sel')) return;
   const sym = _getActiveTileSymbol(Number(tile.id.replace('tile-', '')));
-  if (sym) openDetailView(sym);
+  if (sym && sym !== PORTFOLIO_VALUE) openDetailView(sym);
 });
 
 // ── Selectors (tiles 4 & 5) ───────────────────────────────────────────────────
-document.getElementById('sel-4')?.addEventListener('change', e => {
-  document.getElementById('tile-4').dataset.symbol = e.target.value;
-  _loadTileHistory(4, _tilePeriod[4], true);
-  _updateTileQuote(4);
-});
-document.getElementById('sel-5')?.addEventListener('change', e => {
-  document.getElementById('tile-5').dataset.symbol = e.target.value;
-  _loadTileHistory(5, _tilePeriod[5], true);
-  _updateTileQuote(5);
+document.getElementById('sel-4')?.addEventListener('change', e => _onHoldingSelect(4, e.target.value));
+document.getElementById('sel-5')?.addEventListener('change', e => _onHoldingSelect(5, e.target.value));
+
+function _onHoldingSelect(tileIdx, value) {
+  const tile = document.getElementById(`tile-${tileIdx}`);
+  if (tile) tile.dataset.symbol = value;
+  if (value === PORTFOLIO_VALUE) {
+    _tileMode[tileIdx] = 'portfolio';
+  } else if (_tileMode[tileIdx] === 'portfolio') {
+    _tileMode[tileIdx] = 'price';
+  }
+  _updateValToggle(tileIdx);
+  _loadMyTile(tileIdx, _tilePeriod[tileIdx], true);
+}
+
+// ── Value / price toggle (tiles 4 & 5) ────────────────────────────────────────
+document.getElementById('stocks-dashboard')?.addEventListener('click', e => {
+  const btn = e.target.closest('.stocks-valtoggle');
+  if (!btn) return;
+  e.stopPropagation();
+  const tileIdx = Number(btn.dataset.tile);
+  if (_tileMode[tileIdx] === 'portfolio') return;
+  _tileMode[tileIdx] = _tileMode[tileIdx] === 'value' ? 'price' : 'value';
+  _updateValToggle(tileIdx);
+  _loadMyTile(tileIdx, _tilePeriod[tileIdx], false);
 });
 
 // ── Detail window pills ───────────────────────────────────────────────────────
@@ -199,10 +236,15 @@ async function _loadDashboard(force = false) {
   const d = new Date(data.fetched_at);
   mktFetched.textContent = `UPDATED ${d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
 
+  await _loadHoldings();
   _renderGroupTabs(data.groups, data.default_group);
-  _populateSelectors(data.groups);
+  _populateSelectors();
   _updateAllTileQuotes(data.tickers);
   await _loadAllTileHistories(force);
+
+  // Ensure tile charts pick up correct dimensions once layout has settled
+  // (covers the case where the panel was mid-transition during creation).
+  requestAnimationFrame(() => requestAnimationFrame(() => _resizeAllCharts()));
 
   return data.llm_context;
 }
@@ -260,35 +302,77 @@ function _renderGroupTabs(groups, defaultGroup) {
   });
 }
 
-// ── Tile 4 / 5 selector population ───────────────────────────────────────────
-function _populateSelectors(groups) {
-  const equities = [];
-  const cryptos  = [];
-  groups.forEach(g => {
-    g.tickers.forEach(t => {
-      if (t.type === 'crypto') cryptos.push(t);
-      else if (t.type !== 'index') equities.push(t);
-    });
-  });
-
-  const sel4  = document.getElementById('sel-4');
-  const sel5  = document.getElementById('sel-5');
-  const tile4 = document.getElementById('tile-4');
-  const tile5 = document.getElementById('tile-5');
-
-  if (sel4 && equities.length) {
-    sel4.innerHTML = equities.map(t =>
-      `<option value="${escapeHtml(t.symbol)}">${escapeHtml(t.symbol)} — ${escapeHtml(t.name)}</option>`
-    ).join('');
-    tile4.dataset.symbol = equities[0].symbol;
+// ── Holdings load ─────────────────────────────────────────────────────────────
+async function _loadHoldings() {
+  try {
+    const res = await fetch(`${BACKEND_BASE}/stocks/holdings`);
+    if (!res.ok) throw new Error(`/holdings ${res.status}`);
+    const data = await res.json();
+    _holdings = {
+      my_stocks: Array.isArray(data.my_stocks) ? data.my_stocks : [],
+      my_crypto: Array.isArray(data.my_crypto) ? data.my_crypto : [],
+    };
+    if (data.profile && typeof data.profile === 'object') {
+      _profile = { ..._profile, ...data.profile };
+    }
+  } catch (err) {
+    console.error('[stocks-panel] holdings:', err);
+    _holdings = { my_stocks: [], my_crypto: [] };
   }
+}
 
-  if (sel5 && cryptos.length) {
-    sel5.innerHTML = cryptos.map(t => {
-      const label = t.symbol.replace('-USD','').replace('-USDT','');
-      return `<option value="${escapeHtml(t.symbol)}">${escapeHtml(label)}</option>`;
-    }).join('');
-    tile5.dataset.symbol = cryptos[0].symbol;
+function _holdingsFor(tileIdx) {
+  return tileIdx === 5 ? _holdings.my_crypto : _holdings.my_stocks;
+}
+
+function _kindFor(tileIdx) {
+  return tileIdx === 5 ? 'crypto' : 'stocks';
+}
+
+function _sharesFor(tileIdx, symbol) {
+  const h = _holdingsFor(tileIdx).find(x => x.symbol?.toUpperCase() === symbol?.toUpperCase());
+  return h ? Number(h.shares) || 0 : 0;
+}
+
+// ── Tile 4 / 5 selector population (My Stocks / My Crypto) ────────────────────
+function _populateSelectors() {
+  _buildHoldingSelector(4);
+  _buildHoldingSelector(5);
+}
+
+function _buildHoldingSelector(tileIdx) {
+  const sel  = document.getElementById(`sel-${tileIdx}`);
+  const tile = document.getElementById(`tile-${tileIdx}`);
+  if (!sel || !tile) return;
+
+  const items   = _holdingsFor(tileIdx);
+  const isCrypto = tileIdx === 5;
+
+  const opts = [`<option value="${PORTFOLIO_VALUE}">PORTFOLIO</option>`];
+  items.forEach(h => {
+    const sym   = h.symbol;
+    const label = isCrypto ? sym.replace('-USD', '').replace('-USDT', '') : sym;
+    opts.push(`<option value="${escapeHtml(sym)}">${escapeHtml(label)}</option>`);
+  });
+  sel.innerHTML = opts.join('');
+
+  // Default to the combined portfolio view.
+  sel.value          = PORTFOLIO_VALUE;
+  tile.dataset.symbol = PORTFOLIO_VALUE;
+  _tileMode[tileIdx]  = 'portfolio';
+  _updateValToggle(tileIdx);
+}
+
+function _updateValToggle(tileIdx) {
+  const btn = document.querySelector(`.stocks-valtoggle[data-tile="${tileIdx}"]`);
+  if (!btn) return;
+  const mode = _tileMode[tileIdx];
+  if (mode === 'portfolio') {
+    btn.classList.add('hidden');
+  } else {
+    btn.classList.remove('hidden');
+    btn.classList.toggle('active', mode === 'value');
+    btn.textContent = mode === 'value' ? 'VALUE' : 'PRICE';
   }
 }
 
@@ -323,9 +407,7 @@ function _applyQuoteToTile(i, q) {
 
 // ── History loading ───────────────────────────────────────────────────────────
 async function _loadAllTileHistories(force = false) {
-  const tile4sym = document.getElementById('tile-4')?.dataset.symbol || '';
-  const tile5sym = document.getElementById('tile-5')?.dataset.symbol || '';
-  const allSyms  = [...new Set(['^GSPC','^IXIC','^DJI','BTC-USD','ETH-USD', tile4sym, tile5sym].filter(Boolean))];
+  const allSyms = ['^GSPC', '^IXIC', '^DJI', 'BTC-USD', 'ETH-USD'];
 
   const url = `${BACKEND_BASE}/stocks/history/batch?tickers=${allSyms.join(',')}&window=1m${force ? '&force=true' : ''}`;
   let batch;
@@ -356,11 +438,83 @@ async function _loadAllTileHistories(force = false) {
     _renderTileChartDual(3, datasets);
   }
 
-  if (tile4sym && bySymbol[tile4sym]) _renderTileChart(4, [{data: _toXY(bySymbol[tile4sym].candles), color: TILE_COLORS[4]}]);
-  if (tile5sym && bySymbol[tile5sym]) _renderTileChart(5, [{data: _toXY(bySymbol[tile5sym].candles), color: TILE_COLORS[5]}]);
+  // Tiles 4 & 5: My Stocks / My Crypto (portfolio or per-ticker)
+  await Promise.all([
+    _loadMyTile(4, _tilePeriod[4], force),
+    _loadMyTile(5, _tilePeriod[5], force),
+  ]);
+}
+
+// Load a "My Stocks"/"My Crypto" tile in its current mode.
+async function _loadMyTile(tileIdx, win, force = false) {
+  const color = TILE_COLORS[tileIdx];
+  const mode  = _tileMode[tileIdx];
+
+  if (mode === 'portfolio') {
+    const kind = _kindFor(tileIdx);
+    let res;
+    try {
+      const r = await fetch(`${BACKEND_BASE}/stocks/portfolio/history?kind=${kind}&window=${win}${force ? '&force=true' : ''}`);
+      res = await r.json();
+    } catch (err) {
+      console.error(`[stocks-panel] portfolio ${kind}:`, err);
+      return;
+    }
+    _renderTileChart(tileIdx, [{ data: _toXY(res.candles), color }]);
+    _applyPortfolioQuote(tileIdx, res);
+    return;
+  }
+
+  const sym = document.getElementById(`tile-${tileIdx}`)?.dataset.symbol;
+  if (!sym || sym === PORTFOLIO_VALUE) return;
+  try {
+    const res  = await fetch(`${BACKEND_BASE}/stocks/history?ticker=${sym}&window=${win}${force ? '&force=true' : ''}`);
+    const item = await res.json();
+    let pts = _toXY(item.candles);
+    if (mode === 'value') {
+      const sh = _sharesFor(tileIdx, sym);
+      pts = pts.map(p => ({ x: p.x, y: p.y * sh }));
+    }
+    _renderTileChart(tileIdx, [{ data: pts, color }]);
+    _applyHoldingQuote(tileIdx, sym, mode);
+  } catch (err) {
+    console.error(`[stocks-panel] tile ${tileIdx} history:`, err);
+  }
+}
+
+function _applyPortfolioQuote(tileIdx, res) {
+  const price = document.getElementById(`tp-${tileIdx}-price`);
+  const chg   = document.getElementById(`tp-${tileIdx}-chg`);
+  if (price) price.textContent = res?.total_fmt ?? '—';
+  if (chg && res?.change) {
+    chg.textContent       = res.change.pct;
+    chg.dataset.direction = res.change.direction;
+  }
+}
+
+function _applyHoldingQuote(tileIdx, sym, mode) {
+  const q = _mktData?.tickers.find(t => t.symbol === sym);
+  const price = document.getElementById(`tp-${tileIdx}-price`);
+  const chg   = document.getElementById(`tp-${tileIdx}-chg`);
+  if (!q) return;
+  if (mode === 'value' && q.price != null) {
+    const sh  = _sharesFor(tileIdx, sym);
+    const val = sh * q.price;
+    if (price) price.textContent = _fmtMoney(val);
+  } else if (price) {
+    price.textContent = q.price_fmt;
+  }
+  if (chg) {
+    chg.textContent       = q.change.pct;
+    chg.dataset.direction = q.change.direction;
+  }
 }
 
 async function _loadTileHistory(tileIdx, win, force = false) {
+  if (tileIdx === 4 || tileIdx === 5) {
+    await _loadMyTile(tileIdx, win, force);
+    return;
+  }
   if (tileIdx === 3) {
     const [btcRes, ethRes] = await Promise.all([
       fetch(`${BACKEND_BASE}/stocks/history?ticker=BTC-USD&window=${win}${force ? '&force=true' : ''}`).then(r => r.json()).catch(() => null),
@@ -657,6 +811,15 @@ function _toXY(candles) {
   return (candles || []).map(c => ({ x: c.t, y: c.c }));
 }
 
+function _fmtMoney(val) {
+  const sym = _mktData?.currency_sym || '$';
+  if (val == null || Number.isNaN(val)) return '—';
+  const abs = Math.abs(val);
+  if (abs >= 1000) return `${sym}${val.toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 })}`;
+  if (abs >= 1)    return `${sym}${val.toFixed(2)}`;
+  return `${sym}${val.toFixed(4)}`;
+}
+
 function _hexAlpha(hex, alpha) {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
@@ -667,4 +830,196 @@ function _hexAlpha(hex, alpha) {
 function _fmtDate(ts) {
   if (!ts) return '';
   return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// ── Stock settings modal ──────────────────────────────────────────────────────
+let _settingsOverlay = null;
+
+export async function openStockSettings() {
+  // Always pull the latest holdings so the editor is in sync with the backend.
+  await _loadHoldings();
+
+  if (!_settingsOverlay) _settingsOverlay = _buildSettingsOverlay();
+  _renderSettingsRows('my_stocks', _holdings.my_stocks);
+  _renderSettingsRows('my_crypto', _holdings.my_crypto);
+  _populateProfileFields();
+  _settingsOverlay.classList.remove('hidden');
+}
+
+function closeStockSettings() {
+  _settingsOverlay?.classList.add('hidden');
+}
+
+function _buildSettingsOverlay() {
+  const overlay = document.createElement('div');
+  overlay.className = 'stk-settings-overlay hidden';
+  overlay.id        = 'stk-settings-overlay';
+  overlay.innerHTML = `
+    <div class="stk-settings-modal">
+      <div class="stk-settings-hdr">
+        <span class="stk-settings-title">STOCK SETTINGS</span>
+        <button class="stk-settings-close" id="stk-settings-close" title="Close">✕</button>
+      </div>
+      <p class="stk-settings-sub">Configure the tickers and share counts tracked in your My&nbsp;Stocks and My&nbsp;Crypto graphs.</p>
+      <div class="stk-settings-cols">
+        <div class="stk-settings-col">
+          <div class="stk-settings-col-hdr">MY STOCKS</div>
+          <div class="stk-settings-rows" id="stk-rows-my_stocks"></div>
+          <button class="stk-settings-add" data-kind="my_stocks">+ ADD STOCK</button>
+        </div>
+        <div class="stk-settings-col">
+          <div class="stk-settings-col-hdr">MY CRYPTO</div>
+          <div class="stk-settings-rows" id="stk-rows-my_crypto"></div>
+          <button class="stk-settings-add" data-kind="my_crypto">+ ADD CRYPTO</button>
+        </div>
+      </div>
+      <div class="stk-settings-profile">
+        <div class="stk-settings-col-hdr">INVESTOR PROFILE</div>
+        <p class="stk-settings-sub">Used to tailor the AI portfolio analyst that activates with the market panel.</p>
+        <div class="stk-profile-grid">
+          <label class="stk-profile-field">
+            <span>Age</span>
+            <input class="stk-profile-input" id="stk-profile-age" type="number" min="0" max="120" placeholder="e.g. 34" />
+          </label>
+          <label class="stk-profile-field">
+            <span>Risk Profile</span>
+            <select class="stk-profile-input" id="stk-profile-risk_profile">
+              <option value="Conservative">Conservative</option>
+              <option value="Moderate">Moderate</option>
+              <option value="Aggressive">Aggressive</option>
+            </select>
+          </label>
+          <label class="stk-profile-field">
+            <span>Time Horizon</span>
+            <input class="stk-profile-input" id="stk-profile-time_horizon" type="text" placeholder="e.g. 20+ years" />
+          </label>
+          <label class="stk-profile-field">
+            <span>Primary Goal</span>
+            <input class="stk-profile-input" id="stk-profile-primary_goal" type="text" placeholder="e.g. retirement growth" />
+          </label>
+          <label class="stk-profile-field stk-profile-field-wide">
+            <span>Available Capital to Deploy</span>
+            <input class="stk-profile-input" id="stk-profile-available_capital" type="text" placeholder="e.g. $5,000" />
+          </label>
+        </div>
+      </div>
+      <div class="stk-settings-ftr">
+        <span class="stk-settings-msg" id="stk-settings-msg"></span>
+        <div class="stk-settings-actions">
+          <button class="stk-settings-cancel" id="stk-settings-cancel">CANCEL</button>
+          <button class="stk-settings-save" id="stk-settings-save">SAVE</button>
+        </div>
+      </div>
+    </div>`;
+
+  document.body.appendChild(overlay);
+
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeStockSettings(); });
+  overlay.querySelector('#stk-settings-close').addEventListener('click', closeStockSettings);
+  overlay.querySelector('#stk-settings-cancel').addEventListener('click', closeStockSettings);
+  overlay.querySelector('#stk-settings-save').addEventListener('click', _saveStockSettings);
+
+  overlay.querySelectorAll('.stk-settings-add').forEach(btn => {
+    btn.addEventListener('click', () => _addSettingsRow(btn.dataset.kind));
+  });
+
+  // Row remove (event delegation)
+  overlay.addEventListener('click', e => {
+    const rm = e.target.closest('.stk-row-remove');
+    if (rm) rm.closest('.stk-row')?.remove();
+  });
+
+  return overlay;
+}
+
+function _renderSettingsRows(kind, holdings) {
+  const container = document.getElementById(`stk-rows-${kind}`);
+  if (!container) return;
+  container.innerHTML = '';
+  (holdings || []).forEach(h => container.appendChild(_settingsRow(h.symbol, h.shares)));
+  if (!holdings || !holdings.length) container.appendChild(_settingsRow('', ''));
+}
+
+function _addSettingsRow(kind) {
+  const container = document.getElementById(`stk-rows-${kind}`);
+  container?.appendChild(_settingsRow('', ''));
+}
+
+const _PROFILE_FIELDS = ['age', 'risk_profile', 'time_horizon', 'primary_goal', 'available_capital'];
+
+function _populateProfileFields() {
+  _PROFILE_FIELDS.forEach(f => {
+    const el = document.getElementById(`stk-profile-${f}`);
+    if (el) el.value = _profile[f] ?? '';
+  });
+}
+
+function _collectProfile() {
+  const out = {};
+  _PROFILE_FIELDS.forEach(f => {
+    const el = document.getElementById(`stk-profile-${f}`);
+    out[f] = el ? String(el.value).trim() : '';
+  });
+  return out;
+}
+
+function _settingsRow(symbol, shares) {
+  const row = document.createElement('div');
+  row.className = 'stk-row';
+  row.innerHTML = `
+    <input class="stk-row-sym" type="text" placeholder="TICKER" value="${escapeHtml(String(symbol ?? ''))}" maxlength="12" />
+    <input class="stk-row-sh" type="number" step="any" min="0" placeholder="SHARES" value="${escapeHtml(String(shares ?? ''))}" />
+    <button class="stk-row-remove" title="Remove">✕</button>`;
+  return row;
+}
+
+function _collectSettings(kind) {
+  const container = document.getElementById(`stk-rows-${kind}`);
+  const out = [];
+  container?.querySelectorAll('.stk-row').forEach(row => {
+    const sym    = row.querySelector('.stk-row-sym')?.value.trim().toUpperCase();
+    const shares = parseFloat(row.querySelector('.stk-row-sh')?.value);
+    if (sym) out.push({ symbol: sym, shares: Number.isFinite(shares) ? shares : 0 });
+  });
+  return out;
+}
+
+async function _saveStockSettings() {
+  const saveBtn = document.getElementById('stk-settings-save');
+  const msg     = document.getElementById('stk-settings-msg');
+  const profile = _collectProfile();
+  const payload = {
+    my_stocks: _collectSettings('my_stocks'),
+    my_crypto: _collectSettings('my_crypto'),
+    profile,
+  };
+
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'SAVING…'; }
+  if (msg) msg.textContent = '';
+
+  try {
+    const res = await fetch(`${BACKEND_BASE}/stocks/holdings`, {
+      method:  'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(`/holdings ${res.status}`);
+    _holdings = { my_stocks: payload.my_stocks, my_crypto: payload.my_crypto };
+    _profile  = profile;
+
+    // Refresh the My Stocks / My Crypto tiles if the dashboard is live.
+    if (!mktPanel.classList.contains('hidden')) {
+      _populateSelectors();
+      await Promise.all([
+        _loadMyTile(4, _tilePeriod[4], true),
+        _loadMyTile(5, _tilePeriod[5], true),
+      ]);
+    }
+    closeStockSettings();
+  } catch (err) {
+    console.error('[stocks-panel] save settings:', err);
+    if (msg) msg.textContent = 'Save failed — try again.';
+  } finally {
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'SAVE'; }
+  }
 }

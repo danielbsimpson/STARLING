@@ -3308,6 +3308,33 @@ a.news-story-source-title:hover {
 
 .mkt-close-btn:hover { border-color: rgba(255,255,255,0.35); color: #ccc; }
 
+/* Settings (gear) button — sits to the left of the close button */
+.mkt-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.mkt-settings-btn {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 4px;
+  color: #666;
+  cursor: pointer;
+  font-size: 0.8rem;
+  line-height: 1;
+  padding: 2px 7px;
+  transition: border-color 0.15s, color 0.15s, transform 0.3s;
+  flex-shrink: 0;
+}
+
+.mkt-settings-btn:hover {
+  border-color: rgba(255,255,255,0.35);
+  color: #ccc;
+  transform: rotate(45deg);
+}
+
 /* Filter tabs */
 .mkt-tabs {
   display: flex;
@@ -3793,6 +3820,274 @@ a.news-story-source-title:hover {
 
 .spill:hover  { background: rgba(255,255,255,0.05); color: #aaa; }
 .spill.active { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.25); color: #e0e0e0; }
+
+/* My Stocks / My Crypto price↔value toggle */
+.stocks-valtoggle {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid rgba(136,221,255,0.25);
+  border-radius: 3px;
+  color: #6aa9c4;
+  cursor: pointer;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.55rem;
+  padding: 1px 6px;
+  letter-spacing: 0.06em;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.stocks-valtoggle:hover  { background: rgba(136,221,255,0.08); color: #9cd; }
+.stocks-valtoggle.active {
+  background: rgba(136,221,255,0.16);
+  border-color: rgba(136,221,255,0.45);
+  color: #bfe6f5;
+}
+.stocks-valtoggle.hidden { display: none; }
+
+/* ── Stock settings modal ────────────────────────────────────────────────── */
+.stk-settings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(3px);
+  animation: weatherFadeIn 0.2s ease;
+}
+
+.stk-settings-overlay.hidden { display: none; }
+
+.stk-settings-modal {
+  width: min(620px, 92vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  background: #0c0e12;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px;
+  padding: 18px 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.55);
+}
+
+.stk-settings-hdr {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.stk-settings-title {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.85rem;
+  letter-spacing: 0.14em;
+  color: #e0e0e0;
+}
+
+.stk-settings-close {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 4px;
+  color: #777;
+  cursor: pointer;
+  font-size: 0.7rem;
+  padding: 2px 7px;
+  transition: border-color 0.15s, color 0.15s;
+}
+.stk-settings-close:hover { border-color: rgba(255,255,255,0.35); color: #ccc; }
+
+.stk-settings-sub {
+  font-size: 0.66rem;
+  color: #777;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.stk-settings-cols {
+  display: flex;
+  gap: 16px;
+}
+
+.stk-settings-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stk-settings-col-hdr {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  color: #88ddff;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  padding-bottom: 5px;
+}
+
+.stk-settings-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stk-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.stk-row-sym,
+.stk-row-sh {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 4px;
+  color: #ddd;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.66rem;
+  padding: 5px 7px;
+  min-width: 0;
+}
+
+.stk-row-sym { flex: 1; text-transform: uppercase; }
+.stk-row-sh  { width: 78px; flex-shrink: 0; }
+
+.stk-row-sym:focus,
+.stk-row-sh:focus { outline: none; border-color: rgba(136,221,255,0.45); }
+
+.stk-row-remove {
+  background: transparent;
+  border: 1px solid rgba(255,120,120,0.25);
+  border-radius: 4px;
+  color: #b66;
+  cursor: pointer;
+  font-size: 0.6rem;
+  padding: 4px 7px;
+  flex-shrink: 0;
+  transition: border-color 0.15s, color 0.15s;
+}
+.stk-row-remove:hover { border-color: rgba(255,120,120,0.55); color: #f88; }
+
+.stk-settings-add {
+  background: transparent;
+  border: 1px dashed rgba(255,255,255,0.15);
+  border-radius: 4px;
+  color: #888;
+  cursor: pointer;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  padding: 5px;
+  transition: border-color 0.15s, color 0.15s;
+}
+.stk-settings-add:hover { border-color: rgba(255,255,255,0.35); color: #bbb; }
+
+/* ── Investor profile section ── */
+.stk-settings-profile {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  padding-top: 14px;
+}
+
+.stk-profile-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.stk-profile-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.stk-profile-field-wide {
+  grid-column: 1 / -1;
+}
+
+.stk-profile-field > span {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.08em;
+  color: #888;
+}
+
+.stk-profile-input {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 4px;
+  color: #ddd;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.66rem;
+  padding: 5px 7px;
+  min-width: 0;
+}
+
+.stk-profile-input:focus { outline: none; border-color: rgba(136,221,255,0.45); }
+
+.stk-settings-ftr {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  padding-top: 12px;
+}
+
+.stk-settings-msg {
+  font-size: 0.62rem;
+  color: #ff8888;
+}
+
+.stk-settings-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.stk-settings-cancel,
+.stk-settings-save {
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  padding: 6px 14px;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.stk-settings-cancel {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.12);
+  color: #888;
+}
+.stk-settings-cancel:hover { border-color: rgba(255,255,255,0.35); color: #ccc; }
+
+.stk-settings-save {
+  background: rgba(136,221,255,0.14);
+  border: 1px solid rgba(136,221,255,0.4);
+  color: #bfe6f5;
+}
+.stk-settings-save:hover  { background: rgba(136,221,255,0.24); }
+.stk-settings-save:disabled { opacity: 0.5; cursor: default; }
+
+/* Toolkit menu "Stock Settings" button */
+.toolkit-settings-btn {
+  background: rgba(136,221,255,0.1);
+  border: 1px solid rgba(136,221,255,0.35);
+  border-radius: 4px;
+  color: #bfe6f5;
+  cursor: pointer;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  padding: 6px 12px;
+  transition: background 0.15s;
+}
+.toolkit-settings-btn:hover { background: rgba(136,221,255,0.2); }
 
 /* Canvas wrapper fills remaining tile height */
 .stocks-canvas-wrap {
