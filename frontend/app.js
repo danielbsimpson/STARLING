@@ -3,8 +3,8 @@ import { BACKEND_BASE, BOOT_ANIMATION_MS, SHUTDOWN_ANIMATION_MS, SLEEP_AFTER_MS,
 import { detectTimerTrigger, handleTimerTrigger, initTimerPanel, dismissTimerPanel } from './timer-panel.js';
 import { detectWeatherTrigger, openWeatherPanel, closeWeatherPanel, initWeatherPanel, isWeatherPanelOpen, getWeatherContext } from './weather-panel.js';
 import { detectNewsTrigger, openNewsPanel, closeNewsPanel, initNewsPanel, isNewsPanelOpen, getActiveArticleContext } from './news-panel.js';
-import { detectRedditTrigger, openRedditPanel, closeRedditPanel, initRedditPanel } from './reddit-panel.js';
-import { detectYouTubeTrigger, openYouTubePanel, closeYouTubePanel, initYouTubePanel } from './youtube-panel.js';
+import { detectRedditTrigger, openRedditPanel, closeRedditPanel, initRedditPanel, openRedditSettings } from './reddit-panel.js';
+import { detectYouTubeTrigger, openYouTubePanel, closeYouTubePanel, initYouTubePanel, openYouTubeSettings } from './youtube-panel.js';
 import { detectMarketTrigger, openMarketPanel, closeMarketPanel, openStockSettings, setSendToOllama as _setMktSendToOllama, setOnClose as _setMktOnClose } from './stocks-panel.js';
 import { detectCalendarTrigger, openCalendarPanel, closeCalendarPanel, isCalendarPanelOpen } from './calendar-panel.js';
 import { detectMailTrigger, openMailPanel, closeMailPanel, isMailPanelOpen } from './mail-panel.js';
@@ -777,6 +777,89 @@ const TOOLKIT_REGISTRY = [
       btn.textContent = '⚙ STOCK SETTINGS';
       btn.title       = 'Edit tracked tickers and share counts';
       btn.addEventListener('click', e => { e.stopPropagation(); openStockSettings(); });
+      container.appendChild(btn);
+    },
+  },
+  {
+    id: 'youtube',
+    name: 'YouTube Feed',
+    description: 'Displays a live feed of recent videos from your tracked YouTube channels, with filtering, sorting, and a spoken briefing.',
+    ttsScript: 'The YouTube Feed tool displays recent videos from your tracked channels, with filtering and a spoken briefing. Say: open YouTube feed.',
+    phrases: ['open YouTube feed', 'view YouTube feed'],
+    openFn: async () => {
+      closeBrowserPanel();
+      enterYouTubeMode();
+      const ytContext = await openYouTubePanel({});
+      if (ytContext) {
+        await sendToOllama(
+          "Give me a brief spoken summary of what's new on my YouTube feed. " +
+          'For each channel, mention the one or two most interesting recent videos. ' +
+          'Keep the whole summary under forty-five seconds when spoken aloud.',
+          {
+            ephemeralMessages: [
+              { role: 'system', content: SYSTEM_PROMPT },
+              { role: 'system', content: `${_currentTimeContext()}\n${ytContext}` },
+            ],
+          }
+        );
+      } else {
+        exitYouTubeMode();
+        await sendToOllama('Inform the user that the YouTube feed could not be reached right now. One sentence.');
+      }
+      fetchSystemStatus();
+    },
+    renderExtraFn: (container) => {
+      const btn = document.createElement('button');
+      btn.className   = 'toolkit-settings-btn';
+      btn.textContent = '⚙ YOUTUBE CHANNELS';
+      btn.title       = 'Add or remove tracked YouTube channels';
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        closeToolkitPanel();
+        enterYouTubeMode();
+        openYouTubeSettings();
+      });
+      container.appendChild(btn);
+    },
+  },
+  {
+    id: 'reddit',
+    name: 'Reddit Social',
+    description: 'Displays trending posts from your tracked subreddits, with per-subreddit filtering and a spoken briefing.',
+    ttsScript: 'The Reddit Social tool displays trending posts from your tracked subreddits, with filtering and a spoken briefing. Say: open Reddit social.',
+    phrases: ['open Reddit social', 'view Reddit social'],
+    openFn: async () => {
+      closeBrowserPanel();
+      const redditContext = await openRedditPanel({});
+      if (redditContext) {
+        enterRedditMode();
+        await sendToOllama(
+          "Deliver a concise spoken summary of what's trending on Reddit right now. " +
+          'For each subreddit, pick the one or two most interesting posts and describe them in one sentence. ' +
+          'Keep the whole briefing under forty-five seconds when spoken aloud.',
+          {
+            ephemeralMessages: [
+              { role: 'system', content: SYSTEM_PROMPT },
+              { role: 'system', content: `${_currentTimeContext()}\n${redditContext}` },
+            ],
+          }
+        );
+      } else {
+        await sendToOllama('Inform the user that the Reddit feed could not be reached right now. One sentence.');
+      }
+      fetchSystemStatus();
+    },
+    renderExtraFn: (container) => {
+      const btn = document.createElement('button');
+      btn.className   = 'toolkit-settings-btn';
+      btn.textContent = '⚙ SUBREDDITS';
+      btn.title       = 'Add or remove tracked subreddits';
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        closeToolkitPanel();
+        enterRedditMode();
+        openRedditSettings();
+      });
       container.appendChild(btn);
     },
   },

@@ -3076,7 +3076,99 @@ a.news-story-source-title:hover {
 }
 
 .yt-settings-channel-row--pending {
-  opacity: 0.55;
+  opacity: 0.85;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.yt-settings-pending-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.yt-settings-resolve-btn {
+  margin-left: auto;
+  background: rgba(120, 180, 255, 0.08);
+  border: 1px solid rgba(120, 180, 255, 0.22);
+  border-radius: 2px;
+  color: rgba(170, 205, 255, 0.85);
+  cursor: pointer;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 1px;
+  padding: 2px 8px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.yt-settings-resolve-btn:hover {
+  background: rgba(120, 180, 255, 0.16);
+  color: rgba(200, 225, 255, 0.95);
+}
+
+.yt-settings-resolver {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.yt-settings-resolver-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.yt-settings-resolver-input {
+  flex: 1;
+  background: rgba(200, 200, 200, 0.05);
+  border: 1px solid rgba(200, 200, 200, 0.18);
+  color: var(--c);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  padding: 5px 9px;
+  border-radius: 2px;
+  outline: none;
+}
+
+.yt-settings-resolver-input:focus {
+  border-color: rgba(200, 200, 200, 0.45);
+}
+
+.yt-settings-resolver-input::placeholder {
+  color: rgba(200, 200, 200, 0.25);
+}
+
+.yt-settings-resolver-save {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: #999;
+  cursor: pointer;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  padding: 4px 12px;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.yt-settings-resolver-save:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: #cfe6f5;
+}
+
+.yt-settings-resolver-save:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.yt-settings-resolver-error {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9.5px;
+  color: rgba(255, 120, 80, 0.85);
+  letter-spacing: 0.5px;
 }
 
 .yt-settings-pending-header {
@@ -4085,6 +4177,8 @@ a.news-story-source-title:hover {
   font-size: 0.62rem;
   letter-spacing: 0.08em;
   padding: 6px 12px;
+  width: auto;
+  align-self: flex-start;
   transition: background 0.15s;
 }
 .toolkit-settings-btn:hover { background: rgba(136,221,255,0.2); }

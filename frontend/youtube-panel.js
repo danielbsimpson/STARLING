@@ -114,6 +114,15 @@ export function closeYouTubePanel() {
 }
 
 /**
+ * Open the YouTube panel directly into its channel-management settings view.
+ * Re-uses the in-panel settings UI so channels can be edited from the toolkit menu.
+ */
+export async function openYouTubeSettings() {
+  await openYouTubePanel({ silent: true });
+  _showSettingsView();
+}
+
+/**
  * Inject service references and wire the refresh button.
  * Call once during app initialisation.
  */
@@ -201,7 +210,7 @@ async function _fetchAndRenderChannelList() {
         header.textContent = `${pending.length} CHANNEL${pending.length === 1 ? '' : 'S'} PENDING RESOLUTION`;
         ytSettingsChannelList.appendChild(header);
         for (const ch of pending) {
-          ytSettingsChannelList.appendChild(_createPendingChannelRow(ch.name, ch.handle));
+          ytSettingsChannelList.appendChild(_createPendingChannelRow(ch.name, ch.handle, ch.index));
         }
       }
     }
@@ -233,21 +242,124 @@ function _createChannelRow(channelId, displayName) {
   return row;
 }
 
-function _createPendingChannelRow(displayName, handle) {
+function _createPendingChannelRow(displayName, handle, index) {
   const row = document.createElement('div');
   row.className = 'yt-settings-channel-row yt-settings-channel-row--pending';
+
+  // ── Top line: name + RESOLVE toggle + remove ────────────────────────────────
+  const top = document.createElement('div');
+  top.className = 'yt-settings-pending-top';
 
   const nameEl = document.createElement('div');
   nameEl.className = 'yt-settings-channel-name';
   nameEl.textContent = displayName || handle || '(unknown)';
-  row.appendChild(nameEl);
+  top.appendChild(nameEl);
 
-  const badge = document.createElement('span');
-  badge.className = 'yt-settings-pending-badge';
-  badge.textContent = 'PENDING';
-  row.appendChild(badge);
+  const resolveToggle = document.createElement('button');
+  resolveToggle.className = 'yt-settings-resolve-btn';
+  resolveToggle.textContent = 'RESOLVE';
+  resolveToggle.title = 'Provide the channel ID, handle, or URL to activate this channel';
+  top.appendChild(resolveToggle);
+
+  const removeBtn = document.createElement('button');
+  removeBtn.className = 'yt-settings-remove-btn';
+  removeBtn.title = 'Remove channel';
+  removeBtn.textContent = '\u2715';
+  removeBtn.addEventListener('click', async () => {
+    removeBtn.disabled = true;
+    const ok = await _removePendingChannel(index);
+    if (!ok) removeBtn.disabled = false;
+  });
+  top.appendChild(removeBtn);
+
+  row.appendChild(top);
+
+  // ── Inline resolver (hidden until RESOLVE is clicked) ───────────────────────
+  const resolver = document.createElement('div');
+  resolver.className = 'yt-settings-resolver hidden';
+
+  const inputRow = document.createElement('div');
+  inputRow.className = 'yt-settings-resolver-row';
+
+  const input = document.createElement('input');
+  input.className = 'yt-settings-resolver-input';
+  input.type = 'text';
+  input.placeholder = 'Channel ID (UC…), @handle, or channel URL';
+  input.spellcheck = false;
+  input.autocomplete = 'off';
+  if (handle) input.value = '@' + String(handle).replace(/^@/, '');
+
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'yt-settings-resolver-save';
+  saveBtn.textContent = 'SAVE';
+
+  const errEl = document.createElement('div');
+  errEl.className = 'yt-settings-resolver-error hidden';
+
+  const submit = async () => {
+    errEl.classList.add('hidden');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'RESOLVING…';
+    const result = await _resolvePendingChannel(index, input.value);
+    if (!result.ok) {
+      errEl.textContent = result.detail || 'Could not resolve channel.';
+      errEl.classList.remove('hidden');
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'SAVE';
+    }
+  };
+  saveBtn.addEventListener('click', submit);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+  input.addEventListener('input', () => errEl.classList.add('hidden'));
+
+  inputRow.append(input, saveBtn);
+  resolver.append(inputRow, errEl);
+  row.appendChild(resolver);
+
+  resolveToggle.addEventListener('click', () => {
+    const nowHidden = resolver.classList.toggle('hidden');
+    if (!nowHidden) input.focus();
+  });
 
   return row;
+}
+
+async function _resolvePendingChannel(index, rawValue) {
+  const value = (rawValue || '').trim();
+  if (!value) return { ok: false, detail: 'Enter a channel ID, handle, or URL.' };
+  try {
+    const res = await fetch(`${BACKEND_BASE}/youtube/channels/pending/${index}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: value }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return { ok: false, detail: body.detail || 'Could not resolve channel.' };
+    }
+    await _fetchAndRenderChannelList();
+    _hardRefresh(); // background refresh — do not await
+    return { ok: true };
+  } catch (_) {
+    return { ok: false, detail: 'Could not resolve channel.' };
+  }
+}
+
+async function _removePendingChannel(index) {
+  try {
+    const res = await fetch(`${BACKEND_BASE}/youtube/channels/pending/${index}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      _showSettingsError(body.detail || 'Failed to remove channel.');
+      return false;
+    }
+    await _fetchAndRenderChannelList();
+    _hardRefresh(); // background refresh — do not await
+    return true;
+  } catch (_) {
+    _showSettingsError('Failed to remove channel.');
+    return false;
+  }
 }
 
 async function _removeChannel(channelId) {
@@ -268,9 +380,9 @@ async function _removeChannel(channelId) {
 }
 
 async function _addChannel(rawValue) {
-  const channelId = (rawValue || '').trim();
-  if (!/^UC[A-Za-z0-9_\-]{22}$/.test(channelId)) {
-    _showSettingsError('Invalid format. Must be a YouTube channel ID starting with UC (26 chars total).');
+  const value = (rawValue || '').trim();
+  if (!value) {
+    _showSettingsError('Enter a channel ID (UC…), an @handle, or a channel URL.');
     return;
   }
   if (ytSettingsAddBtn) ytSettingsAddBtn.disabled = true;
@@ -278,7 +390,7 @@ async function _addChannel(rawValue) {
     const res = await fetch(`${BACKEND_BASE}/youtube/channels`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ channel_id: channelId }),
+      body: JSON.stringify({ input: value }),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));

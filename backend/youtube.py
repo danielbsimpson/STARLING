@@ -175,6 +175,79 @@ def _save_channels(channels: list[str]) -> None:
     except Exception as exc:
         logger.error("Failed to save youtube_channels.json: %s", exc)
 
+
+def _save_objects(objects: list[dict]) -> None:
+    """Persist the full channel object list (including pending, unresolved entries) verbatim."""
+    try:
+        _CHANNELS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _CHANNELS_FILE.write_text(json.dumps(objects, indent=2), encoding="utf-8")
+    except Exception as exc:
+        logger.error("Failed to save youtube_channels.json: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to save channels.")
+
+
+def _parse_channel_input(raw: str) -> dict:
+    """Parse freeform user input into {"channel_id": ...} or {"handle": ...}.
+
+    Accepts: a bare UC channel ID, a /channel/UC… URL, a youtube.com/@handle URL,
+    a legacy /c/<name> or /user/<name> URL, an RSS feed URL containing channel_id,
+    a bare @handle, or a bare handle/name. Returns {} if nothing usable is found.
+    """
+    s = (raw or "").strip()
+    if not s:
+        return {}
+
+    # Direct UC channel ID
+    if _CHANNEL_ID_RE.match(s):
+        return {"channel_id": s}
+
+    # RSS feed URL: ...feeds/videos.xml?channel_id=UC...
+    m = re.search(r"[?&]channel_id=(UC[A-Za-z0-9_\-]{22})", s)
+    if m:
+        return {"channel_id": m.group(1)}
+
+    # Canonical channel URL: youtube.com/channel/UC...
+    m = re.search(r"youtube\.com/channel/(UC[A-Za-z0-9_\-]{22})", s)
+    if m:
+        return {"channel_id": m.group(1)}
+
+    # Handle URL: youtube.com/@handle
+    m = re.search(r"youtube\.com/@([A-Za-z0-9._-]{1,100})", s)
+    if m:
+        return {"handle": m.group(1)}
+
+    # Legacy custom/user URL: youtube.com/c/<name> or youtube.com/user/<name>
+    m = re.search(r"youtube\.com/(?:c|user)/([A-Za-z0-9._-]{1,100})", s)
+    if m:
+        return {"handle": m.group(1)}
+
+    # Bare @handle
+    if s.startswith("@"):
+        clean = s[1:]
+        return {"handle": clean} if re.match(r"^[A-Za-z0-9._-]{1,100}$", clean) else {}
+
+    # Bare handle / channel name (no spaces, handle-safe characters)
+    if re.match(r"^[A-Za-z0-9._-]{1,100}$", s):
+        return {"handle": s}
+
+    return {}
+
+
+async def _resolve_input_to_channel_id(parsed: dict) -> str | None:
+    """Resolve a parsed input dict to a UC channel ID, scraping the handle if needed."""
+    cid = parsed.get("channel_id")
+    if cid and _CHANNEL_ID_RE.match(cid):
+        return cid
+    handle = parsed.get("handle")
+    if not handle:
+        return None
+    new_id = None
+    if _API_CONFIGURED:
+        new_id = await _resolve_handle_to_channel_id(handle)
+    if new_id is None:
+        new_id = await _resolve_handle_no_api(handle)
+    return new_id if (new_id and _CHANNEL_ID_RE.match(new_id)) else None
+
 # ── Config — Phase 2 (YouTube Data API v3, optional) ─────────────────────────
 YOUTUBE_API_KEY   = os.getenv("YOUTUBE_API_KEY", "")
 YOUTUBE_HANDLE    = os.getenv("YOUTUBE_HANDLE", "")
@@ -749,18 +822,27 @@ async def delete_youtube_cache():
 # ── Channel management endpoints ────────────────────────────────────────────
 
 class ChannelAddRequest(BaseModel):
-    channel_id: str
+    channel_id: str | None = None
+    input: str | None = None
+
+
+class PendingResolveRequest(BaseModel):
+    input: str
+    name: str | None = None
 
 
 @router.get("/youtube/channels")
 async def get_youtube_channels():
-    """Return the full channel list — resolved and pending — with name, handle, and resolution status."""
+    """Return the full channel list — resolved and pending — with name, handle, resolution status, and index."""
     objects = _load_channel_objects()
     if not objects:
         channels = _load_channels()
-        return [{"id": ch, "channel_id": ch, "name": _channel_name_map.get(ch), "handle": None, "resolved": True} for ch in channels]
+        return [
+            {"id": ch, "channel_id": ch, "name": _channel_name_map.get(ch), "handle": None, "resolved": True, "index": i}
+            for i, ch in enumerate(channels)
+        ]
     result = []
-    for obj in objects:
+    for i, obj in enumerate(objects):
         cid = obj.get("channel_id")
         resolved = bool(cid and _CHANNEL_ID_RE.match(cid))
         result.append({
@@ -769,23 +851,107 @@ async def get_youtube_channels():
             "name":       obj.get("name") or _channel_name_map.get(cid or ""),
             "handle":     obj.get("handle"),
             "resolved":   resolved,
+            "index":      i,
         })
     return result
 
 
 @router.post("/youtube/channels")
 async def post_youtube_channel(body: ChannelAddRequest):
-    """Add a channel to the followed list."""
-    if not _CHANNEL_ID_RE.match(body.channel_id):
-        raise HTTPException(status_code=400, detail="Invalid channel ID format.")
-    channels = _load_channels()
-    if body.channel_id in channels:
-        raise HTTPException(status_code=400, detail="Channel already in list.")
-    channels.append(body.channel_id)
-    _save_channels(channels)
+    """Add a channel by ID, @handle, or channel/RSS URL.
+
+    Resolved inputs are added immediately; an unresolvable handle is stored as a
+    pending entry that the user can resolve later by pasting its channel ID."""
+    raw = (body.input or body.channel_id or "").strip()
+    parsed = _parse_channel_input(raw)
+    if not parsed:
+        raise HTTPException(status_code=400, detail="Enter a channel ID (UC…), an @handle, or a channel URL.")
+
+    objects = _load_channel_objects()
+    new_id  = await _resolve_input_to_channel_id(parsed)
+
+    if new_id:
+        if any(o.get("channel_id") == new_id for o in objects):
+            raise HTTPException(status_code=400, detail="Channel already in list.")
+        objects.append({
+            "name":       _channel_name_map.get(new_id),
+            "channel_id": new_id,
+            "handle":     parsed.get("handle"),
+        })
+        _save_objects(objects)
+        _raw_cache.clear()
+        _synth_cache.clear()
+        return {"status": "added", "channel_id": new_id, "resolved": True}
+
+    # Could not resolve — only a handle is salvageable as a pending entry.
+    handle = parsed.get("handle")
+    if not handle:
+        raise HTTPException(
+            status_code=422,
+            detail="Could not resolve that channel. Paste the channel ID (starts with UC) instead.",
+        )
+    if any((o.get("handle") or "").lower() == handle.lower() and not o.get("channel_id") for o in objects):
+        raise HTTPException(status_code=400, detail="That channel is already pending.")
+    objects.append({"name": handle, "channel_id": None, "handle": handle})
+    _save_objects(objects)
     _raw_cache.clear()
     _synth_cache.clear()
-    return {"status": "added", "channel_id": body.channel_id}
+    return {"status": "pending", "handle": handle, "resolved": False}
+
+
+@router.put("/youtube/channels/pending/{index}")
+async def resolve_pending_channel(index: int, body: PendingResolveRequest):
+    """Manually resolve a single pending channel (by its list index) from freeform input."""
+    objects = _load_channel_objects()
+    if index < 0 or index >= len(objects):
+        raise HTTPException(status_code=404, detail="Channel entry not found.")
+
+    parsed = _parse_channel_input(body.input)
+    if not parsed:
+        raise HTTPException(status_code=400, detail="Could not read a channel ID, handle, or URL from that input.")
+
+    new_id = await _resolve_input_to_channel_id(parsed)
+    if not new_id:
+        raise HTTPException(
+            status_code=422,
+            detail="Could not resolve that handle. Try pasting the channel ID (starts with UC) directly.",
+        )
+
+    for i, obj in enumerate(objects):
+        if i != index and obj.get("channel_id") == new_id:
+            raise HTTPException(status_code=400, detail="That channel is already in your list.")
+
+    obj  = objects[index]
+    name = (body.name or obj.get("name") or parsed.get("handle") or "").strip() or None
+    objects[index] = {
+        "name":       name,
+        "channel_id": new_id,
+        "handle":     parsed.get("handle") or obj.get("handle"),
+    }
+    if name:
+        _channel_name_map[new_id] = name
+    _save_objects(objects)
+    _raw_cache.clear()
+    _synth_cache.clear()
+    session_log.log("tool_call", {"endpoint": "PUT /youtube/channels/pending", "channel_id": new_id})
+    return {"status": "resolved", "channel_id": new_id, "name": name}
+
+
+@router.delete("/youtube/channels/pending/{index}")
+async def delete_pending_channel(index: int):
+    """Remove a single pending (unresolved) channel by its list index."""
+    objects = _load_channel_objects()
+    if index < 0 or index >= len(objects):
+        raise HTTPException(status_code=404, detail="Channel entry not found.")
+    cid = objects[index].get("channel_id")
+    if cid and _CHANNEL_ID_RE.match(cid):
+        raise HTTPException(status_code=400, detail="Use the standard remove button for resolved channels.")
+    del objects[index]
+    _save_objects(objects)
+    _raw_cache.clear()
+    _synth_cache.clear()
+    return {"status": "removed"}
+
 
 
 @router.post("/youtube/channels/resolve-pending")
@@ -857,16 +1023,17 @@ async def resolve_pending_channels():
 
 @router.delete("/youtube/channels/{channel_id}")
 async def delete_youtube_channel(channel_id: str):
-    """Remove a channel from the followed list."""
+    """Remove a resolved channel from the followed list, preserving any pending entries."""
     if not _CHANNEL_ID_RE.match(channel_id):
         raise HTTPException(status_code=400, detail="Invalid channel ID format.")
-    channels = _load_channels()
-    if channel_id not in channels:
+    objects  = _load_channel_objects()
+    resolved = [o for o in objects if o.get("channel_id") and _CHANNEL_ID_RE.match(o["channel_id"])]
+    if not any(o.get("channel_id") == channel_id for o in objects):
         raise HTTPException(status_code=404, detail="Channel not in list.")
-    if len(channels) <= 1:
+    if len(resolved) <= 1:
         raise HTTPException(status_code=400, detail="Cannot remove the last channel.")
-    channels.remove(channel_id)
-    _save_channels(channels)
+    objects = [o for o in objects if o.get("channel_id") != channel_id]
+    _save_objects(objects)
     _raw_cache.clear()
     _synth_cache.clear()
     _channel_name_map.pop(channel_id, None)

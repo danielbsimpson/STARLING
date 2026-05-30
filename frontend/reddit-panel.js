@@ -98,6 +98,15 @@ export function closeRedditPanel() {
 }
 
 /**
+ * Open the Reddit panel directly into its subreddit-management settings view.
+ * Re-uses the in-panel settings UI so subreddits can be edited from the toolkit menu.
+ */
+export async function openRedditSettings() {
+  await openRedditPanel({ silent: true });
+  _showRedditSettingsView();
+}
+
+/**
  * Wire up enqueueSpeak and the refresh button click handler.
  * Must be called once during app init before any panel interactions.
  */
