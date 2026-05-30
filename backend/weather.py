@@ -74,10 +74,8 @@ WMO_CODES = {
 
 def _load_cache() -> dict:
     """Load the on-disk JSON cache. Returns {} on read/parse error."""
-    try:
-        return json.loads(_CACHE_FILE.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
+    from file_utils import load_json_cache
+    return load_json_cache(_CACHE_FILE)
 
 
 def _save_cache(cache: dict) -> None:

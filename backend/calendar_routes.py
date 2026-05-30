@@ -67,10 +67,8 @@ if _stored_creds:
 # ── File I/O helpers ──────────────────────────────────────────────────────────
 
 def _load_cache() -> dict:
-    try:
-        return json.loads(_CACHE_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
+    from file_utils import load_json_cache
+    return load_json_cache(_CACHE_FILE)
 
 
 def _save_cache(data: dict) -> None:

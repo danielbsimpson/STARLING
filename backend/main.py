@@ -81,7 +81,6 @@ from rag import (
 )
 from wikipedia_rag import (
     load_index        as _wiki_load_index,
-    get_embed_model   as _wiki_get_embed_model,
     start_wikipedia_session,
     get_session       as _wiki_get_session,
     clear_session     as _wiki_clear_session,

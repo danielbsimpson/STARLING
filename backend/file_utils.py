@@ -26,3 +26,11 @@ def atomic_write_json(path: Path, data: Any, *, indent: int = 2) -> None:
         path,
         json.dumps(data, ensure_ascii=False, indent=indent),
     )
+
+
+def load_json_cache(path: Path) -> dict:
+    """Load a JSON object from `path`, returning {} on any read/parse error."""
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
