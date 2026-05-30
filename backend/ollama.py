@@ -64,7 +64,9 @@ async def chat(req: ChatRequest):
 
     async def _logging_stream():
         t0 = time.monotonic()
+        ttft_ms: int | None = None
         assembled: list[str] = []
+        final_obj: dict = {}
         async for chunk in _stream_ollama(payload):
             yield chunk
             # Accumulate message content for the post-stream log entry
@@ -76,17 +78,40 @@ async def chat(req: ChatRequest):
                     obj = json.loads(line)
                     content = obj.get("message", {}).get("content", "")
                     if content:
+                        if ttft_ms is None:
+                            ttft_ms = round((time.monotonic() - t0) * 1000)
                         assembled.append(content)
                     if obj.get("done"):
-                        full_text = "".join(assembled)[:4000]
-                        elapsed_ms = round((time.monotonic() - t0) * 1000)
-                        session_log.log("llm_response", {
-                            "model":               req.model,
-                            "full_text":           full_text,
-                            "token_count_estimate": len(full_text.split()),
-                            "duration_ms":         elapsed_ms,
-                        })
+                        final_obj = obj
             except Exception:
                 pass  # best-effort: per-chunk parse errors should never break the stream
+
+        if final_obj:
+            try:
+                full_text = "".join(assembled)[:4000]
+                elapsed_ms = round((time.monotonic() - t0) * 1000)
+                event_data: dict = {
+                    "model":                req.model,
+                    "full_text":            full_text,
+                    "token_count_estimate": len(full_text.split()),
+                    "duration_ms":          elapsed_ms,
+                }
+                if ttft_ms is not None:
+                    event_data["ttft_ms"] = ttft_ms
+                # Ollama native counters → map to the same keys the dashboard uses.
+                p_tok = final_obj.get("prompt_eval_count")
+                c_tok = final_obj.get("eval_count")
+                eval_ns = final_obj.get("eval_duration")
+                if isinstance(p_tok, int):
+                    event_data["prompt_tokens"] = p_tok
+                if isinstance(c_tok, int):
+                    event_data["completion_tokens"] = c_tok
+                if isinstance(eval_ns, (int, float)) and eval_ns > 0:
+                    event_data["predicted_ms"] = round(eval_ns / 1e6, 1)
+                    if isinstance(c_tok, int):
+                        event_data["predicted_per_second"] = round(c_tok / (eval_ns / 1e9), 2)
+                session_log.log("llm_response", event_data)
+            except Exception:
+                pass  # best-effort: logging must never break the response
 
     return StreamingResponse(_logging_stream(), media_type="application/x-ndjson")

@@ -118,6 +118,7 @@
             </div>
             <div class="llm-ctx-note" id="llm-ctx-note">Applies on next restart.</div>
             <button class="system-status-open-btn" id="system-status-open-btn">SYSTEM STATUS</button>
+            <button class="system-status-open-btn" id="logdash-open-btn">DIAGNOSTICS &amp; LOGS</button>
             <button class="power-btn" id="power-btn" title="Shut down S.T.A.R.L.I.N.G.">SHUTDOWN</button>
           </div>
 
@@ -888,6 +889,139 @@ Press SUBMIT when finished dictating.</span>
         <div class="system-section-label">INJECTED PROMPT BLOCK</div>
         <pre id="system-static-block" class="system-static-block"></pre>
       </div>
+    </div>
+  </div>
+
+  <!-- Diagnostics & Logs dashboard — opened from the SYSTEM menu. -->
+  <div id="logdash-panel" class="logdash-panel hidden" role="dialog" aria-label="Diagnostics and Logs">
+    <div class="logdash-header">
+      <div class="logdash-title">DIAGNOSTICS &amp; LOGS</div>
+      <div class="logdash-tabs">
+        <button class="logdash-tab active" data-tab="overview">OVERVIEW</button>
+        <button class="logdash-tab" data-tab="sessions">SESSIONS</button>
+        <button class="logdash-tab" data-tab="traces">TRACES</button>
+        <button class="logdash-tab" data-tab="analysis">ANALYSIS</button>
+      </div>
+      <div class="logdash-header-controls">
+        <button id="logdash-live-btn" class="logdash-btn" title="Auto-refresh the active tab">● LIVE</button>
+        <button id="logdash-refresh-btn" class="logdash-btn">REFRESH</button>
+        <button id="logdash-close-btn" class="logdash-btn logdash-close-btn">&#x2715; CLOSE</button>
+      </div>
+    </div>
+
+    <!-- ── Overview tab ── -->
+    <div class="logdash-tab-view" id="logdash-overview">
+      <div class="logdash-section-label">SYSTEM HEALTH</div>
+      <div class="logdash-health" id="logdash-health"></div>
+      <div class="logdash-section-label">LIVE RESOURCES <span class="logdash-sub">current process</span></div>
+      <div class="logdash-health" id="logdash-resources"></div>
+      <div class="logdash-section-label">AGGREGATE METRICS <span class="logdash-sub">last 50 sessions</span></div>
+      <div class="logdash-metric-grid" id="logdash-metrics"></div>
+      <div class="logdash-cols">
+        <div class="logdash-col">
+          <div class="logdash-section-label">TOOL USAGE FREQUENCY</div>
+          <div class="logdash-bars" id="logdash-tool-freq"></div>
+        </div>
+        <div class="logdash-col">
+          <div class="logdash-section-label">RECENT ERRORS</div>
+          <div class="logdash-error-list" id="logdash-recent-errors"></div>
+        </div>
+      </div>
+      <div class="logdash-section-label">PROMPT VERSIONS <span class="logdash-sub">performance by system-prompt hash · last 7 days</span></div>
+      <div class="logdash-table-wrap logdash-breakdown-wrap">
+        <table class="logdash-table" id="logdash-versions-table">
+          <thead>
+            <tr><th>Prompt Hash</th><th>Responses</th><th>Avg ms</th><th>Avg TTFT</th><th>Avg tok/s</th><th>Last Seen</th></tr>
+          </thead>
+          <tbody id="logdash-versions-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Sessions tab ── -->
+    <div class="logdash-tab-view hidden" id="logdash-sessions">
+      <div class="logdash-sessions-layout">
+        <aside class="logdash-sidebar">
+          <div class="logdash-section-label">SESSIONS</div>
+          <div class="logdash-session-list" id="logdash-session-list"></div>
+        </aside>
+        <div class="logdash-events-panel">
+          <div class="logdash-events-toolbar">
+            <div class="logdash-type-filters" id="logdash-type-filters"></div>
+            <input type="search" id="logdash-search" class="logdash-search" placeholder="search events…" autocomplete="off" />
+            <span class="logdash-event-count" id="logdash-event-count"></span>
+          </div>
+          <div class="logdash-stats-strip" id="logdash-stats-strip"></div>
+          <div class="logdash-table-wrap" id="logdash-table-wrap">
+            <div class="logdash-empty" id="logdash-events-empty">Select a session to view its events.</div>
+            <table class="logdash-table hidden" id="logdash-table">
+              <thead>
+                <tr><th>#</th><th>Time</th><th>+ms</th><th>Src</th><th>Event</th><th>Summary</th></tr>
+              </thead>
+              <tbody id="logdash-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Traces tab ── -->
+    <div class="logdash-tab-view hidden" id="logdash-traces">
+      <div class="logdash-analysis-head">
+        <div class="logdash-section-label">INTERACTION TRACES <span class="logdash-sub">STT → RAG → LLM → tools → TTS</span></div>
+        <div class="logdash-window-pills" id="logdash-trace-pills">
+          <button class="logdash-wpill" data-days="1">1D</button>
+          <button class="logdash-wpill" data-days="2">2D</button>
+          <button class="logdash-wpill" data-days="3">3D</button>
+          <button class="logdash-wpill" data-days="4">4D</button>
+          <button class="logdash-wpill" data-days="7">1W</button>
+          <button class="logdash-wpill" data-days="30">1M</button>
+        </div>
+        <select class="logdash-select" id="logdash-trace-select"></select>
+      </div>
+      <div class="logdash-analysis-scope" id="logdash-trace-scope"></div>
+      <div class="logdash-trace-legend" id="logdash-trace-legend"></div>
+      <div class="logdash-traces" id="logdash-trace-list"></div>
+    </div>
+
+    <!-- ── Analysis tab ── -->
+    <div class="logdash-tab-view hidden" id="logdash-analysis">
+      <div class="logdash-analysis-head">
+        <div class="logdash-section-label">SESSION ANALYSIS</div>
+        <div class="logdash-window-pills" id="logdash-window-pills">
+          <button class="logdash-wpill" data-days="1">1D</button>
+          <button class="logdash-wpill" data-days="2">2D</button>
+          <button class="logdash-wpill" data-days="3">3D</button>
+          <button class="logdash-wpill" data-days="4">4D</button>
+          <button class="logdash-wpill" data-days="7">1W</button>
+          <button class="logdash-wpill" data-days="30">1M</button>
+        </div>
+        <select class="logdash-select" id="logdash-analysis-select"></select>
+        <button class="logdash-btn" id="logdash-evaluate-btn" title="Score responses with the local model (single session)">EVALUATE</button>
+      </div>
+      <div class="logdash-analysis-scope" id="logdash-analysis-scope"></div>
+      <div class="logdash-anomalies" id="logdash-anomalies"></div>
+      <div class="logdash-metric-grid" id="logdash-llm-metrics"></div>
+      <div class="logdash-charts" id="logdash-charts">
+        <div class="logdash-chart-box"><div class="logdash-chart-title">LATENCY (ms)</div><canvas id="logdash-chart-latency"></canvas></div>
+        <div class="logdash-chart-box"><div class="logdash-chart-title">THROUGHPUT (tok/s)</div><canvas id="logdash-chart-tps"></canvas></div>
+        <div class="logdash-chart-box"><div class="logdash-chart-title">TTFT (ms)</div><canvas id="logdash-chart-ttft"></canvas></div>
+      </div>
+      <div class="logdash-section-label">QUALITY <span class="logdash-sub">local LLM-as-judge · single session only</span></div>
+      <div class="logdash-metric-grid" id="logdash-quality"></div>
+      <div class="logdash-section-label">RAG RETRIEVAL</div>
+      <div class="logdash-metric-grid" id="logdash-rag-metrics"></div>
+      <div class="logdash-section-label">TOOL-CALL BREAKDOWN</div>
+      <div class="logdash-table-wrap logdash-breakdown-wrap">
+        <table class="logdash-table" id="logdash-breakdown-table">
+          <thead>
+            <tr><th>Tool / Endpoint</th><th>Dispatches</th><th>Calls</th><th>Errors</th><th>Silent</th><th>Err %</th><th>Avg ms</th><th>p95 ms</th></tr>
+          </thead>
+          <tbody id="logdash-breakdown-body"></tbody>
+        </table>
+      </div>
+      <div class="logdash-section-label">RESPONSE REVIEWS <span class="logdash-sub">LLM replies with injected tool context</span></div>
+      <div class="logdash-reviews" id="logdash-reviews"></div>
     </div>
   </div>
 

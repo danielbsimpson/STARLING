@@ -24,6 +24,8 @@ from fastapi.responses import JSONResponse, Response
 from kokoro_onnx import Kokoro
 from pydantic import BaseModel
 
+import session_log
+
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/synthesize", tags=["tts"])
 
@@ -189,6 +191,9 @@ async def synthesize(req: TTSRequest):
     try:
         lang = _VOICE_MAP[req.voice]["lang"]
         loop = asyncio.get_running_loop()
+        chunks = _split_chunks(req.text)
+        device = "cpu" if (_onnx_provider == "CPUExecutionProvider" or not _onnx_provider) else "gpu"
+        _t0 = asyncio.get_running_loop().time()
 
         def _run_synthesis():
             return _synthesize_chunked(kokoro, req.text, req.voice, req.speed, lang)
@@ -204,6 +209,7 @@ async def synthesize(req: TTSRequest):
             global _kokoro
             _kokoro = None  # reset so next request rebuilds with GPU
             _cpu_kokoro = _build_kokoro("CPUExecutionProvider")
+            device = "cpu"
 
             def _run_synthesis_cpu():
                 return _synthesize_chunked(_cpu_kokoro, req.text, req.voice, req.speed, lang)
@@ -211,6 +217,21 @@ async def synthesize(req: TTSRequest):
             samples, sample_rate = await loop.run_in_executor(None, _run_synthesis_cpu)
         buf = io.BytesIO()
         sf.write(buf, samples, sample_rate, format="WAV")
+        try:
+            duration_ms = round((asyncio.get_running_loop().time() - _t0) * 1000)
+            audio_s = round(len(samples) / sample_rate, 2) if sample_rate else None
+            session_log.log("tts_synthesis", {
+                "voice":       req.voice,
+                "speed":       req.speed,
+                "lang":        lang,
+                "chunk_count": len(chunks),
+                "char_count":  len(req.text),
+                "audio_s":     audio_s,
+                "duration_ms": duration_ms,
+                "device":      device,
+            })
+        except Exception:
+            pass  # best-effort: logging must never break synthesis
         return Response(content=buf.getvalue(), media_type="audio/wav")
     except Exception as exc:
         log.exception("TTS synthesis failed")

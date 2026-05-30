@@ -111,6 +111,8 @@ async def transcribe(audio: UploadFile = File(...)):
         session_log.log("user_speech", {
             "transcript":    transcript,
             "duration_ms":   round(info.duration * 1000),
+            "language":      getattr(info, "language", None),
+            "language_prob": round(float(getattr(info, "language_probability", 0.0)), 3) or None,
             "whisper_model": _WHISPER_MODEL_SIZE,
             "device":        _active_device,
         })

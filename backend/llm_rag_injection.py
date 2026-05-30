@@ -13,9 +13,13 @@ RAG must never block the main chat path.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
+import time
 from typing import Any
+
+import session_log
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +68,7 @@ def inject_rag_and_memory(messages: list[dict[str, Any]]) -> None:
             return
 
         query_vec = get_embedding(last_user)
+        query_hash = hashlib.md5(last_user.encode()).hexdigest()[:8]
 
         # Insert after the contiguous leading system block so order becomes:
         # [soul, system_state, doc, memory, ...rest]
@@ -74,16 +79,46 @@ def inject_rag_and_memory(messages: list[dict[str, Any]]) -> None:
         if RAG_ENABLED:
             rag_k    = int(os.getenv("RAG_VOICE_TOP_K", "2"))
             max_toks = int(os.getenv("RAG_MAX_CONTEXT_TOKENS", "400"))
+            _t0      = time.monotonic()
             results  = retrieve(last_user, k=rag_k, embedding=query_vec)
+            _rag_ms  = round((time.monotonic() - _t0) * 1000)
             ctx_block = format_context_for_llm(results, max_tokens=max_toks)
             if ctx_block:
                 messages.insert(base_idx, {"role": "system", "content": ctx_block})
                 base_idx += 1
+            try:
+                session_log.log("rag_retrieval", {
+                    "scope":       "docs",
+                    "query_hash":  query_hash,
+                    "k":           rag_k,
+                    "hits":        len(results),
+                    "sources":     [r.get("source") for r in results][:8],
+                    "scores":      [round(float(r.get("score", 0.0)), 4) for r in results][:8],
+                    "duration_ms": _rag_ms,
+                    "injected":    bool(ctx_block),
+                })
+            except Exception:  # noqa: BLE001 — logging must never break the chat path
+                pass
 
         if MEMORY_RAG_ENABLED:
+            _t0m        = time.monotonic()
             mem_results = retrieve_memory(last_user, embedding=query_vec)
+            _mem_ms     = round((time.monotonic() - _t0m) * 1000)
             mem_block   = format_memory_for_llm(mem_results)
             if mem_block:
                 messages.insert(base_idx, {"role": "system", "content": mem_block})
+            try:
+                session_log.log("rag_retrieval", {
+                    "scope":       "memory",
+                    "query_hash":  query_hash,
+                    "k":           len(mem_results),
+                    "hits":        len(mem_results),
+                    "sources":     [r.get("category") for r in mem_results][:8],
+                    "scores":      [round(float(r.get("score", 0.0)), 4) for r in mem_results][:8],
+                    "duration_ms": _mem_ms,
+                    "injected":    bool(mem_block),
+                })
+            except Exception:  # noqa: BLE001 — logging must never break the chat path
+                pass
     except Exception:  # noqa: BLE001 — must never break the chat path
         logger.exception("RAG/memory injection failed; continuing without context.")

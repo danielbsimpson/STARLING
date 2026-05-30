@@ -143,28 +143,55 @@ async def chat(req: ChatRequest):
 
     async def _logging_stream():
         t0 = time.monotonic()
+        ttft_ms: int | None = None
         assembled: list[str] = []
+        stream_metrics: dict = {}
+        done_seen = False
         async for chunk in _stream_as_ndjson(payload):
             yield chunk
             try:
-                for line in chunk.decode("utf-8", errors="replace").split("\n"):
+                text = chunk.decode("utf-8", errors="replace") if isinstance(chunk, (bytes, bytearray)) else chunk
+                for line in text.split("\n"):
                     line = line.strip()
                     if not line:
                         continue
                     obj = json.loads(line)
                     content = obj.get("message", {}).get("content", "")
                     if content:
+                        if ttft_ms is None:
+                            ttft_ms = round((time.monotonic() - t0) * 1000)
                         assembled.append(content)
+                    if isinstance(obj.get("metrics"), dict):
+                        stream_metrics = obj["metrics"]
                     if obj.get("done"):
-                        full_text = "".join(assembled)[:4000]
-                        elapsed_ms = round((time.monotonic() - t0) * 1000)
-                        session_log.log("llm_response", {
-                            "model":               req.model,
-                            "full_text":           full_text,
-                            "token_count_estimate": len(full_text.split()),
-                            "duration_ms":         elapsed_ms,
-                        })
+                        done_seen = True
             except Exception:
                 pass  # best-effort: per-chunk parse errors should never break the stream
+
+        # Log once the stream has fully drained so real token/timing metrics
+        # (emitted on the line *after* the done sentinel) are captured too.
+        if done_seen:
+            try:
+                full_text = "".join(assembled)[:4000]
+                elapsed_ms = round((time.monotonic() - t0) * 1000)
+                event_data: dict = {
+                    "model":                req.model,
+                    "full_text":            full_text,
+                    "token_count_estimate": len(full_text.split()),
+                    "duration_ms":          elapsed_ms,
+                }
+                if ttft_ms is not None:
+                    event_data["ttft_ms"] = ttft_ms
+                # Real metrics from llama-server timings/usage (preferred over the estimate).
+                for key in (
+                    "prompt_tokens", "completion_tokens", "prompt_n", "predicted_n",
+                    "prompt_per_second", "predicted_per_second", "predicted_ms",
+                ):
+                    val = stream_metrics.get(key)
+                    if isinstance(val, (int, float)):
+                        event_data[key] = round(val, 2) if isinstance(val, float) else val
+                session_log.log("llm_response", event_data)
+            except Exception:
+                pass  # best-effort: logging must never break the response
 
     return StreamingResponse(_logging_stream(), media_type="application/x-ndjson")

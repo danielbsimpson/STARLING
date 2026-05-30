@@ -10,6 +10,7 @@ import { detectCalendarTrigger, openCalendarPanel, closeCalendarPanel, isCalenda
 import { detectMailTrigger, openMailPanel, closeMailPanel, isMailPanelOpen } from './mail-panel.js';
 import { detectBrowserTrigger, detectBrowserClose, detectWikiSectionTrigger, isBrowserPanelOpen, openBrowserPanel, closeBrowserPanel, getBrowserPageText, ensureBrowserPageText, getBrowserPageUrl, getBrowserJsRendered } from './browser-panel.js';
 import { detectSystemStatusTrigger, handleSystemStatusTrigger, initSystemPanel, showSystemPanel } from './system-panel.js';
+import { initLogDashboard, showLogDashboard } from './log-dashboard.js';
 import { detectFuzzyToolIntent } from './fuzzy-tool-detect.js';
 import { getInterruptPhrase } from './interrupt-phrases.js';
 import { easeOutCubic, easeInCubic, easeInOutQuad, easeOutBack, easeInOutSine } from './animation-easings.js';
@@ -4167,6 +4168,7 @@ initYouTubePanel({ enqueueSpeak, sendToOllama, interruptSpeech });
 initNewsPanel({ enqueueSpeak, sendToOllama, interruptSpeech, onClose: exitNewsMode });
 initToolkitPanel(TOOLKIT_REGISTRY);
 initSystemPanel();
+initLogDashboard();
 
 // ── Fuzzy confirm banner button wiring (Tier 2) ───────────────────────────────
 const _fcbYes = document.getElementById('fcb-yes');
@@ -4252,6 +4254,11 @@ document.getElementById('soul-open-btn')?.addEventListener('click', () => {
 // ── System Status "SYSTEM STATUS" button ─────────────────────────────────────
 document.getElementById('system-status-open-btn')?.addEventListener('click', () => {
   showSystemPanel();
+});
+
+// ── Diagnostics & Logs "DIAGNOSTICS & LOGS" button ───────────────────────────
+document.getElementById('logdash-open-btn')?.addEventListener('click', () => {
+  showLogDashboard();
 });
 
 // ── Soul verbal protests (fired by soul-panel.js via CustomEvent) ─────────────
