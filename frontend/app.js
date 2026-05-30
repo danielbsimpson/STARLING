@@ -1174,6 +1174,9 @@ const voicePicker   = document.getElementById('voice-picker');
 const voiceTestBtn    = document.getElementById('voice-test-btn');
 const voiceDefaultBtn = document.getElementById('voice-default-btn');
 const ttsEngineEl     = document.getElementById('tts-engine');
+const llmCtxInput   = document.getElementById('llm-ctx-input');
+const llmCtxSaveBtn = document.getElementById('llm-ctx-save-btn');
+const llmCtxNote    = document.getElementById('llm-ctx-note');
 const footerTts = document.getElementById('ftr-tts');
 const footerWhisperDevice = document.getElementById('ftr-whisper-dev');
 const footerKokoroDevice = document.getElementById('ftr-kokoro-dev');
@@ -1253,6 +1256,61 @@ async function fetchContextLimit() {
     _ctxLimit = _KNOWN_CTX[modelKey] ?? null;
   }
 }
+
+// ── User-tunable LLM context size (persisted backend setting) ─────────────────
+let _ctxSettingMin = 2048;
+let _ctxSettingMax = 131072;
+
+async function loadLlmCtxSetting() {
+  if (!llmCtxInput) return;
+  try {
+    const res = await fetch(`${BACKEND_BASE}/system/llm-settings`);
+    if (!res.ok) return;
+    const s = await res.json();
+    if (s.ctx_min) { _ctxSettingMin = s.ctx_min; llmCtxInput.min = s.ctx_min; }
+    if (s.ctx_max) { _ctxSettingMax = s.ctx_max; llmCtxInput.max = s.ctx_max; }
+    if (s.ctx_size) llmCtxInput.value = s.ctx_size;
+  } catch { /* backend offline — leave input blank */ }
+}
+
+async function saveLlmCtxSetting() {
+  if (!llmCtxInput || !llmCtxSaveBtn) return;
+  const val = parseInt(llmCtxInput.value, 10);
+  if (!Number.isFinite(val) || val < _ctxSettingMin || val > _ctxSettingMax) {
+    if (llmCtxNote) {
+      llmCtxNote.textContent = `Enter ${_ctxSettingMin}–${_ctxSettingMax} tokens.`;
+      llmCtxNote.classList.add('llm-ctx-note--error');
+    }
+    return;
+  }
+  const original = llmCtxSaveBtn.textContent;
+  llmCtxSaveBtn.disabled = true;
+  llmCtxSaveBtn.textContent = 'SAVING…';
+  try {
+    const res = await fetch(`${BACKEND_BASE}/system/llm-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ctx_size: val }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (llmCtxNote) {
+      llmCtxNote.textContent = 'Saved — applies on next restart.';
+      llmCtxNote.classList.remove('llm-ctx-note--error');
+    }
+    llmCtxSaveBtn.textContent = 'SAVED';
+    setTimeout(() => { llmCtxSaveBtn.textContent = original; }, 1500);
+  } catch {
+    if (llmCtxNote) {
+      llmCtxNote.textContent = 'Save failed.';
+      llmCtxNote.classList.add('llm-ctx-note--error');
+    }
+    llmCtxSaveBtn.textContent = original;
+  } finally {
+    llmCtxSaveBtn.disabled = false;
+  }
+}
+
+llmCtxSaveBtn && llmCtxSaveBtn.addEventListener('click', saveLlmCtxSetting);
 
 function updateLlmMetrics(m) {
   if (!lmPrompt) return;
@@ -2203,6 +2261,63 @@ function _drainSentenceBuffer(buf, re, flushFn) {
 }
 
 // ── Ollama streaming chat ─────────────────────────────────────────────────────
+
+// Rough token estimate (~4 chars/token for English). Conservative enough for a
+// pre-send safety guard without a real tokenizer.
+function _estimateTokens(text) {
+  return Math.ceil((text || '').length / 4);
+}
+
+function _estimateMessagesTokens(messages) {
+  // ~4 tokens of per-message overhead (role tags / separators) on top of content.
+  let total = 0;
+  for (const m of messages) total += _estimateTokens(m.content) + 4;
+  return total;
+}
+
+/**
+ * Trim a message list so its estimated token count fits the model's context
+ * window, reserving headroom for the model's reply. The leading system prompt
+ * and the final user message are always preserved; oldest middle turns are
+ * dropped first, and an over-long single message is hard-truncated as a last
+ * resort. Returns a (possibly new) array; never mutates conversationHistory.
+ */
+function _guardContextSize(messages) {
+  const limit = _ctxLimit || 4096;
+  const reserve = Math.min(1024, Math.floor(limit * 0.25)); // room for the reply
+  const budget = limit - reserve;
+  if (budget <= 0 || _estimateMessagesTokens(messages) <= budget) return messages;
+
+  const out = [...messages];
+  // Indices we must keep: a leading system message (if present) and the last message.
+  const keepHead = out.length && out[0].role === 'system' ? 1 : 0;
+
+  // Drop oldest middle messages until within budget (always keep head + last).
+  while (_estimateMessagesTokens(out) > budget && out.length > keepHead + 1) {
+    out.splice(keepHead, 1);
+  }
+
+  // Still over budget — truncate the largest message's content as a last resort.
+  if (_estimateMessagesTokens(out) > budget) {
+    let largest = -1, largestLen = 0;
+    for (let j = 0; j < out.length; j++) {
+      const len = (out[j].content || '').length;
+      if (len > largestLen) { largestLen = len; largest = j; }
+    }
+    if (largest >= 0) {
+      const over = _estimateMessagesTokens(out) - budget;
+      const cutChars = Math.min(largestLen, over * 4 + 64);
+      const kept = (out[largest].content || '').slice(0, Math.max(0, largestLen - cutChars));
+      out[largest] = { ...out[largest], content: kept + '\n…[truncated to fit context]' };
+    }
+  }
+
+  if (out.length !== messages.length) {
+    console.warn(`[context-guard] trimmed ${messages.length - out.length} message(s) to fit ${budget} token budget`);
+  }
+  return out;
+}
+
 async function sendToOllama(userText, options = {}) {
   const { ephemeralMessages = null, extraContext = null, existingElement = null } = options;
 
@@ -2219,6 +2334,11 @@ async function sendToOllama(userText, options = {}) {
       ? [{ role: 'system', content: extraContext }, ...conversationHistory]
       : conversationHistory;
   }
+
+  // Guard against exceeding the model's context window. Trims oldest turns
+  // (and over-long injected context) so a single big injection can't 400 the
+  // request with an "exceeds the available context size" error.
+  messages = _guardContextSize(messages);
 
   // If an existing interrupt bubble is provided, reuse it so the LLM response
   // appears seamlessly in the same message rather than as a new bubble.
@@ -4096,6 +4216,7 @@ statModel.textContent = MODEL;
 _applyTtsMode();
 loadVoices();
 fetchContextLimit();
+loadLlmCtxSetting();
 _loadManifest();  // Phase 4: load subject→image manifest for dynamic dossier images
 _setMktSendToOllama(sendToOllama);  // provide LLM callback to stocks panel briefing
 _setMktOnClose(exitMarketMode);     // close button returns to conversation mode

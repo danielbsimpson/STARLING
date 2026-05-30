@@ -6380,6 +6380,17 @@ a.news-story-source-title:hover {
 .system-status-open-btn { display: block; width: 100%; background: transparent; border: 1px solid #2c5e8a; color: #6cd3ff; padding: 8px; margin-bottom: 6px; cursor: pointer; font-family: 'Share Tech Mono', monospace; letter-spacing: 2px; }
 .system-status-open-btn:hover { background: #112a44; }
 
+/* ── LLM context-size setting (SYSTEM menu) ──────────────────────────────── */
+.llm-ctx-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.llm-ctx-label { color: #6cd3ff; font-family: 'Share Tech Mono', monospace; font-size: 11px; letter-spacing: 1px; flex: 0 0 auto; }
+.llm-ctx-input { flex: 1 1 auto; min-width: 0; background: #050b13; border: 1px solid #2c5e8a; color: #d9e8f5; padding: 6px 8px; font-family: 'Share Tech Mono', monospace; font-size: 12px; }
+.llm-ctx-unit { color: #4a7ba6; font-family: 'Share Tech Mono', monospace; font-size: 11px; flex: 0 0 auto; }
+.llm-ctx-save-btn { flex: 0 0 auto; background: transparent; border: 1px solid #2c5e8a; color: #6cd3ff; padding: 6px 12px; cursor: pointer; font-family: 'Share Tech Mono', monospace; letter-spacing: 1px; }
+.llm-ctx-save-btn:hover { background: #112a44; }
+.llm-ctx-save-btn:disabled { opacity: 0.5; cursor: default; }
+.llm-ctx-note { color: #4a7ba6; font-family: 'Share Tech Mono', monospace; font-size: 10px; margin-bottom: 8px; }
+.llm-ctx-note--error { color: #ff6b6b; }
+
 /* ── Fuzzy tool confirmation banner (Tier 2 — fuzzy recovery) ─────────────── */
 #fuzzy-confirm-banner { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: #0d0d0d; border: 1px solid #333; padding: 10px 18px; border-radius: 4px; font-family: monospace; font-size: 0.75rem; color: #aaa; z-index: 9999; display: flex; align-items: center; gap: 8px; }
 #fuzzy-confirm-banner.hidden { display: none; }

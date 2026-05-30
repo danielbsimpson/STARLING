@@ -15,6 +15,7 @@ import os
 import platform
 import subprocess
 import time
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -248,6 +249,43 @@ def is_boot_complete() -> bool:
 
 _BASE_DIR = Path(__file__).parent
 _MEMORY_DIR = _BASE_DIR / "memory"
+
+
+# ── User-tunable LLM runtime settings ─────────────────────────────────────────
+# Persisted to memory/llm_settings.json. launch.py reads the same file at boot
+# to decide llama-server's --ctx-size, so changes take effect on next restart.
+_LLM_SETTINGS_FILE = _MEMORY_DIR / "llm_settings.json"
+_CTX_MIN = 2048
+_CTX_MAX = 131072
+_CTX_DEFAULT = 8192
+
+
+def get_llm_settings() -> dict:
+    """Return persisted LLM runtime settings, falling back to defaults."""
+    ctx = _CTX_DEFAULT
+    try:
+        if _LLM_SETTINGS_FILE.exists():
+            data = json.loads(_LLM_SETTINGS_FILE.read_text(encoding="utf-8"))
+            raw = int(data.get("ctx_size", _CTX_DEFAULT))
+            ctx = max(_CTX_MIN, min(_CTX_MAX, raw))
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        ctx = _CTX_DEFAULT
+    return {"ctx_size": ctx, "ctx_min": _CTX_MIN, "ctx_max": _CTX_MAX, "ctx_default": _CTX_DEFAULT}
+
+
+def save_llm_settings(ctx_size: int) -> dict:
+    """Persist the desired llama-server context size. Returns the stored settings.
+
+    Raises ValueError if ctx_size is outside the supported range.
+    """
+    raw = int(ctx_size)
+    if raw < _CTX_MIN or raw > _CTX_MAX:
+        raise ValueError(f"ctx_size must be between {_CTX_MIN} and {_CTX_MAX}")
+    _MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = _LLM_SETTINGS_FILE.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps({"ctx_size": raw}, indent=2), encoding="utf-8")
+    tmp.replace(_LLM_SETTINGS_FILE)
+    return {"ctx_size": raw, "ctx_min": _CTX_MIN, "ctx_max": _CTX_MAX, "ctx_default": _CTX_DEFAULT}
 
 
 def _check_mail() -> tuple[bool, str | None]:

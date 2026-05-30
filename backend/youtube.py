@@ -48,6 +48,8 @@ logger = logging.getLogger(__name__)
 _CHANNELS_ENV     = os.getenv("YOUTUBE_CHANNELS", "")
 _CACHE_SECONDS    = int(os.getenv("YOUTUBE_CACHE_SECONDS", "1800"))
 _SYNTHESIS_ON     = os.getenv("YOUTUBE_SYNTHESIS_ENABLED", "true").lower() in ("1", "true", "yes")
+# Number of most-recent videos injected into the LLM context (keeps prompt small).
+_LLM_VIDEO_LIMIT  = max(1, int(os.getenv("YOUTUBE_LLM_VIDEO_LIMIT", "10")))
 
 # Disk-cache: persists video data across restarts, 12-hour TTL
 _DISK_CACHE_FILE  = Path(__file__).parent / "memory" / "youtube_cache.json"
@@ -426,17 +428,22 @@ async def _fetch_all_channels_parallel(channels: list[str], max_per_channel: int
 
 
 def _build_llm_context(videos: list[dict], channels: list[str]) -> str:
-    """Build a compact plain-text summary of recent videos for LLM injection."""
+    """Build a compact plain-text summary of the top recent videos for LLM injection.
+
+    To keep the injected prompt well under the model's context window, only the
+    most recent N videos across the whole feed are included (mirrors the "top of
+    the panel" the user actually sees). Configurable via YOUTUBE_LLM_VIDEO_LIMIT.
+    """
     now   = datetime.now(timezone.utc).strftime("%A, %B %d at %I:%M %p UTC")
     lines = [f"[YOUTUBE FEED — {now}]"]
-    for ch in channels:
-        name        = _channel_name_map.get(ch, ch)
-        ch_videos   = [v for v in videos if v["channel_id"] == ch][:5]
-        if not ch_videos:
-            continue
-        lines.append(f"{name}:")
-        for i, v in enumerate(ch_videos, 1):
-            lines.append(f"  {i}. {v['title']} ({v['views_fmt']} views, {v['age']})")
+    top   = sorted(videos, key=lambda v: v.get("published_ts", 0), reverse=True)[:_LLM_VIDEO_LIMIT]
+    if not top:
+        lines.append("(no recent videos)")
+        return "\n".join(lines)
+    lines.append(f"Top {len(top)} most recent videos:")
+    for i, v in enumerate(top, 1):
+        name = v.get("channel") or _channel_name_map.get(v.get("channel_id", ""), "")
+        lines.append(f"  {i}. {v['title']} — {name} ({v['views_fmt']} views, {v['age']})")
     return "\n".join(lines)
 
 

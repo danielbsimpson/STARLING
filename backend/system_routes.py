@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
 
 import system_state
 from session_log import LOCALHOST_HOSTS
@@ -44,3 +45,24 @@ async def system_health_endpoint():
         "boot_complete": system_state.is_boot_complete(),
         "uptime_s":      system_state.uptime_s(),
     }
+
+
+class LlmSettingsRequest(BaseModel):
+    ctx_size: int
+
+
+@router.get("/system/llm-settings")
+async def get_llm_settings_endpoint(request: Request):
+    """Return the persisted, user-tunable LLM runtime settings. Localhost only."""
+    _require_localhost(request)
+    return system_state.get_llm_settings()
+
+
+@router.put("/system/llm-settings")
+async def put_llm_settings_endpoint(payload: LlmSettingsRequest, request: Request):
+    """Persist the desired llama-server context size (applies on next restart)."""
+    _require_localhost(request)
+    try:
+        return system_state.save_llm_settings(payload.ctx_size)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))

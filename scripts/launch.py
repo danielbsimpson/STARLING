@@ -64,8 +64,29 @@ LLAMA_ALIAS      = _cfg("LLAMA_ALIAS",      "llama3.2-3b")
 LLAMA_PORT       = _cfg("LLAMA_PORT",       "8080")
 LLAMA_HOST       = _cfg("LLAMA_HOST",       "127.0.0.1")
 LLAMA_GPU_LAYERS = _cfg("LLAMA_GPU_LAYERS", "999")
-LLAMA_CTX_SIZE   = _cfg("LLAMA_CTX_SIZE",   "4096")
+LLAMA_CTX_SIZE   = _cfg("LLAMA_CTX_SIZE",   "8192")
 BACKEND_PORT     = _cfg("BACKEND_PORT",     "8000")
+
+
+def _load_persisted_ctx_size(default: str) -> str:
+    """Prefer the user-tunable context size persisted via the menu.
+
+    Reads backend/memory/llm_settings.json (written by the /system/llm-settings
+    endpoint). Falls back to the env/.env/hardcoded default on any problem.
+    """
+    settings_path = REPO_ROOT / "backend" / "memory" / "llm_settings.json"
+    try:
+        if settings_path.exists():
+            data = json.loads(settings_path.read_text(encoding="utf-8"))
+            raw = int(data.get("ctx_size"))
+            if 2048 <= raw <= 131072:
+                return str(raw)
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        pass
+    return default
+
+
+LLAMA_CTX_SIZE = _load_persisted_ctx_size(LLAMA_CTX_SIZE)
 
 # Dream state timeout — backend is given this much time to complete dream state
 # before being force-killed on shutdown. Mirrors dream.py's DREAM_TIMEOUT_S.

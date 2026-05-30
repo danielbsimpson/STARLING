@@ -110,6 +110,13 @@
           <!-- System / Shutdown section -->
           <div class="menu-section">
             <div class="menu-section-label">SYSTEM</div>
+            <div class="llm-ctx-row">
+              <label class="llm-ctx-label" for="llm-ctx-input" title="llama-server context window size">LLM CONTEXT</label>
+              <input class="llm-ctx-input" id="llm-ctx-input" type="number" min="2048" max="131072" step="1024" title="Context window in tokens (applies on next restart)">
+              <span class="llm-ctx-unit">tok</span>
+              <button class="llm-ctx-save-btn" id="llm-ctx-save-btn" title="Save context size (applies on restart)">SAVE</button>
+            </div>
+            <div class="llm-ctx-note" id="llm-ctx-note">Applies on next restart.</div>
             <button class="system-status-open-btn" id="system-status-open-btn">SYSTEM STATUS</button>
             <button class="power-btn" id="power-btn" title="Shut down S.T.A.R.L.I.N.G.">SHUTDOWN</button>
           </div>
