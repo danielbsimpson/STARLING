@@ -23,7 +23,6 @@ from __future__ import annotations
 import logging
 import os
 import time
-from collections import Counter
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional
@@ -96,6 +95,9 @@ def load_index():
     """
     Pre-load the ChromaDB collection and embedding model at FastAPI startup.
     Safe to call before any ingestion — the collection will simply be empty.
+
+    Also warms up the embedding model with a dummy encode so the first real
+    /wiki/start request isn't penalised by the ~40s model-load cost.
     """
     try:
         col   = _get_collection()
@@ -110,15 +112,74 @@ def load_index():
     except Exception as exc:
         logger.warning(f"Wikipedia: could not load index — {exc}")
 
+    # Warm up the embedding model now (in the startup thread) so the first
+    # user query embeds instantly instead of triggering a cold model load.
+    try:
+        _embed_query("warm up")
+        logger.info("Wikipedia: embedding model warmed up.")
+    except Exception as exc:
+        logger.warning(f"Wikipedia: embedding warm-up failed (non-fatal) — {exc}")
+
 
 # ── Article discovery ──────────────────────────────────────────────────────────
+
+def _normalize_title(text: str) -> str:
+    """Lowercase, strip punctuation/whitespace, and singularize a simple trailing
+    plural so 'large language models' and 'Large language model' compare equal."""
+    import re
+    t = re.sub(r"[^\w\s]", "", text.lower()).strip()
+    t = re.sub(r"\s+", " ", t)
+    # Crude singularization: 'models' -> 'model', 'batteries' -> 'battery'.
+    if t.endswith("ies") and len(t) > 4:
+        t = t[:-3] + "y"
+    elif t.endswith("ses") and len(t) > 4:
+        t = t[:-2]
+    elif t.endswith("s") and not t.endswith("ss") and len(t) > 3:
+        t = t[:-1]
+    return t
+
+
+def _title_candidates(query: str) -> list[str]:
+    """Common casing + plural/singular variants of a query for exact-title
+    matching.
+
+    Simple-English Wikipedia titles are usually sentence-case and singular
+    (e.g. 'Machine learning', 'Large language model'), so capitalize() of the
+    singular form is the most likely hit.
+    """
+    q = query.strip()
+    forms = [q]
+    # Add a singular form by trimming a simple trailing plural.
+    if q.lower().endswith("ies") and len(q) > 4:
+        forms.append(q[:-3] + "y")
+    elif q.lower().endswith("ses") and len(q) > 4:
+        forms.append(q[:-2])
+    elif q.lower().endswith("s") and not q.lower().endswith("ss") and len(q) > 3:
+        forms.append(q[:-1])
+
+    out: list[str] = []
+    for form in forms:
+        for cand in (form, form.capitalize(), form.title(), form.lower(), form.upper()):
+            if cand and cand not in out:
+                out.append(cand)
+    return out
+
 
 def find_article(query: str) -> Optional[str]:
     """
     Find the best-matching Wikipedia article title for a user query.
 
-    Embeds the query, retrieves the top-20 semantically similar chunks,
-    and returns the article title that appears most frequently (majority vote).
+    Strategy:
+      1. Exact-title fast path — if the query (in any common casing or simple
+         singular/plural form) matches an article title verbatim, use it. This
+         stops a tangentially-related article from out-voting the article the
+         user actually named.
+      2. Semantic fallback — embed the query, pull the top-20 nearest chunks,
+         and pick the title with the highest *similarity-weighted* score
+         (sum of 1 - cosine_distance). Titles whose normalized form matches the
+         query get a large bonus so a directly-named article beats one that
+         merely mentions the topic a lot.
+
     Returns None when the index is empty or no match is found.
     """
     col = _get_collection()
@@ -126,23 +187,49 @@ def find_article(query: str) -> Optional[str]:
     if total == 0:
         return None
 
+    # 1) Exact-title fast path.
+    for cand in _title_candidates(query):
+        hit = col.get(where={"title": {"$eq": cand}}, limit=1)
+        if hit["ids"]:
+            return cand
+
+    # 2) Similarity-weighted semantic vote with a title-match bonus.
     embedding = _embed_query(query)
     n_results = min(20, total)
 
     results = col.query(
         query_embeddings=[embedding],
         n_results=n_results,
-        include=["metadatas"],
+        include=["metadatas", "distances"],
     )
 
-    if not results["metadatas"] or not results["metadatas"][0]:
+    metas = results["metadatas"][0] if results["metadatas"] else []
+    dists = results["distances"][0] if results.get("distances") else []
+    if not metas:
         return None
 
-    titles = [m["title"] for m in results["metadatas"][0] if "title" in m]
-    if not titles:
+    query_norm = _normalize_title(query)
+    scores: dict[str, float] = {}
+    for meta, dist in zip(metas, dists):
+        title = meta.get("title")
+        if not title:
+            continue
+        # Cosine distance → similarity weight; closer chunks count for more.
+        weight = 1.0 - dist
+        title_norm = _normalize_title(title)
+        # Strong bonus when the title matches the query (exactly or as a
+        # substring), so 'Large language model' beats 'Mistral AI' for the
+        # query 'large language models'.
+        if title_norm == query_norm:
+            weight += 5.0
+        elif query_norm and (query_norm in title_norm or title_norm in query_norm):
+            weight += 2.0
+        scores[title] = scores.get(title, 0.0) + weight
+
+    if not scores:
         return None
 
-    return Counter(titles).most_common(1)[0][0]
+    return max(scores, key=scores.get)
 
 
 # ── Session state ──────────────────────────────────────────────────────────────

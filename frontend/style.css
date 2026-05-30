@@ -4498,9 +4498,15 @@ a.news-story-source-title:hover {
 
 .toolkit-panel {
   position: absolute;
-  inset: 0;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 45%;
+  height: 90%;
   z-index: 80;
   background: rgba(10, 10, 10, 0.97);
+  border: 1px solid rgba(200, 200, 200, 0.12);
+  border-radius: 8px;
   display: flex;
   flex-direction: column;
   padding: 28px 32px;
