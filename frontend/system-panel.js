@@ -105,14 +105,27 @@ function _kv(label, value) {
          `<span class="system-kv-v">${escapeHtml(value ?? '—')}</span></div>`;
 }
 
+/**
+ * Format an STT/TTS boot-probe entry as "engine model · DEVICE".
+ * Device is uppercased (GPU/CPU); a trailing "?" marks a boot-time prediction
+ * made before the model loaded and confirmed its actual device.
+ */
+function _engineVal(probe) {
+  const engine = probe.engine ? `${probe.engine} ` : '';
+  const model  = probe.model || '?';
+  let device   = (probe.device || '?').toUpperCase();
+  if (probe.predicted && device !== '?') device += '?';
+  return `${engine}${model} · ${device}`;
+}
+
 function _renderBoot(boot) {
   if (!_bootMount) return;
   const llm = boot.llm || {}, stt = boot.stt || {}, tts = boot.tts || {};
   const rag = boot.rag || {}, gpu = boot.gpu || {};
   _bootMount.innerHTML =
     _kv('LLM',     `${llm.backend || '?'} / ${llm.model || '?'}`) +
-    _kv('STT',     `${stt.model || '?'} (${stt.device || '?'})`) +
-    _kv('TTS',     `${tts.model || '?'} (${tts.device || '?'})`) +
+    _kv('STT',     _engineVal(stt)) +
+    _kv('TTS',     _engineVal(tts)) +
     _kv('RAG',     rag.enabled ? `enabled · ${rag.chunk_count} chunks` : 'disabled') +
     _kv('Memory RAG', rag.memory_enabled ? 'enabled' : 'disabled') +
     _kv('GPU',     gpu && gpu.name ? `${gpu.name} (${gpu.total_vram_mib} MiB)` : 'none') +

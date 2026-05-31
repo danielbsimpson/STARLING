@@ -108,28 +108,52 @@ def _probe_llm() -> dict:
 def _probe_stt() -> dict:
     try:
         import stt
+        model = getattr(stt, "_WHISPER_MODEL_SIZE", "unknown")
+        # Whisper resolves its device lazily on first transcription (to avoid a
+        # CUDA stall while llama-server loads VRAM). At boot _active_device is
+        # still None, so predict from the requested env device — mirroring the
+        # live /system-status endpoint — instead of reporting "unknown"/"?".
+        active = getattr(stt, "_active_device", None)
+        requested = getattr(stt, "_DEVICE", "cpu")
+        device = active if active is not None else requested
         return {
-            "model":  getattr(stt, "_WHISPER_MODEL_SIZE", "unknown"),
-            "device": getattr(stt, "_active_device",      "unknown"),
+            "engine":    "whisper",
+            "model":     model,
+            "device":    "GPU" if device == "cuda" else "CPU",
+            "predicted": active is None,
         }
     except Exception:
-        return {"model": "unknown", "device": "unknown"}
+        return {"engine": "whisper", "model": "unknown", "device": "unknown"}
 
 
 def _probe_tts() -> dict:
     try:
         import tts
-        provider = getattr(tts, "_onnx_provider", None) or "CPU"
+        # Kokoro resolves its ONNX provider lazily on first synthesis. At boot
+        # _onnx_provider is None, so predict from the providers onnxruntime
+        # reports as available — mirroring the live /system-status endpoint —
+        # rather than defaulting to CPU.
+        resolved = getattr(tts, "_onnx_provider", None)
+        if resolved:
+            providers = [resolved]
+        else:
+            try:
+                providers = tts._get_available_providers()
+            except Exception:
+                providers = []
         is_gpu = any(
-            kw in provider for kw in ("CUDA", "Tensorrt", "ROCM", "Dml")
+            kw in p for p in providers
+            for kw in ("CUDA", "Tensorrt", "ROCM", "Dml")
         )
         return {
-            "model":    "kokoro-v1.0",
-            "provider": provider,
-            "device":   "cuda" if is_gpu else "cpu",
+            "engine":    "kokoro",
+            "model":     "kokoro-v1.0",
+            "provider":  resolved or (providers[0] if providers else "CPU"),
+            "device":    "GPU" if is_gpu else "CPU",
+            "predicted": resolved is None,
         }
     except Exception:
-        return {"model": "unknown", "provider": "unknown", "device": "unknown"}
+        return {"engine": "kokoro", "model": "unknown", "provider": "unknown", "device": "unknown"}
 
 
 def _probe_rag() -> dict:
@@ -502,8 +526,8 @@ def render_static_prompt_block() -> str:
     llm_part = f"{llm.get('backend', '?')} {llm.get('model', '?')}"
     if llm.get("n_ctx"):
         llm_part += f" (n_ctx={llm['n_ctx']})"
-    stt_part = f"{stt.get('model', '?')} on {stt.get('device', '?')}"
-    tts_part = f"{tts_.get('model', '?')} on {tts_.get('device', '?')}"
+    stt_part = f"{stt.get('engine', 'whisper')} {stt.get('model', '?')} on {stt.get('device', '?')}"
+    tts_part = f"{tts_.get('engine', 'kokoro')} {tts_.get('model', '?')} on {tts_.get('device', '?')}"
 
     if rag.get("enabled"):
         rag_part = f"enabled, {rag.get('chunk_count', 0)} chunks"
