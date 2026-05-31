@@ -16,6 +16,8 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.request
+import webbrowser
 from pathlib import Path
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
@@ -92,11 +94,11 @@ LLAMA_CTX_SIZE = _load_persisted_ctx_size(LLAMA_CTX_SIZE)
 # before being force-killed on shutdown. Mirrors dream.py's DREAM_TIMEOUT_S.
 _DREAM_TIMEOUT_S = int(_cfg("DREAM_TIMEOUT_S", "300"))
 
-# How long to wait for llama-server to print its ready marker before starting the backend.
-# Keeps Python's CUDA/ONNX module-level init (stt.py, tts.py) from racing with
-# llama-server's GPU model load, which can cause an indefinite CUDA stall.
-_LLAMA_READY_MARKER  = "server is listening"
-_LLAMA_READY_TIMEOUT = int(_cfg("LLAMA_READY_TIMEOUT", "120"))  # seconds
+# How long to wait for the backend /health endpoint to come up before opening the
+# browser. The UI is served by the backend, so this is how long until there is
+# something to look at. llama-server keeps loading in the background; the frontend
+# stays in its blue "INIT" state until the LLM reports ready (via /system-status).
+_UI_READY_TIMEOUT = int(_cfg("UI_READY_TIMEOUT", "60"))  # seconds
 
 # ── Terminal colours (ANSI) ───────────────────────────────────────────────────
 
@@ -290,38 +292,28 @@ def start_backend() -> "subprocess.Popen[bytes]":
     )
 
 
-def _wait_for_llama_ready(proc: "subprocess.Popen[bytes]") -> bool:
+def _open_browser_when_ready(timeout: int = _UI_READY_TIMEOUT) -> None:
     """
-    Read llama-server stdout line-by-line, echoing each line, until the server
-    prints its ready marker or the timeout expires.
+    Poll the backend /health endpoint, then open the UI in the default browser.
 
-    This keeps the FastAPI backend from starting (and triggering CUDA/ONNX
-    module-level initialisation) while llama-server is still loading its model
-    onto the GPU — the overlap is what causes the intermittent CUDA stall.
-
-    Returns True when the marker is found, False on timeout or early process exit.
+    The backend serves the frontend, so as soon as /health responds there is a
+    page to look at — even though llama-server is still loading in the background.
+    The UI stays in its blue "INIT" state until the LLM reports ready.
     """
-    deadline = time.time() + _LLAMA_READY_TIMEOUT
-    while time.time() < deadline:
-        if proc.poll() is not None:
-            _err("llama-server exited before becoming ready.")
-            return False
-        raw = proc.stdout.readline()  # type: ignore[union-attr]
-        if not raw:
-            time.sleep(0.05)
-            continue
+    url = f"http://localhost:{BACKEND_PORT}"
+    deadline = time.time() + timeout
+    while time.time() < deadline and not _shutting_down:
         try:
-            line = raw.decode("utf-8", errors="replace").rstrip()
+            with urllib.request.urlopen(f"{url}/health", timeout=2) as resp:
+                if resp.status == 200:
+                    _info(f"UI ready — opening {url} in your browser")
+                    webbrowser.open(url)
+                    return
         except Exception:
-            continue
-        print(f"{_CYAN}[llama]{_R} {line}", flush=True)
-        if _LLAMA_READY_MARKER in line:
-            return True
-    _err(
-        f"llama-server did not print '{_LLAMA_READY_MARKER}' within {_LLAMA_READY_TIMEOUT}s "
-        "— starting backend anyway."
-    )
-    return False
+            pass  # backend not up yet — keep polling
+        time.sleep(0.5)
+    if not _shutting_down:
+        _err(f"Backend /health not reachable within {timeout}s — open {url} manually.")
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
@@ -334,20 +326,24 @@ def main() -> None:
     if hasattr(signal, "SIGTERM"):
         signal.signal(signal.SIGTERM, shutdown_handler)
 
-    _llama_proc   = start_llama()
-
-    # Wait for llama-server to finish loading its model before starting the backend.
-    # The backend imports stt.py and tts.py at module level, both of which trigger
-    # CUDA/ONNX device queries.  Running those queries while llama-server is still
-    # allocating VRAM can cause an indefinite CUDA context stall.
-    _info(f"Waiting for llama-server (ready marker: '{_LLAMA_READY_MARKER}')…")
-    _wait_for_llama_ready(_llama_proc)
-
+    # Start the backend FIRST so the UI is reachable almost immediately. The
+    # backend's stt.py / tts.py now resolve their GPU devices lazily (on first
+    # inference) rather than at import, so starting it before llama-server no
+    # longer risks the CUDA context stall that the old llama-first order avoided.
+    # The frontend gates its heavy Whisper/Kokoro warm-up until the LLM reports
+    # ready, so model loads still don't race with llama-server's VRAM allocation.
     _backend_proc = start_backend()
+
+    # Start llama-server concurrently — it keeps loading in the background while
+    # the user already has the (blue / "INIT") UI to look at.
+    _llama_proc = start_llama()
 
     _write_pid_file()
     _info(f"Both processes started.  PID file: {PID_FILE}")
     _info("Press Ctrl+C to stop everything.\n")
+
+    # Open the browser once the backend /health endpoint responds.
+    threading.Thread(target=_open_browser_when_ready, daemon=True).start()
 
     # Start output-forwarding threads (daemon so they don't block exit)
     threading.Thread(

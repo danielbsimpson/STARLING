@@ -1,5 +1,5 @@
 // ── Imports ───────────────────────────────────────────────────────────────────
-import { BACKEND_BASE, BOOT_ANIMATION_MS, SHUTDOWN_ANIMATION_MS, SLEEP_AFTER_MS, SLEEP_ANIMATION_MS, WAKE_ANIMATION_MS } from './config.js';
+import { BACKEND_BASE, BOOT_ANIMATION_MS, SHUTDOWN_ANIMATION_MS, SLEEP_AFTER_MS, SLEEP_ANIMATION_MS, WAKE_ANIMATION_MS, READY_POLL_INTERVAL_MS, READY_POLL_TIMEOUT_MS } from './config.js';
 import { detectTimerTrigger, handleTimerTrigger, initTimerPanel, dismissTimerPanel } from './timer-panel.js';
 import { detectWeatherTrigger, openWeatherPanel, closeWeatherPanel, initWeatherPanel, isWeatherPanelOpen, getWeatherContext } from './weather-panel.js';
 import { detectNewsTrigger, openNewsPanel, closeNewsPanel, initNewsPanel, isNewsPanelOpen, getActiveArticleContext } from './news-panel.js';
@@ -1828,8 +1828,10 @@ function initSphere() {
     camera.position.set(0, 0, 6.2);
     _restoreCanvasToRing();
     _resetAnimOffsets();
-    setState('idle');
-    [micBtn, sendBtn, textInput, powerBtn].forEach(el => el && (el.disabled = false));
+    // Boot animation is done — but stay blue ("INIT") with controls disabled until
+    // model warm-up (LLM ready) has also completed.
+    _bootAnimDone = true;
+    _finishStartupIfReady();
   }
 
   /** Called once the shutdown animation finishes. Fires the backend shutdown call. */
@@ -4108,6 +4110,38 @@ async function _loadSoul() {
   }
 }
 
+// ── Startup coordination ──────────────────────────────────────────────────────
+// Interactive controls are revealed (and the sphere turns from blue "INIT" to its
+// ready idle state) only once BOTH conditions are met:
+//   1. the boot animation has finished, and
+//   2. model warm-up is complete — which itself waits for the LLM to report ready.
+let _bootAnimDone = false;
+let _warmupDone   = false;
+
+function _finishStartupIfReady() {
+  if (!(_bootAnimDone && _warmupDone)) return;
+  setState('idle');
+  [micBtn, sendBtn, textInput, powerBtn].forEach(el => el && (el.disabled = false));
+}
+
+// Poll /system-status until the LLM is no longer OFFLINE (llama-server still loads
+// in the background after the UI is already on screen). Keeps the UI in its blue
+// "INIT" state until the model is ready, then resolves so warm-up can proceed.
+async function _waitForLlmReady() {
+  const deadline = Date.now() + READY_POLL_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(`${BACKEND_BASE}/system-status`);
+      if (res.ok) {
+        const s = await res.json();
+        if (s.llm && s.llm !== 'OFFLINE') return true;
+      }
+    } catch { /* backend momentarily unreachable — keep polling */ }
+    await new Promise(r => setTimeout(r, READY_POLL_INTERVAL_MS));
+  }
+  return false;  // timed out — proceed anyway so the UI never hangs forever
+}
+
 // Synthesise the greeting to pre-heat Kokoro, then POST the returned WAV to
 // /transcribe so the Whisper CUDA session is initialised before the user ever
 // presses the mic.
@@ -4117,6 +4151,9 @@ async function warmupModels(greetingEl) {
   setState('warmup');
   // Load prompt registry early so getPrompt() serves live values for all subsequent calls.
   await loadPrompts();
+  // Wait for llama-server to finish loading before warming up the GPU models, so
+  // Whisper/Kokoro initialisation never races with llama's VRAM allocation.
+  await _waitForLlmReady();
   try {
     const blob = await _fetchTTSBlob(_sanitiseForTTS(GREETING_TEXT));
     if (blob) {
@@ -4128,6 +4165,13 @@ async function warmupModels(greetingEl) {
       // Note: we intentionally do NOT play the greeting here. audio.play() is blocked
       // by the browser autoplay policy until the user has made a gesture on the page.
     }
+  } catch { /* warm-up failures are non-fatal */ }
+  // Warm up the LLM itself — llama-server has the model in VRAM (we waited on
+  // /system-status), but the prompt-eval / generation path is still cold until a
+  // first inference. Fire one tiny silent call so the user's first real turn does
+  // not pay that cost. Output is discarded.
+  try {
+    await _callLLMSilently('ping', [{ role: 'system', content: 'Reply with a single word.' }]);
   } catch { /* warm-up failures are non-fatal */ }
   // Both Kokoro and Whisper have now completed their first inference pass — poll
   // system-status so the GPU badges in the footer are populated before the user speaks.
@@ -4157,7 +4201,10 @@ async function warmupModels(greetingEl) {
   conversationHistory = [{ role: 'system', content: SYSTEM_PROMPT }];
   // Reveal the full greeting only once everything is ready.
   if (greetingEl) greetingEl.textContent = GREETING_TEXT;
-  setState('idle');
+  // Mark warm-up complete; controls/idle state are revealed once the boot
+  // animation has also finished (see _finishStartupIfReady).
+  _warmupDone = true;
+  _finishStartupIfReady();
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -4193,13 +4240,16 @@ if (_fcbNo) {
   });
 }
 // Disable interactive controls during boot animation.
-// _onBootAnimationComplete() (called from animate()) re-enables them.
-// If Three.js fails to init, _sphereAnimPhase stays 'none' and we re-enable immediately below.
+// _onBootAnimationComplete() (called from animate()) re-enables them once warm-up
+// has also finished. If Three.js fails to init, _sphereAnimPhase stays 'none' and
+// we mark the boot phase done immediately below so warm-up alone gates the controls.
 [micBtn, sendBtn, textInput, powerBtn].forEach(el => el && (el.disabled = true));
 initSphere();
-// If sphere didn't start a boot animation (Three.js unavailable), enable controls now.
+// If sphere didn't start a boot animation (Three.js unavailable), treat the boot
+// phase as complete now — controls are then gated solely on model warm-up.
 if (_sphereAnimPhase === 'none') {
-  [micBtn, sendBtn, textInput, powerBtn].forEach(el => el && (el.disabled = false));
+  _bootAnimDone = true;
+  _finishStartupIfReady();
 }
 
 // ── Dev-only lifecycle animation hotkeys (gated on ?dev=1) ────────────────────

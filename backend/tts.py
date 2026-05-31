@@ -29,24 +29,50 @@ import session_log
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/synthesize", tags=["tts"])
 
-# ── Log active ONNX provider at import time so it shows in server startup output ─
-_available = _ort.get_available_providers()
-# Default to DmlExecutionProvider (DirectML/GPU) if available and env not overridden.
-# kokoro-onnx only activates GPU automatically for onnxruntime-gpu; with
-# onnxruntime-directml the ONNX_PROVIDER env var must be set explicitly.
+# ── ONNX provider detection (lazy — resolved on first use, not at import) ──────
+# Deferred so importing this module does not query ONNX providers while
+# llama-server may still be allocating VRAM, which can contribute to a CUDA
+# context stall (see scripts/launch.py).
 _GPU_PROVIDERS = ("CUDAExecutionProvider", "TensorrtExecutionProvider",
                   "ROCMExecutionProvider", "DmlExecutionProvider")
-_default_provider = next((p for p in _GPU_PROVIDERS if p in _available), None)
-_onnx_provider = os.getenv("ONNX_PROVIDER", _default_provider)
-if _onnx_provider:
-    log.info("Kokoro ONNX provider: %s", _onnx_provider)
-else:
-    log.warning(
-        "\u26a0  No GPU ONNX provider detected — Kokoro will run on CPU (slow). "
-        "Available providers: %s. "
-        "Fix: pip install --force-reinstall --no-deps onnxruntime-gpu",
-        _available,
-    )
+_available: list[str] | None = None
+_onnx_provider: str | None = None
+_provider_resolved = False
+
+
+def _resolve_providers() -> None:
+    """Detect available ONNX providers and select the active one (cached)."""
+    global _available, _onnx_provider, _provider_resolved
+    if _provider_resolved:
+        return
+    _available = _ort.get_available_providers()
+    # Default to a GPU provider if available and env not overridden. kokoro-onnx
+    # only activates GPU automatically for onnxruntime-gpu; with
+    # onnxruntime-directml the ONNX_PROVIDER env var must be set explicitly.
+    _default_provider = next((p for p in _GPU_PROVIDERS if p in _available), None)
+    _onnx_provider = os.getenv("ONNX_PROVIDER", _default_provider)
+    if _onnx_provider:
+        log.info("Kokoro ONNX provider: %s", _onnx_provider)
+    else:
+        log.warning(
+            "\u26a0  No GPU ONNX provider detected — Kokoro will run on CPU (slow). "
+            "Available providers: %s. "
+            "Fix: pip install --force-reinstall --no-deps onnxruntime-gpu",
+            _available,
+        )
+    _provider_resolved = True
+
+
+def _get_available_providers() -> list[str]:
+    """Return the available ONNX providers, resolving them on first use."""
+    _resolve_providers()
+    return _available or []
+
+
+def _get_onnx_provider() -> str | None:
+    """Return the selected ONNX provider, resolving it on first use."""
+    _resolve_providers()
+    return _onnx_provider
 
 # ── Model file paths ───────────────────────────────────────────────────────────
 _MODEL_DIR   = Path(__file__).parent.parent / "models"
@@ -77,7 +103,7 @@ def _get_kokoro() -> Kokoro:
                 "Run: python scripts/download_models.py"
             )
         log.info("Loading Kokoro TTS model (first request)\u2026")
-        _kokoro = _build_kokoro(_onnx_provider)
+        _kokoro = _build_kokoro(_get_onnx_provider())
     return _kokoro
 
 
@@ -192,7 +218,8 @@ async def synthesize(req: TTSRequest):
         lang = _VOICE_MAP[req.voice]["lang"]
         loop = asyncio.get_running_loop()
         chunks = _split_chunks(req.text)
-        device = "cpu" if (_onnx_provider == "CPUExecutionProvider" or not _onnx_provider) else "gpu"
+        _active_provider = _get_onnx_provider()
+        device = "cpu" if (_active_provider == "CPUExecutionProvider" or not _active_provider) else "gpu"
         _t0 = asyncio.get_running_loop().time()
 
         def _run_synthesis():

@@ -36,9 +36,21 @@ def _resolve_device(requested: str) -> str:
         logger.warning("CUDA unavailable for Whisper (%s) — using CPU/int8.", exc)
         return "cpu"
 
-_active_device: str = _resolve_device(_DEVICE)
+# Device is resolved lazily on first model load — NOT at import time. Resolving
+# here would call ctranslate2.get_cuda_device_count() while llama-server may still
+# be allocating VRAM, which can cause an indefinite CUDA context stall (see
+# scripts/launch.py). None means "not yet resolved".
+_active_device: str | None = None
 # Holds the active model; lazy-loaded on first request.
 _model: WhisperModel | None = None
+
+
+def _get_active_device() -> str:
+    """Resolve and cache the Whisper device on first use (lazy, GPU-stall safe)."""
+    global _active_device
+    if _active_device is None:
+        _active_device = _resolve_device(_DEVICE)
+    return _active_device
 
 
 def _build_model(device: str) -> WhisperModel:
@@ -48,10 +60,11 @@ def _build_model(device: str) -> WhisperModel:
 
 
 def _get_model() -> WhisperModel:
-    global _model, _active_device
+    global _model
     if _model is None:
-        _model = _build_model(_active_device)
-        logger.info("Whisper model ready on %s.", _active_device)
+        device = _get_active_device()
+        _model = _build_model(device)
+        logger.info("Whisper model ready on %s.", device)
     return _model
 
 

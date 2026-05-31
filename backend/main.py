@@ -409,15 +409,20 @@ def _provider_is_gpu(providers: list) -> bool:
 
 @app.get("/system-status")
 async def system_status():
-    # Whisper — device is resolved once at startup
-    whisper_device = "GPU" if _stt._active_device == "cuda" else "CPU"
+    # Whisper — report the resolved device if a model has loaded, otherwise
+    # predict from the requested env WITHOUT forcing resolution (resolving here
+    # would query CUDA and could stall while llama-server is still loading).
+    if _stt._active_device is not None:
+        whisper_device = "GPU" if _stt._active_device == "cuda" else "CPU"
+    else:
+        whisper_device = "GPU" if _stt._DEVICE == "cuda" else "CPU"
 
     # Kokoro — check actual ONNX session providers if model is loaded,
     # otherwise predict from what onnxruntime reports as available
     if _tts._kokoro is not None:
         active_providers = _tts._kokoro.sess.get_providers()
     else:
-        active_providers = _tts._available
+        active_providers = _tts._get_available_providers()
 
     kokoro_device = "GPU" if _provider_is_gpu(active_providers) else "CPU"
 
