@@ -5286,6 +5286,39 @@ a.news-story-source-title:hover {
   margin-bottom: 0;
 }
 
+/* ── Sphere surface picker (SPHERE SURFACE menu section) ──────────────────── */
+.surface-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.surface-opt {
+  flex: 1 1 0;
+  min-width: 96px;
+  padding: 8px 10px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: rgba(200, 210, 230, 0.7);
+  background: rgba(140, 170, 220, 0.04);
+  border: 1px solid rgba(160, 180, 220, 0.18);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+.surface-opt:hover {
+  background: rgba(140, 170, 220, 0.1);
+  border-color: rgba(160, 180, 220, 0.32);
+  color: rgba(220, 230, 245, 0.92);
+}
+.surface-opt.active {
+  color: #dff0ff;
+  background: rgba(120, 180, 255, 0.16);
+  border-color: rgba(140, 200, 255, 0.55);
+  box-shadow: 0 0 10px rgba(120, 180, 255, 0.18) inset;
+}
+
 /* ── Journal-mode layout (same pattern as news-mode / mkt-mode) ──────────── */
 
 .body-cols > .journal-panel {

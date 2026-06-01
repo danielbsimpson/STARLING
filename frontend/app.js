@@ -23,6 +23,11 @@ import {
   smoothToward,
   smoothColor,
 } from './ambient-fx.js';
+import { SURFACE_REGISTRY, isValidSurfaceId, readSavedSurfaceId, DEFAULT_SURFACE_ID } from './sphere-surfaces.js';
+import { createSurfaceManager } from './sphere-surface-manager.js';
+import { buildVoronoiEffect } from './sphere-voronoi.js';
+import { buildLiquidMetalEffect } from './sphere-liquid-metal.js';
+import { buildSolidBlackEffect } from './sphere-solid.js';
 import { initNebula } from './nebula-bg.js';
 import {
   wikiMode,
@@ -984,6 +989,10 @@ let _startWakeAnim  = function () { _onWakeAnimationComplete();  };
 // ── Dev-only animation replays (overwritten by initSphere(); gated on ?dev=1) ──
 let _replayBootAnim      = function () {};
 let _previewShutdownAnim = function () {};
+
+// ── Sphere surface selection (overwritten by initSphere()) ─────────────────────
+// Applies a surface effect by id; no-op fallback when Three.js is unavailable.
+let _applySphereSurface = function () { return false; };
 
 // ── Sleep mode state ──────────────────────────────────────────────────────────
 let _isSleeping           = false;   // true while sleep overlay is showing
@@ -2027,6 +2036,42 @@ function initSphere() {
   scene.add(sphereMesh);
   const SPHERE_EMISSIVE_INTENSITY_BASE = sphereMat.emissiveIntensity;
 
+  // ── Pluggable surface effect manager ───────────────────────────────────────
+  // Owns the sphere mesh's material and swaps it at runtime (Voronoi default).
+  // The CPU vertex deformation on sphereGeo keeps driving whichever material is
+  // active, so the surface still reacts to audio while listening/speaking.
+  // Per-frame context values are cached at the top of animate() and read by
+  // getFrameContext() — a single reused object so the loop allocates nothing.
+  let _frameDelta            = 0;
+  let _frameT                = 0;
+  let _frameLifecycleActive  = false;
+  const _frameOrbColor       = new THREE.Color();
+  const _frameCtx = {
+    state: 'idle', delta: 0, t: 0,
+    orbColorTarget: _frameOrbColor, lifecycleActive: false,
+    orbOpacity: 1, prefersReducedMotion: _prefersReducedMotion,
+    analyser: sphereAnalyserRef, orbs,
+  };
+  function _getSurfaceFrameContext() {
+    _frameCtx.state           = sphereStateRef.current;
+    _frameCtx.delta           = _frameDelta;
+    _frameCtx.t               = _frameT;
+    _frameCtx.lifecycleActive = _frameLifecycleActive;
+    _frameCtx.orbOpacity      = _orbOpacity;
+    return _frameCtx;
+  }
+  const surfaceManager = createSurfaceManager({
+    THREE,
+    sphereMesh,
+    builders: { 'voronoi': buildVoronoiEffect, 'liquid-metal': buildLiquidMetalEffect, 'solid-black': buildSolidBlackEffect },
+    storage: window.localStorage,
+    getFrameContext: _getSurfaceFrameContext,
+    baseColor: 0x060606,
+  });
+  surfaceManager.applyEffect(readSavedSurfaceId(window.localStorage));
+  // Expose runtime switching to the menu picker (module scope).
+  _applySphereSurface = (id) => surfaceManager.applyEffect(id);
+
   // ── Rim / Fresnel sphere — back-face, slightly larger, very low opacity ───
   // Renders only the outer edge silhouette, creating a subtle "backlit halo" rim.
   const rimMat = new THREE.MeshLambertMaterial({
@@ -2495,6 +2540,23 @@ function initSphere() {
       if (anyChange) sphereGeo.attributes.position.needsUpdate = true;
     }
 
+    // ── Active surface effect update (PAT-002) ───────────────────────────────
+    // Build the representative orb colour the surface eases toward so the
+    // surface and orbs read as one organism, cache the per-frame context
+    // values, then drive the active effect exactly once (no per-effect
+    // branching here). The CPU deformation above already ran, so the surface
+    // still reacts to audio regardless of which effect is active.
+    if (orbOverrideColor) {
+      _frameOrbColor.copy(orbOverrideColor);
+    } else {
+      temperatureToRGB(_orbWarmth, 0, _tempRGB);
+      _frameOrbColor.setRGB(_tempRGB.r, _tempRGB.g, _tempRGB.b);
+    }
+    _frameDelta           = delta;
+    _frameT               = t;
+    _frameLifecycleActive = lifecycleActive;
+    surfaceManager.updateActive();
+
     // ── Atmospheric glow — ease colour / strength, render (GOAL-002, TASK-012) ─
     if (!_prefersReducedMotion) {
       // Under reduced motion _glowStrength holds its initial constant value.
@@ -2511,7 +2573,12 @@ function initSphere() {
       );
     }
     const renderGlowStrength = _glowStrength * blinkGlowMul;
-    sphereMat.emissiveIntensity = SPHERE_EMISSIVE_INTENSITY_BASE * blinkGlowMul;
+    // Blink dims the active sphere material's emissive (Phong-based effects);
+    // ShaderMaterial effects without emissiveIntensity are skipped safely.
+    const _activeSphereMat = sphereMesh.material;
+    if (_activeSphereMat && 'emissiveIntensity' in _activeSphereMat) {
+      _activeSphereMat.emissiveIntensity = SPHERE_EMISSIVE_INTENSITY_BASE * blinkGlowMul;
+    }
     rimMat.opacity = RIM_OPACITY_BASE * blinkRimMul;
 
     if (_bloomEnabled && bloomPass) {
@@ -4613,6 +4680,33 @@ if (_sphereAnimPhase === 'none') {
   _bootAnimDone = true;
   _finishStartupIfReady();
 }
+
+// ── Sphere surface picker (SPHERE SURFACE menu section) ───────────────────────
+// Populate the menu with one button per registered effect, highlight the saved
+// selection, and switch the live surface on click. isValidSurfaceId guards the
+// click handler (SEC-002); applies are no-ops when the id is already active.
+(function initSurfacePicker() {
+  const picker = document.getElementById('surface-picker');
+  if (!picker) return;
+  let currentId = readSavedSurfaceId(window.localStorage, DEFAULT_SURFACE_ID);
+  picker.innerHTML = '';
+  SURFACE_REGISTRY.forEach(({ id, label }) => {
+    const btn = document.createElement('button');
+    btn.className = 'surface-opt';
+    btn.dataset.surfaceId = id;
+    btn.textContent = label;
+    if (id === currentId) btn.classList.add('active');
+    btn.addEventListener('click', () => {
+      if (!isValidSurfaceId(id) || id === currentId) return;
+      if (_applySphereSurface(id)) {
+        currentId = id;
+        picker.querySelectorAll('.surface-opt').forEach(el =>
+          el.classList.toggle('active', el.dataset.surfaceId === id));
+      }
+    });
+    picker.appendChild(btn);
+  });
+})();
 
 // ── Dev-only lifecycle animation hotkeys (gated on ?dev=1) ────────────────────
 // Ctrl+Shift+B → replay boot · Ctrl+Shift+S → sleep (wake via activity) ·
