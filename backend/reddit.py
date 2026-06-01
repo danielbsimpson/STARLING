@@ -12,6 +12,7 @@ import logging
 import os
 import re
 import time
+import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -120,68 +121,173 @@ def _sanitise_sub(name: str) -> str | None:
 
 # ── Fetching ──────────────────────────────────────────────────────────────────
 
-async def _fetch_subreddit_posts(
-    subreddit: str, sort: str = "hot", limit: int = 10
-) -> list[dict]:
-    """Fetch hot posts from a single subreddit via the public JSON API."""
-    url = (
-        f"https://www.reddit.com/r/{subreddit}/{sort}.json"
-        f"?limit={limit}&raw_json=1"
-    )
-    headers = {"User-Agent": "STARLING/1.0 (personal assistant; read-only; contact: local)"}
+_BROWSER_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/125.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json, text/html, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+}
+
+_ATOM_NS = "http://www.w3.org/2005/Atom"
+
+
+def _parse_rss_posts(xml_text: str, subreddit: str, limit: int) -> list[dict]:
+    """Parse a Reddit Atom RSS feed into the same post-dict shape as the JSON API."""
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(url, headers=headers)
-        if resp.status_code != 200:
-            logger.warning("Reddit fetch for r/%s returned HTTP %d", subreddit, resp.status_code)
-            return []
-        children = resp.json()["data"]["children"]
-    except Exception as exc:
-        logger.warning("Reddit fetch error for r/%s: %s", subreddit, exc)
+        root = ET.fromstring(xml_text)
+    except ET.ParseError as exc:
+        logger.warning("RSS parse error for r/%s: %s", subreddit, exc)
         return []
 
+    entries = root.findall(f"{{{_ATOM_NS}}}entry")
     posts: list[dict] = []
-    for child in children:
-        d = child.get("data", {})
-        title = d.get("title", "").strip()
+    for entry in entries[:limit]:
+        title_el = entry.find(f"{{{_ATOM_NS}}}title")
+        title = (title_el.text or "").strip() if title_el is not None else ""
         if not title:
             continue
+
+        # Prefer the alternate link (the post URL)
+        url = ""
+        for link in entry.findall(f"{{{_ATOM_NS}}}link"):
+            if link.get("rel") == "alternate":
+                url = link.get("href", "")
+                break
+        if not url:
+            link_el = entry.findall(f"{{{_ATOM_NS}}}link")
+            url = link_el[0].get("href", "") if link_el else ""
+
+        # Permalink is the same as url for Atom feeds
+        permalink = url
+
+        author_el = entry.find(f"{{{_ATOM_NS}}}author/{{{_ATOM_NS}}}name")
+        author = (author_el.text or "").strip() if author_el is not None else ""
+
+        published_el = entry.find(f"{{{_ATOM_NS}}}published") or entry.find(f"{{{_ATOM_NS}}}updated")
+        created_utc = 0.0
+        if published_el is not None and published_el.text:
+            try:
+                dt = datetime.fromisoformat(published_el.text.replace("Z", "+00:00"))
+                created_utc = dt.timestamp()
+            except ValueError:
+                pass
+
         if len(title) > 300:
             title = title[:300].rsplit(" ", 1)[0] + "\u2026"
 
-        selftext = d.get("selftext", "").strip()
-        selftext = re.sub(r"<[^>]+>", " ", selftext).strip()
-        selftext = re.sub(r"\s{2,}", " ", selftext)
-        if len(selftext) > 280:
-            selftext = selftext[:280].rsplit(" ", 1)[0] + "\u2026"
-
-        thumbnail = d.get("thumbnail", "")
-        if not (isinstance(thumbnail, str) and thumbnail.startswith("http")):
-            thumbnail = None
-
-        author = d.get("author", "[deleted]")
-        if author and author != "[deleted]":
-            author = f"u/{author}"
-
-        created_utc = float(d.get("created_utc", 0.0))
         posts.append({
-            "id":           d.get("id", ""),
+            "id":           entry.find(f"{{{_ATOM_NS}}}id").text.split("_")[-1] if entry.find(f"{{{_ATOM_NS}}}id") is not None else "",
             "title":        title,
-            "score":        int(d.get("score", 0)),
-            "num_comments": int(d.get("num_comments", 0)),
+            "score":        0,   # not available in RSS
+            "num_comments": 0,   # not available in RSS
             "author":       author,
-            "subreddit":    d.get("subreddit", subreddit),
-            "url":          d.get("url", ""),
-            "permalink":    f"https://www.reddit.com{d.get('permalink', '')}",
-            "selftext":     selftext,
-            "is_self":      bool(d.get("is_self", False)),
+            "subreddit":    subreddit,
+            "url":          url,
+            "permalink":    permalink,
+            "selftext":     "",
+            "is_self":      False,
             "created_utc":  created_utc,
-            "age":          _human_age(created_utc),
-            "flair":        d.get("link_flair_text") or None,
-            "thumbnail":    thumbnail,
+            "age":          _human_age(created_utc) if created_utc else "unknown",
+            "flair":        None,
+            "thumbnail":    None,
         })
 
     return posts
+
+
+async def _fetch_subreddit_posts(
+    subreddit: str, sort: str = "hot", limit: int = 10
+) -> list[dict]:
+    """Fetch posts from a single subreddit.
+
+    Strategy:
+    1. Try old.reddit.com JSON API (less aggressive bot-detection, same schema).
+    2. Try www.reddit.com JSON API as a secondary attempt.
+    3. Fall back to the Atom RSS feed (no score data, but sort order is preserved).
+    """
+    _json_candidates = [
+        f"https://old.reddit.com/r/{subreddit}/{sort}.json?limit={limit}&raw_json=1",
+        f"https://www.reddit.com/r/{subreddit}/{sort}.json?limit={limit}&raw_json=1",
+    ]
+    rss_url = f"https://www.reddit.com/r/{subreddit}/{sort}.rss?limit={limit}"
+
+    async with httpx.AsyncClient(timeout=12.0, follow_redirects=True) as client:
+        # ── Attempt 1 & 2: JSON API (old then www) ───────────────────────────
+        children = None
+        for json_url in _json_candidates:
+            try:
+                resp = await client.get(json_url, headers=_BROWSER_HEADERS)
+                if resp.status_code == 200:
+                    children = resp.json()["data"]["children"]
+                    break
+                logger.warning(
+                    "Reddit JSON for r/%s returned HTTP %d (%s)",
+                    subreddit, resp.status_code, json_url,
+                )
+            except Exception as exc:
+                logger.warning("Reddit JSON fetch error for r/%s: %s", subreddit, exc)
+
+        if children is not None:
+            # ── Parse JSON response ──────────────────────────────────────────
+            posts: list[dict] = []
+            for child in children:
+                d = child.get("data", {})
+                title = d.get("title", "").strip()
+                if not title:
+                    continue
+                if len(title) > 300:
+                    title = title[:300].rsplit(" ", 1)[0] + "\u2026"
+
+                selftext = d.get("selftext", "").strip()
+                selftext = re.sub(r"<[^>]+>", " ", selftext).strip()
+                selftext = re.sub(r"\s{2,}", " ", selftext)
+                if len(selftext) > 280:
+                    selftext = selftext[:280].rsplit(" ", 1)[0] + "\u2026"
+
+                thumbnail = d.get("thumbnail", "")
+                if not (isinstance(thumbnail, str) and thumbnail.startswith("http")):
+                    thumbnail = None
+
+                author = d.get("author", "[deleted]")
+                if author and author != "[deleted]":
+                    author = f"u/{author}"
+
+                created_utc = float(d.get("created_utc", 0.0))
+                posts.append({
+                    "id":           d.get("id", ""),
+                    "title":        title,
+                    "score":        int(d.get("score", 0)),
+                    "num_comments": int(d.get("num_comments", 0)),
+                    "author":       author,
+                    "subreddit":    d.get("subreddit", subreddit),
+                    "url":          d.get("url", ""),
+                    "permalink":    f"https://www.reddit.com{d.get('permalink', '')}",
+                    "selftext":     selftext,
+                    "is_self":      bool(d.get("is_self", False)),
+                    "created_utc":  created_utc,
+                    "age":          _human_age(created_utc),
+                    "flair":        d.get("link_flair_text") or None,
+                    "thumbnail":    thumbnail,
+                })
+            return posts
+
+        # ── Attempt 2: RSS / Atom feed ───────────────────────────────────────
+        try:
+            rss_headers = {**_BROWSER_HEADERS, "Accept": "application/rss+xml, application/atom+xml, text/xml, */*"}
+            rss_resp = await client.get(rss_url, headers=rss_headers)
+            if rss_resp.status_code == 200:
+                return _parse_rss_posts(rss_resp.text, subreddit, limit)
+            logger.warning(
+                "Reddit RSS for r/%s returned HTTP %d", subreddit, rss_resp.status_code
+            )
+        except Exception as exc:
+            logger.warning("Reddit RSS fetch error for r/%s: %s", subreddit, exc)
+
+    return []
 
 
 async def _fetch_all_parallel(
