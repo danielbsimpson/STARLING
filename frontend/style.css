@@ -454,11 +454,16 @@ html, body {
   border-radius: 50%;
   position: relative; z-index: 1;
   /* Fade the canvas content (sphere bloom/glow haze) to transparent toward the
-     rim instead of a hard circular border. The inner ~58% stays fully opaque so
+     rim instead of a hard circular border. The inner ~55% stays fully opaque so
      the sphere and orbiting orbs remain crisp; the outer band dissolves so the
-     glow blends into the surrounding CSS halo rather than ending on a hard line. */
-  -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 0%, #000 58%, transparent 92%);
-          mask-image: radial-gradient(circle at 50% 50%, #000 0%, #000 58%, transparent 92%);
+     glow blends into the surrounding CSS halo rather than ending on a hard line.
+     IMPORTANT: `closest-side` sizes the gradient circle to exactly the canvas
+     radius (105 px on the 210 px ring), which guarantees the mask reaches fully
+     transparent at 100% — right at the border-radius clip boundary. The previous
+     plain `circle` keyword defaulted to `farthest-corner` (≈148.5 px), leaving
+     the mask ~62% opaque at the clip edge and producing the hard visible ring. */
+  -webkit-mask-image: radial-gradient(closest-side circle at 50% 50%, #000 0%, #000 55%, transparent 100%);
+          mask-image: radial-gradient(closest-side circle at 50% 50%, #000 0%, #000 55%, transparent 100%);
 }
 
 /* While a lifecycle animation plays, the canvas expands to fill the viewport so

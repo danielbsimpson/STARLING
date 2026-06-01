@@ -28,6 +28,7 @@ import { createSurfaceManager } from './sphere-surface-manager.js';
 import { buildVoronoiEffect } from './sphere-voronoi.js';
 import { buildLiquidMetalEffect } from './sphere-liquid-metal.js';
 import { buildSolidBlackEffect } from './sphere-solid.js';
+import { BREATH_CONFIG, breathAmplitudeForState, breathDisplacement, advanceBreathPhase, rippleWeight, rippleDisplacement } from './sphere-breath.js';
 import { initNebula } from './nebula-bg.js';
 import {
   wikiMode,
@@ -1887,6 +1888,9 @@ function initSphere() {
     _rippleOriginX    = 0;
     _rippleOriginY    = 0;
     _rippleOriginZ    = 1;
+    _breathPhase = 0;
+    _breathAmp   = BREATH_CONFIG.idleAmp;
+    _rippleGain  = 0;
     sphereMesh.rotation.set(0, 0, 0);
     rimMesh.rotation.set(0, 0, 0);
   }
@@ -2024,6 +2028,22 @@ function initSphere() {
     const x = origPos[i * 3], y = origPos[i * 3 + 1], z = origPos[i * 3 + 2];
     noiseOffset[i] = Math.sin(x * 7.3 + y * 13.7 + z * 5.9) * 0.5 + 0.5; // 0..1
   }
+
+  // ── Breath / mic-impact ripple setup ─────────────────────────────────────
+  // Pre-compute once: the directional weight of each vertex toward the mic
+  // so the per-frame loop adds only a multiply-add per vertex (CON-002).
+  const rippleW = new Float32Array(numVerts);
+  for (let i = 0; i < numVerts; i++) {
+    rippleW[i] = rippleWeight(
+      { x: origPos[i * 3], y: origPos[i * 3 + 1], z: origPos[i * 3 + 2] },
+      BREATH_CONFIG.micDir,
+      BREATH_CONFIG.rippleFalloff,
+    );
+  }
+  // Runtime state — reset by _resetAnimOffsets() below.
+  let _breathPhase = 0;
+  let _breathAmp   = BREATH_CONFIG.idleAmp;
+  let _rippleGain  = 0;
 
   const sphereMat = new THREE.MeshPhongMaterial({
     color:     0x060606,
@@ -2486,23 +2506,48 @@ function initSphere() {
       orb.light.intensity *= blinkDimMul;
     });
 
+    // ── Breath cycle + mic-impact ripple ──────────────────────────────────────
+    // Advance breath phase and ease amplitude toward the current-state target.
+    // Runs every frame outside lifecycle choreography (CON-001, CON-004).
+    if (!lifecycleActive) {
+      _breathPhase = advanceBreathPhase(_breathPhase, BREATH_CONFIG.breathHz, delta);
+      _breathAmp   = smoothToward(_breathAmp, breathAmplitudeForState(state), BREATH_CONFIG.ampSmoothing, delta);
+    }
+    // Under prefers-reduced-motion the surface is effectively static (CON-003).
+    const breathScalar = (!lifecycleActive && !_prefersReducedMotion)
+      ? breathDisplacement(_breathPhase, _breathAmp)
+      : 0;
+
     // ── Sphere surface deformation (audio-driven in listening mode) ──────────
     const positions = sphereGeo.attributes.position.array;
     if (isListening && !lifecycleActive && sphereAnalyserRef.an && sphereAnalyserRef.data) {
       sphereAnalyserRef.an.getByteFrequencyData(sphereAnalyserRef.data);
       const audioData = sphereAnalyserRef.data;
       const dataLen   = audioData.length;
+
+      // Compute smoothed mean amplitude for the ripple gain (RISK-003: single read).
+      if (!_prefersReducedMotion) {
+        let sum = 0;
+        for (let k = 0; k < dataLen; k++) sum += audioData[k];
+        _rippleGain = smoothToward(_rippleGain, (sum / dataLen) / 255, BREATH_CONFIG.rippleGainSmoothing, delta);
+      }
+
       for (let i = 0; i < numVerts; i++) {
         const bin    = Math.floor((i / numVerts) * dataLen);
-        const target = (audioData[bin] / 255) * 0.13;
+        const target = (audioData[bin] / 255) * 0.13
+          + breathScalar
+          + rippleDisplacement(rippleW[i], 1.0, _rippleGain, BREATH_CONFIG.rippleDepth);
         dispSmooth[i] += (target - dispSmooth[i]) * 0.32;
-        const scale = 1 + dispSmooth[i];
+        const scale = Math.max(0.85, Math.min(1.2, 1 + dispSmooth[i]));
         positions[i * 3]     = origPos[i * 3]     * scale;
         positions[i * 3 + 1] = origPos[i * 3 + 1] * scale;
         positions[i * 3 + 2] = origPos[i * 3 + 2] * scale;
       }
       sphereGeo.attributes.position.needsUpdate = true;
     } else {
+      // Ease ripple gain back to zero while not listening.
+      _rippleGain = smoothToward(_rippleGain, 0, BREATH_CONFIG.rippleGainSmoothing, delta);
+
       // In non-listening states: blend proximity push with a very subtle idle noise
       // so the surface is never perfectly smooth — gives organic, pressurised feel.
       // Noise amplitude is tiny (0.006) so it never looks like it's moving.
@@ -2526,9 +2571,9 @@ function initSphere() {
             * idleEventEnv
             * Math.pow(Math.max(0, nx * _rippleOriginX + ny * _rippleOriginY + nz * _rippleOriginZ), IDLE_FX_CONFIG.rippleFalloffPow)
           : 0;
-        const target = proximityPush + idleNoise + pulseDelta + rippleDelta;
+        const target = proximityPush + idleNoise + pulseDelta + rippleDelta + breathScalar;
         const diff = target - dispSmooth[i];
-        if (fx.event || Math.abs(diff) > 0.0002) {
+        if (fx.event || Math.abs(breathScalar) > 0.0001 || Math.abs(diff) > 0.0002) {
           dispSmooth[i] += diff * 0.09;
           const scale = Math.max(0.85, Math.min(1.2, 1 + dispSmooth[i]));
           positions[i * 3]     = origPos[i * 3]     * scale;

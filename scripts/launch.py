@@ -94,11 +94,18 @@ LLAMA_CTX_SIZE = _load_persisted_ctx_size(LLAMA_CTX_SIZE)
 # before being force-killed on shutdown. Mirrors dream.py's DREAM_TIMEOUT_S.
 _DREAM_TIMEOUT_S = int(_cfg("DREAM_TIMEOUT_S", "300"))
 
+# Set DEV_MODE=1 in .env / environment to enable uvicorn --reload (auto-restart
+# on source changes). In production mode (default) --reload is omitted, which
+# means the backend worker runs in the same process as uvicorn and starts
+# serving requests as soon as imports complete — typically 10–20 s faster than
+# reload mode on a cold Python environment with heavy ML libraries.
+DEV_MODE = _cfg("DEV_MODE", "0").strip() not in ("0", "false", "no", "")
+
 # How long to wait for the backend /health endpoint to come up before opening the
 # browser. The UI is served by the backend, so this is how long until there is
 # something to look at. llama-server keeps loading in the background; the frontend
 # stays in its blue "INIT" state until the LLM reports ready (via /system-status).
-_UI_READY_TIMEOUT = int(_cfg("UI_READY_TIMEOUT", "60"))  # seconds
+_UI_READY_TIMEOUT = int(_cfg("UI_READY_TIMEOUT", "90"))  # seconds
 
 # ── Terminal colours (ANSI) ───────────────────────────────────────────────────
 
@@ -279,10 +286,14 @@ def start_backend() -> "subprocess.Popen[bytes]":
         python, "-m", "uvicorn", "main:app",
         "--host", "0.0.0.0",
         "--port", BACKEND_PORT,
-        "--reload",
-        "--reload-dir", str(backend_dir),
     ]
-    _info(f"Starting FastAPI backend on port {BACKEND_PORT}")
+    if DEV_MODE:
+        # Auto-reload on source changes — convenient during development but
+        # adds 20–40 s to cold-start time because imports run in a subprocess.
+        cmd += ["--reload", "--reload-dir", str(backend_dir)]
+        _info(f"Starting FastAPI backend on port {BACKEND_PORT} (DEV_MODE — reload enabled)")
+    else:
+        _info(f"Starting FastAPI backend on port {BACKEND_PORT}")
     return subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
