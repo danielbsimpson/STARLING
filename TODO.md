@@ -58,11 +58,11 @@ All implementation plans live in [`plan/`](./plan/). Completed feature guides ha
 | Boot & Shutdown Animation | [`assets/archived/feature-boot-shutdown-animation-1.md`](./assets/archived/feature-boot-shutdown-animation-1.md) | ✅ Done | Animated sphere sequence on startup and shutdown; in-UI power control buttons with visual boot/shutdown state transitions |
 | Sleep Mode | [`assets/archived/feature-sleep-mode-1.md`](./assets/archived/feature-sleep-mode-1.md) | ✅ Done | Inactivity-triggered sphere retreat animation; transitions into dream state processing on sleep; wake greeting plays when the user returns |
 | Cinematic Lifecycle Animations | [`assets/archived/feature-lifecycle-animations-2.md`](./assets/archived/feature-lifecycle-animations-2.md) | ✅ Done | Replaces the flat camera-zoom boot/shutdown/sleep/wake sequences with screen-filling choreography — the sphere drifts, tilts, and parallaxes through space while the orbs keep orbiting throughout |
-| Sphere Surface Effects | [`plan/feature-sphere-voronoi-surface-1.md`](./plan/feature-sphere-voronoi-surface-1.md) | 🔲 Planned | User-selectable sphere surface from the menu: Voronoi bioluminescent skin (state-reactive glowing cells) or a Liquid Metal mercury shader (pole ripples + audio reactivity) |
-| Orb Behaviour | [`plan/feature-sphere-orb-behavior-1.md`](./plan/feature-sphere-orb-behavior-1.md) | 🔲 Planned | Emergent, emotionally expressive boid-like behaviour for the seven orbiting orbs with state-driven colour temperature |
+| Sphere Surface Effects | [`assets/archived/feature-sphere-voronoi-surface-1.md`](./assets/archived/feature-sphere-voronoi-surface-1.md) | ✅ Done | User-selectable sphere surface from the menu: Voronoi bioluminescent skin (state-reactive glowing cells) or a Liquid Metal mercury shader (pole ripples + audio reactivity) |
+| Orb Behaviour | [`assets/archived/feature-sphere-orb-behavior-1.md`](./assets/archived/feature-sphere-orb-behavior-1.md) | ✅ Done | Emergent, emotionally expressive boid-like behaviour for the seven orbiting orbs with state-driven colour temperature |
 | Breath & Ripple | [`plan/feature-sphere-breath-ripple-1.md`](./plan/feature-sphere-breath-ripple-1.md) | 🔲 Planned | Always-on breath cycle and directional mic-impact ripple across the living sphere surface |
-| Ambient FX | [`plan/feature-sphere-ambient-fx-1.md`](./plan/feature-sphere-ambient-fx-1.md) | 🔲 Planned | State-reactive atmospheric glow around the sphere and a slow procedural nebula background |
-| Idle Expressiveness | [`plan/feature-sphere-idle-expressiveness-1.md`](./plan/feature-sphere-idle-expressiveness-1.md) | 🔲 Planned | Unpredictable idle micro-animations and an abstract full-sphere "blink" |
+| Ambient FX | [`assets/archived/feature-sphere-ambient-fx-1.md`](./assets/archived/feature-sphere-ambient-fx-1.md) | ✅ Done | State-reactive atmospheric glow around the sphere and a slow procedural nebula background |
+| Idle Expressiveness | [`assets/feature-sphere-idle-expressiveness-1.md`](./assets/feature-sphere-idle-expressiveness-1.md) | ✅ Done | Unpredictable idle micro-animations and an abstract full-sphere "blink" |
 
 ---
 
