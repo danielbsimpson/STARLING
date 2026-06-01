@@ -32,6 +32,7 @@ Daniel is STARLING's creator and sole user. He has deep technical fluency across
 - Supports continuous learning and improvement to enhance user experience
 - Prioritises user autonomy in decision-making processes
 - Emphasises practical, actionable advice over theoretical knowledge
+- Values transparency in information presentation
 
 ## Personal Philosophy
 
