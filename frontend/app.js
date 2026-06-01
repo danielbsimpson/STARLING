@@ -14,6 +14,8 @@ import { initLogDashboard, showLogDashboard } from './log-dashboard.js';
 import { detectFuzzyToolIntent } from './fuzzy-tool-detect.js';
 import { getInterruptPhrase } from './interrupt-phrases.js';
 import { easeOutCubic, easeInCubic, easeInOutQuad, easeOutBack, easeInOutSine } from './animation-easings.js';
+import { IDLE_FX_CONFIG, eventEnvelope, blinkEnvelope, makeIdleScheduler } from './idle-expressiveness.js';
+import { ORB_BEHAVIOR_CONFIG, warmthForState, temperatureToRGB, steerOrb, integrateOrbPosition, shouldStartChase, pickChasePair } from './orb-behavior.js';
 import {
   GLOW_CONFIG,
   glowColorForState,
@@ -1653,6 +1655,11 @@ function initSphere() {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setSize(RING_SIZE, RING_SIZE);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  // Clear to fully transparent so neither the direct render nor the bloom
+  // EffectComposer paints an opaque background. Without this the composer's
+  // full-frame passes tone-map the cleared black buffer to an opaque grey disc
+  // (clipped to a circle by the canvas border-radius/mask).
+  renderer.setClearColor(0x000000, 0);
   if (THREE.SRGBColorSpace) renderer.outputColorSpace = THREE.SRGBColorSpace;
 
   const scene  = new THREE.Scene();
@@ -1727,6 +1734,13 @@ function initSphere() {
   let _sphereSpinY   = 0;     // sphere/rim spin about Y
   let _sphereTiltX   = 0;     // sphere/rim tilt about X
   let _devShutdownPreview = false;   // when true, shutdown anim restores instead of going offline
+  const idleFx = makeIdleScheduler(IDLE_FX_CONFIG);
+  let _idleEventSeqSeen = -1;
+  let _blinkSeqSeen     = -1;
+  let _idleBrightOrbIdx = -1;
+  let _rippleOriginX    = 0;
+  let _rippleOriginY    = 0;
+  let _rippleOriginZ    = 1;
 
   // ── Glow colour / strength state (eased each frame in animate()) ───────────
   let _glowColor    = { ...GLOW_CONFIG.idleColor };  // current eased glow colour {r,g,b}
@@ -1857,6 +1871,13 @@ function initSphere() {
     _orbOpacity    = 1.0;
     _sphereSpinY   = 0;
     _sphereTiltX   = 0;
+    idleFx.reset();
+    _idleEventSeqSeen = -1;
+    _blinkSeqSeen     = -1;
+    _idleBrightOrbIdx = -1;
+    _rippleOriginX    = 0;
+    _rippleOriginY    = 0;
+    _rippleOriginZ    = 1;
     sphereMesh.rotation.set(0, 0, 0);
     rimMesh.rotation.set(0, 0, 0);
   }
@@ -1898,9 +1919,11 @@ function initSphere() {
   // Each orb orbits at a fixed radius in a plane tilted by tiltX / tiltZ —
   // distance from centre is always exactly r, so they can never enter the sphere.
   const ORB_WHITE    = new THREE.Color(0xffffff);
-  const ORB_BLUE     = new THREE.Color(0x88bbff);
-  const ORB_YELLOW   = new THREE.Color(0xffdd88);
-  const ORB_GREEN    = new THREE.Color(0x88ffaa);  // green — thinking / transcribing
+  // The former discrete per-state colours (ORB_BLUE/ORB_GREEN/ORB_YELLOW) are
+  // superseded by the continuous colour-temperature ramp (cool → cyan → gold)
+  // in orb-behavior.js — state warmth now forms the orb colour baseline. The
+  // proximity ("agitated"), UI-hover ("aware") and lifecycle tints below remain
+  // higher-priority overrides layered on top of that baseline (REQ-008).
   const ORB_AGITATED = new THREE.Color(0xff8888);  // light red — cursor proximity
   const ORB_AWARE    = new THREE.Color(0xaaccff);  // pale blue — UI hover
   const ORB_COOLWHITE = new THREE.Color(0xddeeff); // cool-white — shutdown / sleep tint
@@ -1920,7 +1943,38 @@ function initSphere() {
   let _lastT        = null;
   let proximityVal  = 0;   // smoothed cursor proximity (0 = far, 1 = on sphere edge)
 
-  const orbs = orbDefs.map((_, i) => {
+  // ── Boid / colour-temperature runtime state (eased each frame) ─────────────
+  const _orbMeanSpeed     = orbDefs.reduce((s, p) => s + p.speed, 0) / orbDefs.length;
+  let _orbRadiusStateMult = 1.0;  // per-state radius mult (listening tightens orbits)
+  let _speedEqualize      = 0;    // 0 = independent speeds, 1 = converge to mean (listening)
+  let _micLean            = 0;    // 0..1 bias of the cluster toward the mic (listening)
+  let _speakAmp           = 0;    // smoothed output-audio amplitude (speaking pulse)
+  let _orbWarmth          = 0;    // smoothed colour-temperature warmth 0..1
+  let _chase              = null; // { pair:[a,b], endsAt:ms } during a two-orb chase
+  // Preallocated scratch objects — reused every frame so the n² boid loop
+  // allocates nothing (CON-002 / RISK-003).
+  const _steerTarget = { x: 0, y: 0, z: 0 };
+  const _steerAccel  = { x: 0, y: 0, z: 0 };
+  const _integrated  = { pos: { x: 0, y: 0, z: 0 }, vel: { x: 0, y: 0, z: 0 } };
+  const _neighbors   = [];
+  const _tempRGB     = { r: 0, g: 0, b: 0 };
+  const _scratchColor = new THREE.Color();
+  const _proxColor    = new THREE.Color();
+
+  // Compute an orb's analytic orbit point for angle/radius into `out` {x,y,z}.
+  function _orbAnalyticPoint(p, angle, r, out) {
+    const lx = r * Math.cos(angle);
+    const ly = r * Math.sin(angle);
+    const mx = lx;
+    const my = ly * Math.cos(p.tiltX);
+    const mz = ly * Math.sin(p.tiltX);
+    out.x = mx * Math.cos(p.tiltZ) - my * Math.sin(p.tiltZ);
+    out.y = mx * Math.sin(p.tiltZ) + my * Math.cos(p.tiltZ);
+    out.z = mz;
+    return out;
+  }
+
+  const orbs = orbDefs.map((p, i) => {
     // Vary orb mesh sizes — gives depth and hierarchy to the assembly
     const orbSizes = [0.075, 0.055, 0.085, 0.048, 0.068, 0.042, 0.078];
     // transparent + depthWrite:false so _orbOpacity fades cleanly during
@@ -1935,7 +1989,16 @@ function initSphere() {
     const light = new THREE.PointLight(0xffffff, 3.5, 0, 0);
     scene.add(mesh);
     scene.add(light);
-    return { mesh, mat, light, color: ORB_WHITE.clone() };
+    // Per-orb boid runtime state: integrated angle (theta), current position,
+    // velocity, and a fixed ember temperature offset.
+    const start = _orbAnalyticPoint(p, p.phase, p.r, { x: 0, y: 0, z: 0 });
+    return {
+      mesh, mat, light, color: ORB_WHITE.clone(),
+      theta: p.phase,
+      curPos: { x: start.x, y: start.y, z: start.z },
+      vel: { x: 0, y: 0, z: 0 },
+      ember: (i / (orbDefs.length - 1) - 0.5) * ORB_BEHAVIOR_CONFIG.emberSpread,
+    };
   });
 
   // ── Main sphere ────────────────────────────────────────────────────────────
@@ -1958,9 +2021,11 @@ function initSphere() {
     specular:  0xaaaaaa,   // slightly brighter specular for sharper orb highlights
     shininess: 52,
     emissive:  0x0a0a0a,   // very faint self-emission so dark face isn't pure black
+    emissiveIntensity: 1.0,
   });
   const sphereMesh = new THREE.Mesh(sphereGeo, sphereMat);
   scene.add(sphereMesh);
+  const SPHERE_EMISSIVE_INTENSITY_BASE = sphereMat.emissiveIntensity;
 
   // ── Rim / Fresnel sphere — back-face, slightly larger, very low opacity ───
   // Renders only the outer edge silhouette, creating a subtle "backlit halo" rim.
@@ -1974,6 +2039,7 @@ function initSphere() {
   });
   const rimMesh = new THREE.Mesh(new THREE.SphereGeometry(1.045, SEG, SEG), rimMat);
   scene.add(rimMesh);
+  const RIM_OPACITY_BASE = rimMat.opacity;
 
   // ── GOAL-002b FALLBACK: in-scene additive Fresnel-shell glow ──────────────
   // Activated when window.STARLING_FX is absent or the composer fails to init.
@@ -2147,6 +2213,43 @@ function initSphere() {
     sphereMesh.rotation.set(_sphereTiltX, _sphereSpinY, 0);
     rimMesh.rotation.copy(sphereMesh.rotation);
 
+    const idleEligible = state === 'idle' && !lifecycleActive && !_prefersReducedMotion;
+    let fx = { event: null, blink: null };
+    if (idleEligible) {
+      fx = idleFx.update(delta * 1000, true);
+    } else {
+      idleFx.reset();
+      _idleEventSeqSeen = -1;
+      _blinkSeqSeen     = -1;
+      _idleBrightOrbIdx = -1;
+      _rippleOriginX    = 0;
+      _rippleOriginY    = 0;
+      _rippleOriginZ    = 1;
+    }
+    if (fx.event && fx.event.seq !== _idleEventSeqSeen) {
+      _idleEventSeqSeen = fx.event.seq;
+      if (fx.event.kind === 'orbBrighten') {
+        _idleBrightOrbIdx = fx.event.seq % orbs.length;
+      } else if (fx.event.kind === 'ripple') {
+        const originIdx = fx.event.seq % numVerts;
+        const ox = origPos[originIdx * 3];
+        const oy = origPos[originIdx * 3 + 1];
+        const oz = origPos[originIdx * 3 + 2];
+        const olen = Math.hypot(ox, oy, oz) || 1;
+        _rippleOriginX = ox / olen;
+        _rippleOriginY = oy / olen;
+        _rippleOriginZ = oz / olen;
+      }
+    }
+    if (fx.blink && fx.blink.seq !== _blinkSeqSeen) {
+      _blinkSeqSeen = fx.blink.seq;
+    }
+    const idleEventEnv = fx.event ? eventEnvelope(fx.event.progress) : 0;
+    const blinkDim = fx.blink ? blinkEnvelope(fx.blink.progress) : 0;
+    const blinkDimMul = 1 - blinkDim * (1 - IDLE_FX_CONFIG.blinkDimFactor);
+    const blinkGlowMul = THREE.MathUtils.lerp(1, IDLE_FX_CONFIG.blinkGlowFactor, blinkDim);
+    const blinkRimMul = THREE.MathUtils.lerp(1, IDLE_FX_CONFIG.blinkRimOpacityFactor, blinkDim);
+
     // ── Mouse proximity computation (once per frame) ─────────────────────────
     // Skipped during lifecycle animations — the cursor's position relative to
     // the expanded canvas is meaningless mid-choreography (TASK-012).
@@ -2166,18 +2269,23 @@ function initSphere() {
       proxCurved = Math.pow(proximityVal, 1.8);
     }
 
-    // ── Orb colour target — lifecycle override → speech state → proximity ────
-    let orbColorTarget;
+    // ── Orb colour override — lifecycle → proximity → UI hover ──────────────
+    // The colour-temperature ramp (cool → cyan → gold) forms the per-orb
+    // baseline (applied inside the orb loop). These three tints, when active,
+    // override that baseline at higher priority (REQ-008). proxCurved drives the
+    // "agitated" red exactly as before, layered over the temperature baseline.
+    const _reducedMotion = _prefersReducedMotion;
+    const now = Date.now();
+    let orbOverrideColor = null;
     if (lifecycleActive) {
       // Shutdown/sleep tint to cool-white; boot/wake settle to plain white.
-      orbColorTarget = _lifecycleColor || ORB_WHITE;
+      orbOverrideColor = _lifecycleColor || ORB_WHITE;
+    } else if (proximityVal > 0.01) {
+      // Reuse a scratch colour so proximity never allocates per frame.
+      orbOverrideColor = _proxColor.copy(ORB_AGITATED).lerp(ORB_WHITE, 1 - proxCurved);
+    } else if (_uiHovered) {
+      orbOverrideColor = ORB_AWARE;
     }
-    else if (isListening)              orbColorTarget = ORB_BLUE;
-    else if (isThinking)          orbColorTarget = ORB_GREEN;
-    else if (isSpeaking)          orbColorTarget = ORB_YELLOW;
-    else if (proximityVal > 0.01) orbColorTarget = ORB_AGITATED.clone().lerp(ORB_WHITE, 1 - proxCurved);
-    else if (_uiHovered)          orbColorTarget = ORB_AWARE;
-    else                          orbColorTarget = ORB_WHITE;
 
     // Smoothly ramp orbit speed — lifecycle choreography overrides state logic
     let targetSpeedMult;
@@ -2191,35 +2299,146 @@ function initSphere() {
     orbSpeedMult += (targetSpeedMult - orbSpeedMult) * 0.03;
     orbTimeAccum += delta * orbSpeedMult;
 
+    // ── Ease per-state behaviour scalars (continuous — no position jumps) ────
+    const _k = delta > 0 ? 1 - Math.exp(-3.0 * delta) : 0;
+    const radiusStateTarget = (!lifecycleActive && isListening)
+      ? ORB_BEHAVIOR_CONFIG.listenRadiusMult : 1.0;
+    _orbRadiusStateMult += (radiusStateTarget - _orbRadiusStateMult) * _k;
+    const equalizeTarget = (!lifecycleActive && isListening) ? 1 : 0;
+    _speedEqualize += (equalizeTarget - _speedEqualize) * _k;
+    const micLeanTarget = (!lifecycleActive && isListening) ? 1 : 0;
+    _micLean += (micLeanTarget - _micLean) * _k;
+
+    // Speaking waveform pulse — smoothed average output amplitude (suppressed
+    // under reduced motion → orbs fall back to calm idle drift, CON-003).
+    let speakAmpTarget = 0;
+    if (!lifecycleActive && isSpeaking && !_reducedMotion
+        && sphereAnalyserRef.an && sphereAnalyserRef.data) {
+      sphereAnalyserRef.an.getByteFrequencyData(sphereAnalyserRef.data);
+      const d = sphereAnalyserRef.data;
+      let sum = 0;
+      for (let i = 0; i < d.length; i++) sum += d[i];
+      speakAmpTarget = (sum / d.length) / 255;
+    }
+    _speakAmp += (speakAmpTarget - _speakAmp) * (delta > 0 ? 1 - Math.exp(-8.0 * delta) : 0);
+
+    // Colour-temperature warmth — eased toward the state's warmth (idle while
+    // a lifecycle animation plays so orbs cool to blue-white, TASK-015).
+    const targetWarmth = lifecycleActive ? 0.0 : warmthForState(state);
+    _orbWarmth += (targetWarmth - _orbWarmth)
+      * (delta > 0 ? 1 - Math.exp(-ORB_BEHAVIOR_CONFIG.tempSmoothing * delta) : 0);
+
+    // Thinking two-orb chase scheduling (deterministic via injectable rng).
+    const _thinkActive = isThinking && !lifecycleActive && !_reducedMotion;
+    if (_thinkActive) {
+      if (_chase === null) {
+        if (shouldStartChase(Math.random, ORB_BEHAVIOR_CONFIG.chaseProb)) {
+          _chase = { pair: pickChasePair(Math.random, orbDefs.length), endsAt: now + ORB_BEHAVIOR_CONFIG.chaseDurationMs };
+        }
+      } else if (now >= _chase.endsAt) {
+        _chase = null;
+      }
+    } else {
+      _chase = null;
+    }
+
     // ── Update orb positions and colours ────────────────────────────────────
     orbDefs.forEach((p, i) => {
-      const angle = p.speed * orbTimeAccum + p.phase;
-      // Point on circle in local XY plane — radius modulated by lifecycle offset
-      const r  = p.r * _orbRadiusMult;
-      const lx = r * Math.cos(angle);
-      const ly = r * Math.sin(angle);
-      // Rotate around X axis by tiltX
-      const mx = lx;
-      const my = ly * Math.cos(p.tiltX);
-      const mz = ly * Math.sin(p.tiltX);
-      // Rotate around Z axis by tiltZ
-      const fx = mx * Math.cos(p.tiltZ) - my * Math.sin(p.tiltZ);
-      const fy = mx * Math.sin(p.tiltZ) + my * Math.cos(p.tiltZ);
-      const fz = mz;
-
       const orb = orbs[i];
-      orb.mesh.position.set(fx, fy, fz);
-      orb.light.position.set(fx, fy, fz);
 
-      // Smooth colour transition toward target (proximity / UI hover / speech state)
-      orb.color.lerp(orbColorTarget, 0.04);
+      // Effective angular speed: equalise toward the mean while listening, and
+      // jitter erratically while thinking. Integrating per-orb (theta) instead
+      // of re-deriving from the shared accumulator keeps speed changes from
+      // snapping positions (REQ-001) and exactly matches the analytic angle
+      // when equalisation is off (so lifecycle motion is unchanged, CON-004).
+      let effSpeed = p.speed + (_orbMeanSpeed - p.speed) * _speedEqualize;
+      let jitterR = 0;
+      if (_thinkActive) {
+        const ja = ORB_BEHAVIOR_CONFIG.thinkJitterAmp;
+        effSpeed += Math.sin(now * 0.011 + i * 1.7) * Math.sin(now * 0.017 + i * 3.1) * ja * 0.15 * p.speed;
+        jitterR  = Math.sin(now * 0.013 + i * 2.3) * 0.06 * ja;
+      }
+      orb.theta += effSpeed * orbSpeedMult * delta;
+
+      // Radius: lifecycle offset × per-state tighten × thinking jitter ×
+      // speaking pulse.
+      const radiusMult = _orbRadiusMult * (lifecycleActive ? 1.0 : _orbRadiusStateMult);
+      let r = p.r * radiusMult * (1 + jitterR);
+      if (!lifecycleActive && isSpeaking) r *= 1 + _speakAmp * ORB_BEHAVIOR_CONFIG.speakPulseAmount;
+
+      // Analytic orbit target point for this orb.
+      _orbAnalyticPoint(p, orb.theta, r, _steerTarget);
+
+      if (lifecycleActive) {
+        // Deterministic choreography — set positions from the analytic point
+        // exactly as before and keep boid state synced so exiting the
+        // lifecycle eases smoothly instead of snapping (CON-004 / RISK-004).
+        orb.curPos.x = _steerTarget.x; orb.curPos.y = _steerTarget.y; orb.curPos.z = _steerTarget.z;
+        orb.vel.x = 0; orb.vel.y = 0; orb.vel.z = 0;
+        orb.mesh.position.set(_steerTarget.x, _steerTarget.y, _steerTarget.z);
+        orb.light.position.set(_steerTarget.x, _steerTarget.y, _steerTarget.z);
+      } else {
+        // Listening mic-lean — bias the target toward the microphone direction.
+        if (_micLean > 0.001) {
+          const lean = _micLean * 0.45;
+          _steerTarget.x += ORB_BEHAVIOR_CONFIG.micDir.x * lean;
+          _steerTarget.y += ORB_BEHAVIOR_CONFIG.micDir.y * lean;
+          _steerTarget.z += ORB_BEHAVIOR_CONFIG.micDir.z * lean;
+        }
+        // Chase — the first orb of the pair steers toward the second's position.
+        if (_chase && i === _chase.pair[0]) {
+          const other = orbs[_chase.pair[1]].curPos;
+          _steerTarget.x = other.x; _steerTarget.y = other.y; _steerTarget.z = other.z;
+        }
+        // Build the neighbour list (reused array) and steer + integrate.
+        _neighbors.length = 0;
+        for (let j = 0; j < orbs.length; j++) {
+          if (j !== i) _neighbors.push(orbs[j].curPos);
+        }
+        steerOrb(orb.curPos, _steerTarget, _neighbors, ORB_BEHAVIOR_CONFIG, _steerAccel);
+        integrateOrbPosition(orb.curPos, orb.vel, _steerAccel, delta, ORB_BEHAVIOR_CONFIG.posSmoothing, _integrated);
+        orb.curPos.x = _integrated.pos.x; orb.curPos.y = _integrated.pos.y; orb.curPos.z = _integrated.pos.z;
+        orb.vel.x = _integrated.vel.x; orb.vel.y = _integrated.vel.y; orb.vel.z = _integrated.vel.z;
+        // Clamp to a band around this frame's target radius so an orb can never
+        // enter the sphere (absolute floor 1.2 > deformed sphere surface) nor
+        // drift far from its orbit shell.
+        const len = Math.hypot(orb.curPos.x, orb.curPos.y, orb.curPos.z) || 1e-9;
+        const minR = Math.max(1.2, r * 0.8), maxR = r * 1.3;
+        if (len < minR || len > maxR) {
+          const target = len < minR ? minR : maxR;
+          const s = target / len;
+          orb.curPos.x *= s; orb.curPos.y *= s; orb.curPos.z *= s;
+        }
+        orb.mesh.position.set(orb.curPos.x, orb.curPos.y, orb.curPos.z);
+        orb.light.position.set(orb.curPos.x, orb.curPos.y, orb.curPos.z);
+      }
+
+      // ── Colour ── override (lifecycle/proximity/hover) → temperature baseline.
+      let orbTarget;
+      if (orbOverrideColor) {
+        orbTarget = orbOverrideColor;
+      } else {
+        temperatureToRGB(_orbWarmth, orb.ember, _tempRGB);
+        orbTarget = _scratchColor.setRGB(_tempRGB.r, _tempRGB.g, _tempRGB.b);
+      }
+      orb.color.lerp(orbTarget, 0.04);
       orb.mat.color.copy(orb.color);
       orb.light.color.copy(orb.color);
 
+      // Layering order: state/lifecycle/proximity baselines first, idle-only
+      // expressiveness second, with no effect outside the idleEligible branch.
       // Base intensity by state, scaled by the lifecycle opacity offset.
       const baseIntensity = isListening ? 6 : isSpeaking ? 5 : 3.5;
       orb.light.intensity = baseIntensity * _orbOpacity;
       orb.mat.opacity     = _orbOpacity;
+      if (fx.event && fx.event.kind === 'orbBrighten' && i === _idleBrightOrbIdx) {
+        orb.light.intensity += IDLE_FX_CONFIG.orbBrightenAmp * idleEventEnv;
+        orb.mat.opacity = Math.min(1, orb.mat.opacity + IDLE_FX_CONFIG.orbOpacityAmp * idleEventEnv);
+        const brightenMix = Math.min(0.22, idleEventEnv * 0.22);
+        orb.mat.color.lerp(ORB_WHITE, brightenMix);
+        orb.light.color.lerp(ORB_WHITE, brightenMix);
+      }
+      orb.light.intensity *= blinkDimMul;
     });
 
     // ── Sphere surface deformation (audio-driven in listening mode) ──────────
@@ -2243,15 +2462,30 @@ function initSphere() {
       // so the surface is never perfectly smooth — gives organic, pressurised feel.
       // Noise amplitude is tiny (0.006) so it never looks like it's moving.
       const proximityPush = proxCurved * 0.08;
+      const pulseDelta = fx.event && fx.event.kind === 'pulse'
+        ? IDLE_FX_CONFIG.pulseAmp * idleEventEnv
+        : 0;
       let anyChange = false;
       for (let i = 0; i < numVerts; i++) {
         // Idle noise: per-vertex sine wave driven by time + unique phase offset
+        const ox = origPos[i * 3];
+        const oy = origPos[i * 3 + 1];
+        const oz = origPos[i * 3 + 2];
+        const olen = Math.hypot(ox, oy, oz) || 1;
+        const nx = ox / olen;
+        const ny = oy / olen;
+        const nz = oz / olen;
         const idleNoise = Math.sin(t * 0.38 + noiseOffset[i] * 6.28) * 0.006;
-        const target = proximityPush + idleNoise;
+        const rippleDelta = fx.event && fx.event.kind === 'ripple'
+          ? IDLE_FX_CONFIG.rippleAmp
+            * idleEventEnv
+            * Math.pow(Math.max(0, nx * _rippleOriginX + ny * _rippleOriginY + nz * _rippleOriginZ), IDLE_FX_CONFIG.rippleFalloffPow)
+          : 0;
+        const target = proximityPush + idleNoise + pulseDelta + rippleDelta;
         const diff = target - dispSmooth[i];
-        if (Math.abs(diff) > 0.0002) {
+        if (fx.event || Math.abs(diff) > 0.0002) {
           dispSmooth[i] += diff * 0.09;
-          const scale = 1 + dispSmooth[i];
+          const scale = Math.max(0.85, Math.min(1.2, 1 + dispSmooth[i]));
           positions[i * 3]     = origPos[i * 3]     * scale;
           positions[i * 3 + 1] = origPos[i * 3 + 1] * scale;
           positions[i * 3 + 2] = origPos[i * 3 + 2] * scale;
@@ -2276,10 +2510,13 @@ function initSphere() {
         _glowStrength, glowStrengthTarget, GLOW_CONFIG.strengthSmoothing, delta,
       );
     }
+    const renderGlowStrength = _glowStrength * blinkGlowMul;
+    sphereMat.emissiveIntensity = SPHERE_EMISSIVE_INTENSITY_BASE * blinkGlowMul;
+    rimMat.opacity = RIM_OPACITY_BASE * blinkRimMul;
 
     if (_bloomEnabled && bloomPass) {
       // Primary bloom path: write eased strength to the pass and composite.
-      bloomPass.strength = _glowStrength;
+      bloomPass.strength = renderGlowStrength;
       composer.render();
     } else {
       // Fresnel-shell fallback path: update colour + strength uniforms (TASK-013).
@@ -2287,7 +2524,7 @@ function initSphere() {
         fresnelUniforms.uGlowColor.value.set(
           _glowColor.r, _glowColor.g, _glowColor.b,
         );
-        fresnelUniforms.uGlowStrength.value = _glowStrength;
+        fresnelUniforms.uGlowStrength.value = renderGlowStrength;
       }
       renderer.render(scene, camera);
     }
