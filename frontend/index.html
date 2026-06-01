@@ -8,13 +8,16 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;600&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=2" />
 </head>
 <body>
   <!-- Fuzzy tool confirmation banner (Tier 2 — fuzzy recovery) -->
   <div id="fuzzy-confirm-banner" class="hidden"><span class="fcb-label">Did you mean to open</span> <span id="fcb-tool-name" class="fcb-tool"></span><span class="fcb-label">?</span><div class="fcb-buttons"><button id="fcb-yes">Yes</button><button id="fcb-no">No</button></div></div>
 
   <div class="starling" id="starling">
+
+    <!-- Procedural nebula background — sits behind all UI (z-index:-1 within .starling stacking context) -->
+    <canvas id="nebula-canvas" aria-hidden="true"></canvas>
 
     <!-- Decorative background -->
     <div class="grid-bg"></div>
@@ -1025,6 +1028,47 @@ Press SUBMIT when finished dictating.</span>
     </div>
   </div>
 
-  <script type="module" src="app.js?v=5"></script>
+  <!--
+    importmap: maps 'three' and 'three/addons/' to the version-locked r160 ESM
+    builds so the postprocessing addon modules can resolve their bare 'three'
+    imports. Both the UMD global (loaded above) and these ESM addons pin to the
+    exact same three@0.160.0 origin to minimise the risk of a duplicate-instance
+    collision (RISK-001 mitigation, CON-001).
+  -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <!--
+    STARLING_FX shim: imports the r160 postprocessing addon classes and exposes
+    them on window.STARLING_FX for app.js (which runs as a UMD-global consumer)
+    to pick up inside initSphere().
+
+    IMPORTANT: this module MUST NOT use top-level await. Module scripts execute
+    in document order, so a top-level await here would block app.js from running
+    until the (potentially slow or unreachable) CDN imports settle — freezing the
+    whole UI. Instead we expose window.STARLING_FX_READY, a promise app.js can
+    observe without blocking startup. If the import fails (CDN unreachable), the
+    promise resolves to null and initSphere() falls back to the in-scene
+    Fresnel-shell glow (GOAL-002b, TASK-013).
+  -->
+  <script type="module">
+    window.STARLING_FX_READY = Promise.all([
+      import('three/addons/postprocessing/EffectComposer.js'),
+      import('three/addons/postprocessing/RenderPass.js'),
+      import('three/addons/postprocessing/UnrealBloomPass.js'),
+      import('three/addons/postprocessing/OutputPass.js'),
+    ]).then(([{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }]) => {
+      window.STARLING_FX = { EffectComposer, RenderPass, UnrealBloomPass, OutputPass };
+      return window.STARLING_FX;
+    }).catch(() => null);
+  </script>
+
+  <script type="module" src="app.js?v=7"></script>
 </body>
 </html>

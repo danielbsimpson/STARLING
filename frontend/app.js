@@ -15,6 +15,14 @@ import { detectFuzzyToolIntent } from './fuzzy-tool-detect.js';
 import { getInterruptPhrase } from './interrupt-phrases.js';
 import { easeOutCubic, easeInCubic, easeInOutQuad, easeOutBack, easeInOutSine } from './animation-easings.js';
 import {
+  GLOW_CONFIG,
+  glowColorForState,
+  bloomStrengthForState,
+  smoothToward,
+  smoothColor,
+} from './ambient-fx.js';
+import { initNebula } from './nebula-bg.js';
+import {
   wikiMode,
   detectWikiTrigger,
   detectWikiExitTrigger,
@@ -1651,7 +1659,33 @@ function initSphere() {
   const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
   camera.position.z = 6.2;
 
-  // ── Reduced-motion preference ──────────────────────────────────────────────
+  // ── Post-processing bloom composer (GOAL-002, TASK-010) ───────────────────
+  // Built from window.STARLING_FX which is populated by the importmap shim in
+  // index.html before this module runs. When the shim fails (CDN unreachable),
+  // STARLING_FX is undefined and _bloomEnabled stays false, activating the
+  // Fresnel-shell fallback (GOAL-002b) defined further below.
+  let _bloomEnabled  = false;
+  let composer       = null;
+  let bloomPass      = null;
+
+  if (window.STARLING_FX) {
+    try {
+      const { EffectComposer, RenderPass, UnrealBloomPass, OutputPass } = window.STARLING_FX;
+      composer  = new EffectComposer(renderer);
+      composer.addPass(new RenderPass(scene, camera));
+      bloomPass = new UnrealBloomPass(
+        new THREE.Vector2(RING_SIZE, RING_SIZE),
+        GLOW_CONFIG.bloomStrengthIdle,
+        GLOW_CONFIG.bloomRadius,
+        GLOW_CONFIG.bloomThreshold,
+      );
+      composer.addPass(bloomPass);
+      composer.addPass(new OutputPass());
+      _bloomEnabled = true;
+    } catch (_err) {
+      console.warn('S.T.A.R.L.I.N.G.: bloom composer failed, falling back to Fresnel-shell glow');
+    }
+  }
   // When the OS requests reduced motion we play a short plain dolly for each
   // lifecycle phase.
   const _prefersReducedMotion =
@@ -1693,6 +1727,10 @@ function initSphere() {
   let _sphereSpinY   = 0;     // sphere/rim spin about Y
   let _sphereTiltX   = 0;     // sphere/rim tilt about X
   let _devShutdownPreview = false;   // when true, shutdown anim restores instead of going offline
+
+  // ── Glow colour / strength state (eased each frame in animate()) ───────────
+  let _glowColor    = { ...GLOW_CONFIG.idleColor };  // current eased glow colour {r,g,b}
+  let _glowStrength = GLOW_CONFIG.bloomStrengthIdle; // current eased bloom / Fresnel strength
 
   // ── Lifecycle in-place flag ─────────────────────────────────────────────────
   // The lifecycle choreography (boot/shutdown/sleep/wake) plays in the sphere's
@@ -1744,6 +1782,7 @@ function initSphere() {
     camera.setViewOffset(w, h, w / 2 - rcx, h / 2 - rcy, w, h);
     camera.updateProjectionMatrix();
     renderer.setSize(w, h);
+    if (_bloomEnabled && composer) composer.setSize(w, h); // TASK-011
   }
 
   function _restoreRingView() {
@@ -1752,6 +1791,7 @@ function initSphere() {
     camera.aspect = 1;
     camera.updateProjectionMatrix();
     renderer.setSize(RING_SIZE, RING_SIZE);
+    if (_bloomEnabled && composer) composer.setSize(RING_SIZE, RING_SIZE); // TASK-011
   }
 
 
@@ -1934,6 +1974,53 @@ function initSphere() {
   });
   const rimMesh = new THREE.Mesh(new THREE.SphereGeometry(1.045, SEG, SEG), rimMat);
   scene.add(rimMesh);
+
+  // ── GOAL-002b FALLBACK: in-scene additive Fresnel-shell glow ──────────────
+  // Activated when window.STARLING_FX is absent or the composer fails to init.
+  // A slightly-oversized back-face sphere uses a Fresnel falloff + additive
+  // blending to simulate the atmospheric scatter that UnrealBloomPass provides.
+  // Uniforms are updated each frame in animate() with the same _glowColor /
+  // _glowStrength so visual behaviour matches the bloom path.
+  let fresnelUniforms = null;
+  if (!_bloomEnabled) {
+    fresnelUniforms = {
+      uGlowColor:    { value: new THREE.Vector3(
+        GLOW_CONFIG.idleColor.r,
+        GLOW_CONFIG.idleColor.g,
+        GLOW_CONFIG.idleColor.b,
+      ) },
+      uGlowStrength: { value: GLOW_CONFIG.bloomStrengthIdle },
+    };
+    const fresnelMat = new THREE.ShaderMaterial({
+      vertexShader: [
+        'varying vec3 vNormal;',
+        'varying vec3 vViewPos;',
+        'void main() {',
+        '  vNormal  = normalize(normalMatrix * normal);',
+        '  vViewPos = (modelViewMatrix * vec4(position, 1.0)).xyz;',
+        '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
+        '}',
+      ].join('\n'),
+      fragmentShader: [
+        'uniform vec3  uGlowColor;',
+        'uniform float uGlowStrength;',
+        'varying vec3  vNormal;',
+        'varying vec3  vViewPos;',
+        'void main() {',
+        '  vec3  viewDir   = normalize(-vViewPos);',
+        '  float fresnel   = 1.0 - abs(dot(vNormal, viewDir));',
+        '  float intensity = pow(max(fresnel, 0.0), 1.8) * uGlowStrength;',
+        '  gl_FragColor = vec4(uGlowColor * intensity, intensity);',
+        '}',
+      ].join('\n'),
+      uniforms:    fresnelUniforms,
+      side:        THREE.BackSide,
+      blending:    THREE.AdditiveBlending,
+      transparent: true,
+      depthWrite:  false,
+    });
+    scene.add(new THREE.Mesh(new THREE.SphereGeometry(1.35, 32, 32), fresnelMat));
+  }
 
   function animate() {
     requestAnimationFrame(animate);
@@ -2174,7 +2261,36 @@ function initSphere() {
       if (anyChange) sphereGeo.attributes.position.needsUpdate = true;
     }
 
-    renderer.render(scene, camera);
+    // ── Atmospheric glow — ease colour / strength, render (GOAL-002, TASK-012) ─
+    if (!_prefersReducedMotion) {
+      // Under reduced motion _glowStrength holds its initial constant value.
+      const glowColorTarget    = lifecycleActive
+        ? GLOW_CONFIG.idleColor
+        : glowColorForState(state);
+      const glowStrengthTarget = (lifecycleActive
+        ? GLOW_CONFIG.bloomStrengthIdle
+        : bloomStrengthForState(state)
+      ) * (lifecycleActive ? _orbOpacity : 1.0);
+      smoothColor(_glowColor, glowColorTarget, GLOW_CONFIG.colorSmoothing, delta);
+      _glowStrength = smoothToward(
+        _glowStrength, glowStrengthTarget, GLOW_CONFIG.strengthSmoothing, delta,
+      );
+    }
+
+    if (_bloomEnabled && bloomPass) {
+      // Primary bloom path: write eased strength to the pass and composite.
+      bloomPass.strength = _glowStrength;
+      composer.render();
+    } else {
+      // Fresnel-shell fallback path: update colour + strength uniforms (TASK-013).
+      if (fresnelUniforms) {
+        fresnelUniforms.uGlowColor.value.set(
+          _glowColor.r, _glowColor.g, _glowColor.b,
+        );
+        fresnelUniforms.uGlowStrength.value = _glowStrength;
+      }
+      renderer.render(scene, camera);
+    }
   }
 
   animate();
@@ -4245,6 +4361,15 @@ if (_fcbNo) {
 // we mark the boot phase done immediately below so warm-up alone gates the controls.
 [micBtn, sendBtn, textInput, powerBtn].forEach(el => el && (el.disabled = true));
 initSphere();
+// ── Nebula background (GOAL-003, TASK-020) ────────────────────────────────────
+// Initialise the procedural nebula after the sphere so the sphere's WebGL context
+// is established first. Wrapped in try/catch: failure leaves the CSS background
+// visible with no console errors (CON-005).
+try {
+  initNebula({ getState: () => sphereStateRef.current });
+} catch (_err) {
+  console.warn('S.T.A.R.L.I.N.G.: nebula background failed to initialise');
+}
 // If sphere didn't start a boot animation (Three.js unavailable), treat the boot
 // phase as complete now — controls are then gated solely on model warm-up.
 if (_sphereAnimPhase === 'none') {

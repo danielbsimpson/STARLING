@@ -42,21 +42,39 @@ html, body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  isolation: isolate; /* creates a stacking context so z-index:-1 children sit
+                         above .starling's own background but below all other UI */
+}
+
+/* ── Nebula background canvas ────────────────────────────────────────────── */
+/* Sits inside .starling's stacking context at z-index:-1, so it paints on    */
+/* top of the flat --bg colour but behind .grid-bg and all UI content.        */
+/* pointer-events:none ensures it never intercepts clicks (CON-004).          */
+#nebula-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  pointer-events: none;
 }
 
 /* ── Grid background ─────────────────────────────────────────────────────── */
 .grid-bg {
   position: absolute; inset: 0;
   background-image:
-    linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+    linear-gradient(rgba(255,255,255,0.012) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.012) 1px, transparent 1px);
   background-size: 40px 40px;
   pointer-events: none;
 }
 .grid-bg::after {
   content: '';
   position: absolute; inset: 0;
-  background: radial-gradient(ellipse 75% 65% at 50% 36%, transparent 0%, var(--bg) 100%);
+  /* Gentle vignette — stays transparent across the central field so the nebula
+     shows through, fading only to a soft semi-opaque darkness at the far edges
+     (no longer a hard fade to opaque --bg, which previously hid the nebula). */
+  background: radial-gradient(ellipse 92% 82% at 50% 38%, transparent 0%, transparent 42%, rgba(6, 7, 12, 0.55) 100%);
 }
 
 /* ── Corner brackets ─────────────────────────────────────────────────────── */
@@ -435,6 +453,12 @@ html, body {
   display: block;
   border-radius: 50%;
   position: relative; z-index: 1;
+  /* Fade the canvas content (sphere bloom/glow haze) to transparent toward the
+     rim instead of a hard circular border. The inner ~58% stays fully opaque so
+     the sphere and orbiting orbs remain crisp; the outer band dissolves so the
+     glow blends into the surrounding CSS halo rather than ending on a hard line. */
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 0%, #000 58%, transparent 92%);
+          mask-image: radial-gradient(circle at 50% 50%, #000 0%, #000 58%, transparent 92%);
 }
 
 /* While a lifecycle animation plays, the canvas expands to fill the viewport so
@@ -460,17 +484,25 @@ html, body {
 }
 
 /* ── Radial fog halo — sits behind the canvas, shifts colour with state ─── */
+/* The 210 px canvas (radius ~105 px) sits on top of this halo, so the visible
+   glow is the band that extends BEYOND the canvas (~29% → 100% of this element).
+   Those mid-outer stops carry the intensity and fade gradually to transparent so
+   the light reads as an atmospheric glow dissipating into space, with no hard
+   edge where the canvas ends. */
 .sphere-halo {
   position: absolute;
-  inset: -30px;           /* extends 30 px beyond the 210 px canvas on each side */
+  inset: -260px;          /* ~730 px glow field centred on the 210 px ring */
   border-radius: 50%;
   background: radial-gradient(
-    ellipse 65% 65% at 50% 50%,
-    rgba(40, 40, 40, 0.55) 0%,
-    rgba(20, 20, 20, 0.25) 45%,
-    transparent 72%
+    circle at 50% 50%,
+    rgba(82, 108, 178, 0.55) 0%,
+    rgba(70,  94, 158, 0.42) 24%,
+    rgba(56,  78, 140, 0.27) 40%,
+    rgba(42,  60, 114, 0.15) 58%,
+    rgba(28,  44,  92, 0.06) 78%,
+    transparent 100%
   );
-  filter: blur(18px);
+  filter: blur(48px);
   pointer-events: none;
   z-index: 0;
   transition: background 0.8s ease;
@@ -478,28 +510,37 @@ html, body {
 /* Listening — cool blue glow */
 .starling.state-listening .sphere-halo {
   background: radial-gradient(
-    ellipse 65% 65% at 50% 50%,
-    rgba(60, 100, 200, 0.50) 0%,
-    rgba(30,  60, 140, 0.22) 45%,
-    transparent 72%
+    circle at 50% 50%,
+    rgba(78, 132, 240, 0.60) 0%,
+    rgba(64, 114, 222, 0.45) 24%,
+    rgba(48,  92, 190, 0.29) 40%,
+    rgba(34,  70, 156, 0.16) 58%,
+    rgba(22,  50, 122, 0.06) 78%,
+    transparent 100%
   );
 }
 /* Thinking — dim green glow */
 .starling.state-thinking .sphere-halo {
   background: radial-gradient(
-    ellipse 65% 65% at 50% 50%,
-    rgba(40, 160, 90, 0.40) 0%,
-    rgba(20,  90, 50, 0.18) 45%,
-    transparent 72%
+    circle at 50% 50%,
+    rgba(58, 204, 122, 0.54) 0%,
+    rgba(46, 178, 104, 0.40) 24%,
+    rgba(34, 146,  84, 0.26) 40%,
+    rgba(24, 114,  66, 0.14) 58%,
+    rgba(16,  84,  48, 0.06) 78%,
+    transparent 100%
   );
 }
 /* Speaking — warm amber glow */
 .starling.state-speaking .sphere-halo {
   background: radial-gradient(
-    ellipse 65% 65% at 50% 50%,
-    rgba(200, 140, 40, 0.45) 0%,
-    rgba(130,  80, 20, 0.20) 45%,
-    transparent 72%
+    circle at 50% 50%,
+    rgba(244, 172, 58, 0.58) 0%,
+    rgba(218, 150, 46, 0.43) 24%,
+    rgba(186, 124, 36, 0.28) 40%,
+    rgba(150,  98, 26, 0.15) 58%,
+    rgba(116,  76, 18, 0.06) 78%,
+    transparent 100%
   );
 }
 

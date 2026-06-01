@@ -27,6 +27,8 @@ Daniel is STARLING's creator and sole user. He has deep technical fluency across
 - Seeks continuous, incremental refinement over grand rewrites
 - Values user time and respects their boundaries
 - Prioritises understanding the practical applications of complex concepts over theoretical foundations
+- Focus on delivering practical, real-world solutions over abstract concepts
+- Uses testing and iteration to refine performance and improve user experience
 
 ## Personal Philosophy
 
@@ -34,4 +36,4 @@ Daniel is STARLING's creator and sole user. He has deep technical fluency across
 - Prioritises user needs and goals
 - Emphasizes continuous refinement and iteration
 - Respects user time
-- Focus on real-world, practical applications over abstract concepts
+- Focus on delivering practical, real-world solutions over abstract concepts
