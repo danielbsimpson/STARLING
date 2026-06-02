@@ -32,6 +32,11 @@ const FUZZY_TOOL_MAP = [
     minMatches: 1,
   },
   {
+    toolName: 'Directions',
+    fuzzyKeywords: ['drive', 'driving', 'commute', 'directions', 'route', 'travel', 'far', 'traffic'],
+    minMatches: 1,
+  },
+  {
     toolName: 'News',
     fuzzyKeywords: ['news', 'headlines', 'briefing', 'stories', 'latest', 'update'],
     minMatches: 1,

@@ -398,6 +398,40 @@ html, body {
   animation: weatherFadeIn 0.35s ease;
 }
 
+/* ── Directions-mode layout (mirrors weather/news modes) ─────────────────── */
+.starling.directions-mode .col-left {
+  width: 37%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: 16px;
+  transform: none;
+  overflow: hidden;
+}
+
+.starling.directions-mode .col-left .ring-section {
+  width: auto;
+}
+
+.starling.directions-mode .ring-section {
+  transform: translateY(-10px);
+  transition: transform 0.5s ease;
+}
+
+.starling.directions-mode .col-left .chat-panel {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  max-height: none;
+  opacity: 0.85;
+}
+
+.starling.directions-mode .col-left .msg {
+  font-size: 10px;
+  line-height: 1.45;
+  padding: 4px 0;
+}
+
 /* ── Dossier text styles ────────────────────────────────────────────────── */
 .pres-dossier-title {
   font-family: 'Share Tech Mono', monospace;
@@ -1601,6 +1635,157 @@ html, body {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+/* ── Directions Panel ──────────────────────────────────────────────────────── */
+
+.directions-panel {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 16px 20px 14px;
+  margin-top: 12px;
+  animation: weatherFadeIn 0.35s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.directions-panel.hidden {
+  display: none;
+}
+
+.directions-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 8px;
+}
+
+.directions-title {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: clamp(0.75rem, 1.4vw, 0.95rem);
+  color: #e0e0e0;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.directions-close-btn {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 4px;
+  color: #666;
+  cursor: pointer;
+  font-size: 0.7rem;
+  line-height: 1;
+  padding: 2px 7px;
+  transition: border-color 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.directions-close-btn:hover {
+  border-color: rgba(255,255,255,0.35);
+  color: #ccc;
+}
+
+.directions-fetched {
+  font-size: 0.6rem;
+  color: #555;
+  letter-spacing: 0.08em;
+}
+
+.directions-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+.directions-route {
+  font-size: 0.72rem;
+  color: #aaa;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.directions-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dir-tile {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+}
+
+.dir-tile-lbl {
+  font-size: 0.58rem;
+  color: #555;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.dir-tile-val {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: clamp(0.95rem, 1.7vw, 1.2rem);
+  color: #e0e0e0;
+  line-height: 1.1;
+}
+
+.directions-traffic {
+  font-size: 0.62rem;
+  color: #888;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Reset inline defaults — directions panel lives at body-cols level. */
+.body-cols > .directions-panel {
+  flex-shrink: 0;
+  width: 0;
+  overflow: hidden;
+  opacity: 0;
+  margin-top: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  animation: none;
+  box-sizing: border-box;
+  transition: width 0.5s ease, opacity 0.4s ease 0.3s, padding 0.5s ease;
+}
+
+.body-cols > .directions-panel.hidden {
+  display: flex;
+}
+
+.starling.directions-mode .body-cols > .directions-panel {
+  width: 60%;
+  opacity: 1;
+  padding: 20px 20px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  margin-left: 1%;
+  overflow: hidden;
+}
+
+@media (max-width: 980px) {
+  .directions-metrics {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ── News Panel ──────────────────────────────────────────────────────────────── */

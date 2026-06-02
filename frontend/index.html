@@ -325,6 +325,33 @@
         </div>
       </div>
 
+      <!-- Directions Panel — zero-width in normal mode, expands in directions-mode -->
+      <div class="directions-panel hidden" id="directions-panel">
+        <div class="directions-header">
+          <div class="directions-title" id="directions-title">DRIVE TIME</div>
+          <button class="directions-close-btn" id="directions-close-btn" title="Close directions panel">✕</button>
+        </div>
+        <div class="directions-fetched" id="directions-fetched">—</div>
+        <div class="directions-body">
+          <div class="directions-route" id="directions-route">—</div>
+          <div class="directions-metrics">
+            <div class="dir-tile">
+              <div class="dir-tile-lbl">DURATION</div>
+              <div class="dir-tile-val" id="directions-duration">—</div>
+            </div>
+            <div class="dir-tile">
+              <div class="dir-tile-lbl">DISTANCE</div>
+              <div class="dir-tile-val" id="directions-distance">—</div>
+            </div>
+            <div class="dir-tile">
+              <div class="dir-tile-lbl">MODE</div>
+              <div class="dir-tile-val" id="directions-mode">DRIVING</div>
+            </div>
+          </div>
+          <div class="directions-traffic" id="directions-traffic">—</div>
+        </div>
+      </div>
+
       <!-- Calendar Panel — hidden until calendar mode is active -->
       <div class="cal-panel hidden" id="cal-panel">
         <div class="cal-header">

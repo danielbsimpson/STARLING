@@ -146,21 +146,33 @@ Each tool is a self-contained dispatch intercept — none modify the core chat p
 | 1 | Time & Date | None | ✅ |
 | 2 | Timers | None | ✅ |
 | 3 | Weather | Open-Meteo (free, no key) | ✅ |
-| 4 | News Briefing | RSS / feedparser | ✅ |
-| 5 | Stocks & Crypto | yfinance | ✅ |
-| 6 | In-UI Browser Panel | None | ✅ |
-| 7 | Ideas Vault | Local JSON | ✅ |
-| 8 | Voice Journal | Local JSON | ✅ |
-| 9 | Wikipedia RAG | ChromaDB + fastembed | ✅ |
-| 10 | Reddit Social Feed | Reddit JSON API | ✅ |
-| 11 | YouTube Feed | YouTube Atom RSS | ✅ |
-| 12 | Toolkit Menu | None (frontend) | ✅ |
-| 13 | iCloud Calendar | CalDAV (Apple ID) | ✅ |
-| 14 | Apple Mail Inbox | IMAP (Apple ID) | ✅ |
-| 15 | System Awareness | Local introspection | ✅ |
+| 4 | Drive Time / Commute | OpenRouteService (hosted or self-hosted) | 🔲 Planned |
+| 5 | News Briefing | RSS / feedparser | ✅ |
+| 6 | Stocks & Crypto | yfinance | ✅ |
+| 7 | In-UI Browser Panel | None | ✅ |
+| 8 | Ideas Vault | Local JSON | ✅ |
+| 9 | Voice Journal | Local JSON | ✅ |
+| 10 | Wikipedia RAG | ChromaDB + fastembed | ✅ |
+| 11 | Reddit Social Feed | Reddit JSON API | ✅ |
+| 12 | YouTube Feed | YouTube Atom RSS | ✅ |
+| 13 | Toolkit Menu | None (frontend) | ✅ |
+| 14 | iCloud Calendar | CalDAV (Apple ID) | ✅ |
+| 15 | Apple Mail Inbox | IMAP (Apple ID) | ✅ |
+| 16 | System Awareness | Local introspection | ✅ |
 | — | Wake Word & Interrupt | None | 🔲 Planned |
 
 See [`toolkit/README.md`](./toolkit/README.md) for screenshots and the full [trigger phrase reference](./toolkit/TRIGGER_PHRASES.md).
+
+### Drive Time / Commute
+
+Starling can answer commute and drive-time questions like "how long to drive to Logan Airport" or "walking time to the park" using OpenRouteService. The implementation supports both the hosted free API tier and a fully self-hosted ORS instance via a configurable base URL.
+
+The spoken result is a concise time-and-distance briefing. When traffic adjustment is enabled, it is explicitly labeled as a typical rush-hour heuristic, not live traffic.
+
+Planning and implementation references:
+
+- [`plan/feature-commute-directions-1.md`](./plan/feature-commute-directions-1.md)
+- [`assets/archived/complete/DIRECTIONS.md`](./assets/archived/complete/DIRECTIONS.md)
 
 ## STARLING Soul
 

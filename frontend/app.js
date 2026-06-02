@@ -2,6 +2,7 @@
 import { BACKEND_BASE, BOOT_ANIMATION_MS, SHUTDOWN_ANIMATION_MS, SLEEP_AFTER_MS, SLEEP_ANIMATION_MS, WAKE_ANIMATION_MS, READY_POLL_INTERVAL_MS, READY_POLL_TIMEOUT_MS } from './config.js';
 import { detectTimerTrigger, handleTimerTrigger, initTimerPanel, dismissTimerPanel } from './timer-panel.js';
 import { detectWeatherTrigger, openWeatherPanel, closeWeatherPanel, initWeatherPanel, isWeatherPanelOpen, getWeatherContext } from './weather-panel.js';
+import { detectDirectionsTrigger, openDirectionsPanel, closeDirectionsPanel, initDirectionsPanel, isDirectionsPanelOpen, getDirectionsContext } from './directions-panel.js';
 import { detectNewsTrigger, openNewsPanel, closeNewsPanel, initNewsPanel, isNewsPanelOpen, getActiveArticleContext } from './news-panel.js';
 import { detectRedditTrigger, openRedditPanel, closeRedditPanel, initRedditPanel, openRedditSettings } from './reddit-panel.js';
 import { detectYouTubeTrigger, openYouTubePanel, closeYouTubePanel, initYouTubePanel, openYouTubeSettings } from './youtube-panel.js';
@@ -191,6 +192,7 @@ function _matchesExitPhrase(text) {
 }
 
 let _presSubject = null;
+let _lastDirectionsRequest = null;
 
 // Fetch and populate the dossier panel from the backend-parsed markdown file.
 // Returns the parsed { title, body, meta } on success, or null on failure.
@@ -406,6 +408,9 @@ const TOOLKIT_MANIFEST_BLOCK =
 
   'Weather: fetches live local conditions and a 7-day forecast from Open-Meteo — no API key required. ' +
   'Say "what\'s the weather", "weather today", "weather forecast", or "weather in [city]". ' +
+
+  'Drive Time and Commute: estimates travel time and distance to a destination using OpenRouteService. ' +
+  'Say "how long to drive to [place]", "commute to [place]", "directions to [place]", "how far is [place]", or "walking time to [place]". ' +
 
   'News: delivers a spoken briefing from live RSS feeds across categories: tech, business, US, science, health, sports, entertainment, and world. ' +
   'Say "news briefing", "what\'s in the news", "tech news", "morning briefing", or "top headlines". ' +
@@ -1497,6 +1502,7 @@ function dismissAllToolPanels() {
   _dismissClockPanel();
   dismissTimerPanel();
   closeWeatherPanel();
+  closeDirectionsPanel();
   exitNewsMode();
   exitMailMode();
   exitRedditMode();
@@ -1516,6 +1522,7 @@ function dismissNonNewsPanels() {
   _dismissClockPanel();
   dismissTimerPanel();
   // closeWeatherPanel() — intentionally skipped; weather stays for discussion
+  // closeDirectionsPanel() — intentionally skipped; directions stays for discussion
   exitRedditMode();
   exitYouTubeMode();
   exitMarketMode();
@@ -3553,6 +3560,36 @@ async function _retriggerTool(toolName, originalTranscript) {
       return;
     }
 
+    case 'Directions': {
+      const req = _lastDirectionsRequest;
+      if (!req || !req.destination) {
+        enqueueSpeak('Where should I route to? Say: how long to drive to, followed by a place.');
+        setState('idle');
+        return;
+      }
+
+      closeBrowserPanel();
+      setState('thinking');
+      const dirCtx = await openDirectionsPanel(req);
+      if (dirCtx) {
+        await sendToOllama(
+          'Give a concise spoken drive-time briefing in one or two natural sentences. ' +
+          'State travel duration and approximate distance, mention the mode, and if typical traffic adjustment is present, call it typical traffic not live traffic. ' +
+          'Do not invent a precise arrival time.',
+          {
+            ephemeralMessages: [
+              { role: 'system', content: SYSTEM_PROMPT },
+              { role: 'system', content: `${_currentTimeContext()}\n${dirCtx}` },
+            ],
+          }
+        );
+      } else {
+        await sendToOllama('Tell the user the drive time to that place could not be determined. One sentence.');
+      }
+      fetchSystemStatus();
+      return;
+    }
+
     case 'News': {
       closeBrowserPanel();
       setState('thinking');
@@ -3835,7 +3872,7 @@ async function _routeInput(text) {  // ── Toolkit confirm intercept (positio
 
   // Keep news / weather panel open when the user wants to discuss;
   // dismiss all other overlapping tool panels.
-  if (isNewsPanelOpen() || isWeatherPanelOpen()) {
+  if (isNewsPanelOpen() || isWeatherPanelOpen() || isDirectionsPanelOpen()) {
     dismissNonNewsPanels();
   } else {
     dismissAllToolPanels();
@@ -3860,6 +3897,18 @@ async function _routeInput(text) {  // ── Toolkit confirm intercept (positio
     const ack = 'Weather panel closed.';
     const { txt: wxTxt } = appendMessage('assistant', ack);
     enqueueSpeak(ack, () => { wxTxt.textContent = ack; });
+    setState('idle');
+    fetchSystemStatus();
+    return;
+  }
+
+  // ── Directions: explicit close phrase while panel is open ─────────────────
+  if (isDirectionsPanelOpen() && /\bclose\s+(?:the\s+)?(?:directions|commute|drive\s*time)\b/i.test(text)) {
+    closeDirectionsPanel();
+    appendMessage('user', text);
+    const ack = 'Directions panel closed.';
+    const { txt: dirTxt } = appendMessage('assistant', ack);
+    enqueueSpeak(ack, () => { dirTxt.textContent = ack; });
     setState('idle');
     fetchSystemStatus();
     return;
@@ -4112,6 +4161,34 @@ async function _routeInput(text) {  // ── Toolkit confirm intercept (positio
       _playbackChain.then(() => { /* panel stays open — user can ask follow-up questions */ });
     } else {
       await sendToOllama(getPrompt('TOOL_WEATHER_UNAVAILABLE'));
+    }
+    fetchSystemStatus();
+    return;
+  }
+
+  const _dirTrigger = detectDirectionsTrigger(text);
+  if (_dirTrigger) {
+    logEvent('tool_dispatch', { tool: 'directions', trigger_phrase: text });
+    closeBrowserPanel();
+    setState('thinking');
+    appendMessage('user', text);
+    _lastDirectionsRequest = _dirTrigger;
+
+    const dirCtx = await openDirectionsPanel(_dirTrigger);
+    if (dirCtx) {
+      await sendToOllama(
+        'Give a concise spoken drive-time briefing in one or two natural sentences. ' +
+        'State travel duration and approximate distance, mention the travel mode, and if the route is adjusted for traffic, say it reflects typical rush-hour traffic not live traffic. ' +
+        'Do not invent a precise arrival time.',
+        {
+          ephemeralMessages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'system', content: `${_currentTimeContext()}\n${dirCtx}` },
+          ],
+        }
+      );
+    } else {
+      await sendToOllama('Tell the user we could not find or route to that destination right now. One short sentence.');
     }
     fetchSystemStatus();
     return;
@@ -4414,7 +4491,8 @@ async function _routeInput(text) {  // ── Toolkit confirm intercept (positio
   // Inject currently-selected news article or open weather data as context
   const _newsArticleCtx  = isNewsPanelOpen()    ? getActiveArticleContext() : null;
   const _weatherCtx      = isWeatherPanelOpen() ? getWeatherContext()       : null;
-  const _combinedCtx = [_extraContext, _newsArticleCtx, _weatherCtx].filter(Boolean).join('\n\n') || null;
+  const _directionsCtx   = isDirectionsPanelOpen() ? getDirectionsContext() : null;
+  const _combinedCtx = [_extraContext, _newsArticleCtx, _weatherCtx, _directionsCtx].filter(Boolean).join('\n\n') || null;
 
   await sendToOllama(text, _combinedCtx ? { extraContext: _combinedCtx } : {});
   fetchSystemStatus();
@@ -4675,6 +4753,7 @@ async function warmupModels(greetingEl) {
 // ── Init ──────────────────────────────────────────────────────────────────────
 initTimerPanel({ appendMessage, setState, enqueueSpeak });
 initWeatherPanel();
+initDirectionsPanel({ enqueueSpeak, sendToOllama, interruptSpeech });
 initRedditPanel({ enqueueSpeak, sendToOllama, interruptSpeech });
 initYouTubePanel({ enqueueSpeak, sendToOllama, interruptSpeech });
 initNewsPanel({ enqueueSpeak, sendToOllama, interruptSpeech, onClose: exitNewsMode });

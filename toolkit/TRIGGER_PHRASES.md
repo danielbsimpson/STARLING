@@ -30,15 +30,16 @@ The first matching tool wins; unmatched input falls through to the LLM.
 | 19 | Ideas Vault — capture | Both "idea/ideas" **and** "vault" must appear |
 | 20 | Ideas Vault — read / manage | Both "idea/ideas" **and** "vault" must appear |
 | 21 | Weather | |
-| 22 | Calendar | iCloud CalDAV; checked before Mail |
-| 23 | Mail inbox | IMAP fetch from Apple Mail |
-| 24 | Market / Stocks / Crypto | Checked before News — more specific domain vocabulary |
-| 25 | YouTube feed | Requires **"youtube feed"** — checked before Reddit and News |
-| 26 | Reddit social feed | Requires **"reddit social"** — checked before News |
-| 27 | News | |
-| 28 | Browser — open | Requires **"browser"** keyword; Wikipedia lookup also requires **"browser"** |
-| 29 | Prompt Registry editor | Opens the prompt editor sub-view inside the menu panel |
-| 30 | LLM fallback | Anything unmatched |
+| 22 | Directions / Commute | Specific navigation vocabulary; checked near Weather before generic News |
+| 23 | Calendar | iCloud CalDAV; checked before Mail |
+| 24 | Mail inbox | IMAP fetch from Apple Mail |
+| 25 | Market / Stocks / Crypto | Checked before News — more specific domain vocabulary |
+| 26 | YouTube feed | Requires **"youtube feed"** — checked before Reddit and News |
+| 27 | Reddit social feed | Requires **"reddit social"** — checked before News |
+| 28 | News | |
+| 29 | Browser — open | Requires **"browser"** keyword; Wikipedia lookup also requires **"browser"** |
+| 30 | Prompt Registry editor | Opens the prompt editor sub-view inside the menu panel |
+| 31 | LLM fallback | Anything unmatched |
 
 ---
 
@@ -367,7 +368,33 @@ Optional location is extracted after `in` / `for` / `at` following `weather` or 
 
 ---
 
-## 10 · Market / Stocks / Crypto
+## 10 · Directions / Commute
+
+Opens the drive-time panel and fetches route duration + distance from OpenRouteService.
+Destination text is extracted after commute/directions phrases; mode is inferred from
+walk/bike keywords (default driving).
+
+| Example phrase | Result |
+|----------------|--------|
+| `how long to drive to Logan Airport` | destination: Logan Airport, profile: driving-car |
+| `what's my commute to the office` | destination: the office, profile: driving-car |
+| `driving time to downtown Boston` | destination: downtown Boston, profile: driving-car |
+| `how far is Fenway Park` | destination: Fenway Park, profile: driving-car |
+| `directions to South Station` | destination: South Station, profile: driving-car |
+| `walking time to the park` | destination: the park, profile: foot-walking |
+| `bike time to Cambridge` | destination: Cambridge, profile: cycling-regular |
+
+Close phrase while panel is open:
+
+| Example phrase |
+|----------------|
+| `close directions` |
+| `close commute` |
+| `close drive time` |
+
+---
+
+## 11 · Market / Stocks / Crypto
 
 Opens the market dashboard. The detected intent selects a view filter.
 Returns a LLM-spoken briefing scoped to the filter.
@@ -409,7 +436,7 @@ Returns a LLM-spoken briefing scoped to the filter.
 
 ---
 
-## 11 · YouTube Feed
+## 12 · YouTube Feed
 
 Opens the YouTube feed panel. Fetches latest videos from configured channels via RSS.
 LLM synthesis runs in the background and Starling delivers a spoken briefing.
@@ -439,7 +466,7 @@ mentions fall through to the LLM.
 
 ---
 
-## 12 · Reddit Social Feed
+## 13 · Reddit Social Feed
 
 Opens the Reddit social feed panel. Fetches top/hot posts from configured subreddits via
 the public Reddit JSON API (no auth required). LLM synthesis runs in the background and
