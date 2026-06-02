@@ -1650,6 +1650,8 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  height: 100%;
+  min-height: 0;
 }
 
 .directions-panel.hidden {
@@ -1700,6 +1702,7 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  flex: 1;
   min-height: 0;
 }
 
@@ -1751,6 +1754,68 @@ html, body {
   text-transform: uppercase;
 }
 
+.directions-map-wrap {
+  position: relative;
+  width: 100%;
+  min-height: 260px;
+  flex: 1;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: #090909;
+  overflow: hidden;
+}
+
+.directions-map-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.directions-map-fallback {
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  font-size: 0.58rem;
+  letter-spacing: 0.08em;
+  color: rgba(220, 220, 220, 0.8);
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.directions-map-legend {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.dir-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.56rem;
+  letter-spacing: 0.1em;
+  color: #9f9f9f;
+  text-transform: uppercase;
+}
+
+.dir-legend-swatch {
+  width: 18px;
+  height: 2px;
+  display: inline-block;
+  border-radius: 2px;
+}
+
+.dir-legend-route {
+  background: #37f3ff;
+  box-shadow: 0 0 8px rgba(55, 243, 255, 0.45);
+}
+
+.dir-legend-slow {
+  background: #ffd84d;
+  box-shadow: 0 0 8px rgba(255, 216, 77, 0.45);
+}
+
 /* Reset inline defaults — directions panel lives at body-cols level. */
 .body-cols > .directions-panel {
   flex-shrink: 0;
@@ -1785,6 +1850,11 @@ html, body {
 @media (max-width: 980px) {
   .directions-metrics {
     grid-template-columns: 1fr;
+  }
+
+  .directions-map-wrap {
+    min-height: 210px;
+    flex: 0 0 210px;
   }
 }
 

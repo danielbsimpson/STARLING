@@ -374,6 +374,9 @@ Opens the drive-time panel and fetches route duration + distance from OpenRouteS
 Destination text is extracted after commute/directions phrases; mode is inferred from
 walk/bike keywords (default driving).
 
+When a route is available, the panel renders a dark map with origin/destination markers,
+draws the neon route from destination to origin, and highlights estimated slowdown zones in yellow.
+
 | Example phrase | Result |
 |----------------|--------|
 | `how long to drive to Logan Airport` | destination: Logan Airport, profile: driving-car |

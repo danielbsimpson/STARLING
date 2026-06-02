@@ -2,6 +2,12 @@
 // Drive-time / commute panel: trigger detection, route fetch, render, and LLM context export.
 
 import { BACKEND_BASE } from './config.js';
+import {
+  initDirectionsMap,
+  renderDirectionsMap,
+  animateRouteFromOrigin,
+  destroyDirectionsMap,
+} from './directions-map.js';
 
 const DIRECTIONS_MIN_DEST_CHARS = 2;
 
@@ -30,6 +36,7 @@ export function initDirectionsPanel({ enqueueSpeak, sendToOllama, interruptSpeec
   _enqueueSpeak = enqueueSpeak || null;
   _sendToOllama = sendToOllama || null;
   _interruptSpeech = interruptSpeech || null;
+  initDirectionsMap();
 }
 
 dirCloseBtn?.addEventListener('click', closeDirectionsPanel);
@@ -108,9 +115,14 @@ function _renderPanel(data) {
   } else {
     dirDuration.textContent = `${data.duration_minutes} MIN`;
     dirDistance.textContent = `${Number(data.distance_miles).toFixed(1)} MI (${Number(data.distance_km).toFixed(1)} KM)`;
-    dirTraffic.textContent = data.traffic_adjusted
-      ? 'TYPICAL RUSH-HOUR TRAFFIC ADJUSTMENT APPLIED'
-      : 'TYPICAL TRAFFIC BASELINE (NO LIVE TRAFFIC FEED)';
+    const hasSlowZones = Array.isArray(data.segments) && data.segments.some(s => s && s.slow_zone);
+    if (hasSlowZones) {
+      dirTraffic.textContent = 'ESTIMATED SLOWDOWN ZONES HIGHLIGHTED (TYPICAL CONDITIONS, NOT LIVE TRAFFIC)';
+    } else {
+      dirTraffic.textContent = data.traffic_adjusted
+        ? 'TYPICAL RUSH-HOUR TRAFFIC ADJUSTMENT APPLIED'
+        : 'TYPICAL TRAFFIC BASELINE (NO LIVE TRAFFIC FEED)';
+    }
   }
 
   dirMode.textContent = _profileLabel(data.profile || 'driving-car');
@@ -156,11 +168,18 @@ export async function openDirectionsPanel({ destination, profile = 'driving-car'
   _starlingEl?.classList.add('directions-mode');
   dirPanel?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
+  // Render map first, then start route draw animation from origin -> destination.
+  const hasMap = renderDirectionsMap(data);
+  if (hasMap) {
+    animateRouteFromOrigin({ durationMs: Number(data.animation_ms) || 7000 });
+  }
+
   return _currentDirectionsContext;
 }
 
 export function closeDirectionsPanel() {
   _currentDirectionsContext = null;
+  destroyDirectionsMap();
   _starlingEl?.classList.remove('directions-mode');
   dirPanel?.classList.add('hidden');
 }

@@ -18,3 +18,14 @@ export const WAKE_ANIMATION_MS  = 5000;
 // the LLM reports ready (i.e. no longer "OFFLINE") before warming up the models.
 export const READY_POLL_INTERVAL_MS = 1000;    // how often to re-poll
 export const READY_POLL_TIMEOUT_MS  = 180000;  // give up after 3 minutes
+
+// Directions map tile themes.
+// Theme can be overridden at runtime via localStorage key:
+//   starling_directions_map_theme = dark | light | satellite
+export const DIRECTIONS_MAP_TILE_THEMES = {
+	dark: 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+	light: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+	satellite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+};
+
+export const DIRECTIONS_MAP_THEME = 'dark';

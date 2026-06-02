@@ -45,6 +45,10 @@ Environment variables:
   DIRECTIONS_RUSH_WINDOWS (default: 07:00-09:30,16:00-18:30)
   DIRECTIONS_DEFAULT_PROFILE (default: driving-car)
   DIRECTIONS_MIN_DEST_CHARS (default: 2)
+    DIRECTIONS_ROUTE_GEOMETRY (default: true)
+    DIRECTIONS_SLOW_SPEED_RATIO (default: 0.65)
+    DIRECTIONS_ROUTE_ANIMATION_MS (default: 7000)
+    DIRECTIONS_SCHEMA_VERSION (default: 2)
 """
 
 from __future__ import annotations
@@ -84,6 +88,16 @@ _RUSH_WINDOWS = os.getenv("DIRECTIONS_RUSH_WINDOWS", "07:00-09:30,16:00-18:30")
 _DEFAULT_PROFILE = os.getenv("DIRECTIONS_DEFAULT_PROFILE", "driving-car").strip().lower()
 _MIN_DEST_CHARS = max(1, int(os.getenv("DIRECTIONS_MIN_DEST_CHARS", "2")))
 _WEATHER_LOCATION = os.getenv("WEATHER_LOCATION", "Framingham,Massachusetts").strip()
+_ROUTE_GEOMETRY = os.getenv("DIRECTIONS_ROUTE_GEOMETRY", "true").strip().lower() in {
+    "1", "true", "yes", "on"
+}
+_SLOW_SPEED_RATIO = max(0.1, min(1.0, float(os.getenv("DIRECTIONS_SLOW_SPEED_RATIO", "0.65"))))
+_ROUTE_ANIMATION_MS = max(1000, int(os.getenv("DIRECTIONS_ROUTE_ANIMATION_MS", "7000")))
+_SCHEMA_VERSION = max(1, int(os.getenv("DIRECTIONS_SCHEMA_VERSION", "2")))
+_OSRM_FALLBACK = os.getenv("DIRECTIONS_OSRM_FALLBACK", "true").strip().lower() in {
+    "1", "true", "yes", "on"
+}
+_OSRM_BASE_URL = os.getenv("DIRECTIONS_OSRM_BASE_URL", "https://router.project-osrm.org").strip().rstrip("/")
 
 _VALID_PROFILES = {"driving-car", "cycling-regular", "foot-walking"}
 _UA = {"User-Agent": "STARLING/1.0"}
@@ -99,6 +113,83 @@ def _profile_spoken_label(profile: str) -> str:
         "cycling-regular": "cycling",
         "foot-walking": "walking",
     }.get(profile, profile)
+
+
+def _route_bbox(route_polyline: list[list[float]]) -> Optional[list[float]]:
+    if not route_polyline:
+        return None
+    lats = [pt[0] for pt in route_polyline]
+    lons = [pt[1] for pt in route_polyline]
+    return [round(min(lats), 6), round(min(lons), 6), round(max(lats), 6), round(max(lons), 6)]
+
+
+def _median(values: list[float]) -> float:
+    if not values:
+        return 0.0
+    sorted_vals = sorted(values)
+    n = len(sorted_vals)
+    mid = n // 2
+    if n % 2 == 1:
+        return sorted_vals[mid]
+    return (sorted_vals[mid - 1] + sorted_vals[mid]) / 2.0
+
+
+def _build_route_segments(
+    route_polyline: list[list[float]],
+    ors_steps: list[dict],
+    rush_adjusted: bool,
+) -> list[dict]:
+    if not route_polyline or not ors_steps:
+        return []
+
+    parsed_segments: list[dict] = []
+    speeds: list[float] = []
+
+    max_index = max(0, len(route_polyline) - 1)
+
+    for step in ors_steps:
+        way_points = step.get("way_points") or []
+        if len(way_points) != 2:
+            continue
+        start_idx = max(0, min(max_index, int(way_points[0])))
+        end_idx = max(0, min(max_index, int(way_points[1])))
+        if end_idx < start_idx:
+            start_idx, end_idx = end_idx, start_idx
+
+        distance_m = float(step.get("distance") or 0.0)
+        duration_s = float(step.get("duration") or 0.0)
+        speed_kmh = (distance_m / duration_s) * 3.6 if duration_s > 0 else 0.0
+        if speed_kmh > 0:
+            speeds.append(speed_kmh)
+
+        parsed_segments.append({
+            "start_idx": start_idx,
+            "end_idx": end_idx,
+            "distance_m": round(distance_m, 1),
+            "duration_s": round(duration_s, 1),
+            "speed_kmh": round(speed_kmh, 1),
+            "slow_zone": False,
+            "estimated_slowdown": False,
+        })
+
+    if not parsed_segments:
+        return []
+
+    median_speed = _median(speeds)
+    mean_speed = (sum(speeds) / len(speeds)) if speeds else 0.0
+    threshold = median_speed * _SLOW_SPEED_RATIO
+
+    for seg in parsed_segments:
+        speed = seg["speed_kmh"]
+        is_slow = False
+        if speed > 0 and threshold > 0 and speed < threshold:
+            is_slow = True
+        if rush_adjusted and speed > 0 and mean_speed > 0 and speed < mean_speed:
+            is_slow = True
+        seg["slow_zone"] = bool(is_slow)
+        seg["estimated_slowdown"] = bool(is_slow)
+
+    return parsed_segments
 
 
 def _parse_hhmm(value: str) -> int:
@@ -229,27 +320,113 @@ async def _fetch_route(
         ]
     }
 
+    async def _fetch_route_osrm() -> Optional[dict]:
+        if not _OSRM_FALLBACK:
+            return None
+
+        profile_map = {
+            "driving-car": "driving",
+            "cycling-regular": "bike",
+            "foot-walking": "foot",
+        }
+        osrm_profile = profile_map.get(profile)
+        if not osrm_profile:
+            return None
+
+        osrm_url = (
+            f"{_OSRM_BASE_URL}/route/v1/{osrm_profile}/"
+            f"{o_lon},{o_lat};{d_lon},{d_lat}"
+        )
+        params = {
+            "overview": "full",
+            "geometries": "geojson",
+            "steps": "true",
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=_TIMEOUT_S) as client:
+                osrm_res = await client.get(osrm_url, params=params, headers=_UA)
+            if osrm_res.status_code < 200 or osrm_res.status_code >= 300:
+                logger.warning("Directions OSRM fallback returned %s", osrm_res.status_code)
+                return None
+
+            osrm_payload = osrm_res.json()
+            routes = osrm_payload.get("routes") or []
+            if not routes:
+                return None
+
+            route0 = routes[0] or {}
+            duration_s = float(route0.get("duration") or 0.0)
+            distance_m = float(route0.get("distance") or 0.0)
+            if duration_s <= 0 or distance_m <= 0:
+                return None
+
+            duration_minutes_raw = max(1, int(round(duration_s / 60.0)))
+
+            route_polyline: list[list[float]] = []
+            if _ROUTE_GEOMETRY:
+                coords = (route0.get("geometry") or {}).get("coordinates") or []
+                for coord in coords:
+                    if not isinstance(coord, (list, tuple)) or len(coord) < 2:
+                        continue
+                    lon = float(coord[0])
+                    lat = float(coord[1])
+                    route_polyline.append([round(lat, 6), round(lon, 6)])
+
+            return {
+                "duration_minutes_raw": duration_minutes_raw,
+                "distance_km": round(distance_m / 1000.0, 1),
+                "distance_miles": round(distance_m * 0.000621371, 1),
+                "fetched_at": datetime.now(timezone.utc).isoformat(),
+                "route_polyline": route_polyline,
+                "route_bbox": _route_bbox(route_polyline),
+                "ors_steps": [],
+            }
+        except Exception as exc:
+            logger.warning("Directions OSRM fallback failed: %s", exc)
+            return None
+
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT_S) as client:
             res = await client.post(url, headers=headers, json=body)
         if res.status_code < 200 or res.status_code >= 300:
-            logger.warning("Directions ORS returned %s", res.status_code)
-            return None
+            logger.warning("Directions ORS returned %s; trying OSRM fallback", res.status_code)
+            return await _fetch_route_osrm()
 
         payload = res.json()
-        summary = payload["features"][0]["properties"]["summary"]
+        feature = payload["features"][0]
+        summary = feature["properties"]["summary"]
         duration_s = float(summary["duration"])
         distance_m = float(summary["distance"])
         duration_minutes_raw = max(1, int(round(duration_s / 60.0)))
+
+        route_polyline: list[list[float]] = []
+        if _ROUTE_GEOMETRY:
+            coords = (feature.get("geometry") or {}).get("coordinates") or []
+            for coord in coords:
+                if not isinstance(coord, (list, tuple)) or len(coord) < 2:
+                    continue
+                lon = float(coord[0])
+                lat = float(coord[1])
+                route_polyline.append([round(lat, 6), round(lon, 6)])
+
+        ors_segments = ((feature.get("properties") or {}).get("segments") or [])
+        steps = []
+        if ors_segments:
+            steps = (ors_segments[0] or {}).get("steps") or []
+
         return {
             "duration_minutes_raw": duration_minutes_raw,
             "distance_km": round(distance_m / 1000.0, 1),
             "distance_miles": round(distance_m * 0.000621371, 1),
             "fetched_at": datetime.now(timezone.utc).isoformat(),
+            "route_polyline": route_polyline,
+            "route_bbox": _route_bbox(route_polyline),
+            "ors_steps": steps,
         }
     except Exception as exc:
-        logger.warning("Directions ORS fetch failed: %s", exc)
-        return None
+        logger.warning("Directions ORS fetch failed: %s; trying OSRM fallback", exc)
+        return await _fetch_route_osrm()
 
 
 def _cache_key(profile: str, origin: tuple[float, float, str], destination: tuple[float, float, str]) -> str:
@@ -257,7 +434,7 @@ def _cache_key(profile: str, origin: tuple[float, float, str], destination: tupl
     d_lat, d_lon, _ = destination
     origin_key = f"{o_lat:.3f}_{o_lon:.3f}"
     dest_key = f"{d_lat:.3f}_{d_lon:.3f}"
-    return f"dir_{profile}_{origin_key}_{dest_key}"
+    return f"dir_v{_SCHEMA_VERSION}_{profile}_{origin_key}_{dest_key}"
 
 
 def _build_llm_context(route: Optional[dict]) -> Optional[str]:
@@ -275,6 +452,9 @@ def _build_llm_context(route: Optional[dict]) -> Optional[str]:
     )
     if route.get("traffic_adjusted"):
         summary += "; adjusted for typical rush-hour traffic"
+
+    if any((seg or {}).get("slow_zone") for seg in (route.get("segments") or [])):
+        summary += "; includes estimated slowdown zones from typical conditions (not live traffic)"
 
     return f"[DRIVE TIME - to {dest} - as of {now_local}]\n{summary}."
 
@@ -342,6 +522,10 @@ async def get_directions(
             "llm_context": None,
             "fetched_at": datetime.now(timezone.utc).isoformat(),
             "traffic_adjusted": False,
+            "route_polyline": [],
+            "route_bbox": None,
+            "segments": [],
+            "animation_ms": _ROUTE_ANIMATION_MS,
         }
         session_log.log("tool_result", {
             "endpoint": "/directions",
@@ -351,6 +535,7 @@ async def get_directions(
         return response
 
     adjusted_minutes, adjusted = _apply_rush_adjust(raw_route["duration_minutes_raw"])
+    segments = _build_route_segments(raw_route.get("route_polyline") or [], raw_route.get("ors_steps") or [], adjusted)
 
     response = {
         "duration_minutes": adjusted_minutes,
@@ -362,6 +547,10 @@ async def get_directions(
         "llm_context": None,
         "fetched_at": raw_route.get("fetched_at", datetime.now(timezone.utc).isoformat()),
         "traffic_adjusted": adjusted,
+        "route_polyline": raw_route.get("route_polyline") or [],
+        "route_bbox": raw_route.get("route_bbox"),
+        "segments": segments,
+        "animation_ms": _ROUTE_ANIMATION_MS,
     }
     response["llm_context"] = _build_llm_context(response)
 

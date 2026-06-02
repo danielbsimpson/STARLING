@@ -49,3 +49,27 @@ def test_weather_flip_markup_and_symbols_present():
     for symbol in ("_renderHourlyCharts", "_flipToDay"):
         assert symbol in panel_js, f"missing symbol '{symbol}' in weather-panel.js"
 
+
+def test_directions_map_markup_and_symbols_present():
+    """Directions map enhancement wires required IDs and map module exports."""
+    index_html = (_FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
+    for el_id in (
+        "directions-map-wrap", "directions-map-canvas", "directions-map-fallback",
+        "directions-map-legend",
+    ):
+        assert el_id in index_html, f"missing element id '{el_id}' in index.html"
+
+    map_js = (_FRONTEND_DIR / "directions-map.js").read_text(encoding="utf-8")
+    for symbol in (
+        "initDirectionsMap", "renderDirectionsMap",
+        "animateRouteFromDestination", "destroyDirectionsMap",
+    ):
+        assert symbol in map_js, f"missing symbol '{symbol}' in directions-map.js"
+
+
+def test_directions_toolkit_entry_present():
+    """Toolkit menu registry should include the Drive Time / Commute tool."""
+    app_js = (_FRONTEND_DIR / "app.js").read_text(encoding="utf-8")
+    assert "id: 'directions'" in app_js, "missing directions toolkit id in app.js"
+    assert "Drive Time / Commute" in app_js, "missing directions toolkit label in app.js"
+

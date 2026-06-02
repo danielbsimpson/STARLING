@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;600&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=2" />
+  <link rel="stylesheet" href="style.css?v=3" />
 </head>
 <body>
   <!-- Fuzzy tool confirmation banner (Tier 2 — fuzzy recovery) -->
@@ -349,6 +349,14 @@
             </div>
           </div>
           <div class="directions-traffic" id="directions-traffic">—</div>
+          <div class="directions-map-wrap" id="directions-map-wrap">
+            <canvas class="directions-map-canvas" id="directions-map-canvas" aria-label="Directions route map"></canvas>
+            <div class="directions-map-fallback" id="directions-map-fallback"></div>
+          </div>
+          <div class="directions-map-legend" id="directions-map-legend">
+            <span class="dir-legend-item"><span class="dir-legend-swatch dir-legend-route"></span> NEON ROUTE</span>
+            <span class="dir-legend-item"><span class="dir-legend-swatch dir-legend-slow"></span> ESTIMATED SLOWDOWN</span>
+          </div>
         </div>
       </div>
 
@@ -1102,6 +1110,6 @@ Press SUBMIT when finished dictating.</span>
     }).catch(() => null);
   </script>
 
-  <script type="module" src="app.js?v=8"></script>
+  <script type="module" src="app.js?v=9"></script>
 </body>
 </html>

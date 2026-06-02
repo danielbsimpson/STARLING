@@ -167,7 +167,9 @@ See [`toolkit/README.md`](./toolkit/README.md) for screenshots and the full [tri
 
 Starling can answer commute and drive-time questions like "how long to drive to Logan Airport" or "walking time to the park" using OpenRouteService. The implementation supports both the hosted free API tier and a fully self-hosted ORS instance via a configurable base URL.
 
-The spoken result is a concise time-and-distance briefing. When traffic adjustment is enabled, it is explicitly labeled as a typical rush-hour heuristic, not live traffic.
+The directions panel now includes a dark black/grey route map with origin and destination markers, plus a neon route line that draws from destination to origin while Starling speaks the briefing.
+
+Slowdown sections are highlighted in yellow as estimated typical congestion zones derived from route-segment speed heuristics. These highlights are explicitly labeled as non-live traffic estimates.
 
 Planning and implementation references:
 

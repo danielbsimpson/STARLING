@@ -779,6 +779,14 @@ const TOOLKIT_REGISTRY = [
     openFn: () => openWeatherPanel(),
   },
   {
+    id: 'directions',
+    name: 'Drive Time / Commute',
+    description: 'Estimates route time and distance, then renders a dark route map with destination-to-origin neon draw and estimated slowdown highlights.',
+    ttsScript: 'The Drive Time and Commute tool estimates travel time and distance, then shows a visual route map. Say: how long to drive to, commute to, or directions to followed by a place.',
+    phrases: ['how long to drive to Logan Airport', 'commute to the office', 'directions to South Station', 'how far is Fenway Park', 'walking time to the park'],
+    openFn: () => enqueueSpeak('Drive Time and Commute tool ready. Ask for directions to a destination, for example: how long to drive to Logan Airport.'),
+  },
+  {
     id: 'news',
     name: 'News',
     description: 'Delivers a spoken news briefing summarised from live RSS feeds across multiple categories and regions.',
@@ -3574,7 +3582,7 @@ async function _retriggerTool(toolName, originalTranscript) {
       if (dirCtx) {
         await sendToOllama(
           'Give a concise spoken drive-time briefing in one or two natural sentences. ' +
-          'State travel duration and approximate distance, mention the mode, and if typical traffic adjustment is present, call it typical traffic not live traffic. ' +
+          'State travel duration and approximate distance, mention the mode, and if the map highlights slowdown zones describe them as estimated typical congestion areas, not live traffic. ' +
           'Do not invent a precise arrival time.',
           {
             ephemeralMessages: [
@@ -4178,7 +4186,7 @@ async function _routeInput(text) {  // ── Toolkit confirm intercept (positio
     if (dirCtx) {
       await sendToOllama(
         'Give a concise spoken drive-time briefing in one or two natural sentences. ' +
-        'State travel duration and approximate distance, mention the travel mode, and if the route is adjusted for traffic, say it reflects typical rush-hour traffic not live traffic. ' +
+        'State travel duration and approximate distance, mention the travel mode, and if the map highlights slowdown zones, say they are estimated from typical conditions and not live traffic. ' +
         'Do not invent a precise arrival time.',
         {
           ephemeralMessages: [
