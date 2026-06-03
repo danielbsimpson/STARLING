@@ -984,6 +984,81 @@ const sendBtn     = document.getElementById('send-btn');
 const clearBtn    = document.getElementById('clear-btn');
 const powerBtn    = document.getElementById('power-btn');
 
+// ── Panel stack / layering (Issue: panel crowding) ─────────────────────────
+const PANEL_STACK_CONFIG = [
+  { key: 'weather-mode',    panelId: 'weather-panel' },
+  { key: 'directions-mode', panelId: 'directions-panel' },
+  { key: 'news-mode',       panelId: 'news-panel' },
+  { key: 'mkt-mode',        panelId: 'mkt-panel' },
+  { key: 'reddit-mode',     panelId: 'reddit-panel' },
+  { key: 'yt-mode',         panelId: 'yt-panel' },
+  { key: 'cal-mode',        panelId: 'cal-panel' },
+  { key: 'mail-mode',       panelId: 'mail-panel' },
+  { key: 'journal-mode',    panelId: 'journal-panel' },
+  { key: 'wiki-mode',       panelId: 'wiki-panel' },
+  { key: 'browser-mode',    panelId: 'browser-panel' },
+];
+
+let _panelStack = [];
+let _panelStackObserver = null;
+
+function _syncPanelStack() {
+  if (!starlingEl) return;
+
+  const activeKeys = PANEL_STACK_CONFIG
+    .map(cfg => cfg.key)
+    .filter(modeClass => starlingEl.classList.contains(modeClass));
+
+  const activeSet = new Set(activeKeys);
+  _panelStack = _panelStack.filter(key => activeSet.has(key));
+
+  for (const key of activeKeys) {
+    if (!_panelStack.includes(key)) _panelStack.push(key);
+  }
+
+  const stackDepth = _panelStack.length;
+  starlingEl.classList.toggle('has-panel-stack', stackDepth > 0);
+
+  for (const cfg of PANEL_STACK_CONFIG) {
+    const panelEl = document.getElementById(cfg.panelId);
+    if (!panelEl) continue;
+    panelEl.classList.remove('panel-stack-item', 'panel-stack-top');
+    panelEl.style.removeProperty('--panel-stack-offset');
+    panelEl.style.removeProperty('z-index');
+  }
+
+  if (!stackDepth) return;
+
+  for (let i = 0; i < stackDepth; i += 1) {
+    const key = _panelStack[i];
+    const cfg = PANEL_STACK_CONFIG.find(c => c.key === key);
+    if (!cfg) continue;
+    const panelEl = document.getElementById(cfg.panelId);
+    if (!panelEl) continue;
+
+    const offsetPx = (stackDepth - 1 - i) * 18;
+    panelEl.classList.add('panel-stack-item');
+    panelEl.style.setProperty('--panel-stack-offset', String(offsetPx));
+    panelEl.style.zIndex = String(220 + i);
+
+    if (i === stackDepth - 1) {
+      panelEl.classList.add('panel-stack-top');
+    }
+  }
+}
+
+function _initPanelStack() {
+  if (!starlingEl || _panelStackObserver) return;
+  _panelStackObserver = new MutationObserver(_syncPanelStack);
+  _panelStackObserver.observe(starlingEl, {
+    attributes: true,
+    attributeFilter: ['class'],
+  });
+  _syncPanelStack();
+}
+
+_initPanelStack();
+
 // ── Power / shutdown ──────────────────────────────────────────────────────────
 // _sphereAnimPhase mirrors the animation state inside initSphere().
 // 'booting' | 'shutting_down' | 'none'

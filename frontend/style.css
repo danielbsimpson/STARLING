@@ -228,6 +228,73 @@ html, body {
   position: relative; z-index: 1;
 }
 
+/* ── Panel stack layering (Issue: panel crowding) ────────────────────────── */
+.starling.has-panel-stack .body-cols {
+  overflow: hidden;
+}
+
+.starling.has-panel-stack .col-left {
+  width: 37% !important;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: 16px;
+  transform: none;
+  overflow: hidden;
+}
+
+.starling.has-panel-stack .col-left .ring-section {
+  width: auto !important;
+}
+
+.starling.has-panel-stack .ring-section {
+  transform: translateY(-10px);
+  transition: transform 0.5s ease;
+}
+
+.starling.has-panel-stack .col-left .chat-panel {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  max-height: none;
+  opacity: 0.85;
+}
+
+.starling.has-panel-stack .col-left .msg {
+  font-size: 10px;
+  line-height: 1.45;
+  padding: 4px 0;
+}
+
+.starling.has-panel-stack .body-cols > .panel-stack-item {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: auto;
+  height: 100%;
+  width: var(--stack-panel-width, 60%) !important;
+  max-width: 68%;
+  margin-left: 0 !important;
+  transform: translateX(calc(var(--panel-stack-offset, 0) * -1px));
+  pointer-events: none;
+}
+
+.starling.has-panel-stack .body-cols > .panel-stack-top {
+  pointer-events: auto;
+}
+
+.starling.has-panel-stack .body-cols > #weather-panel { --stack-panel-width: 58%; }
+.starling.has-panel-stack .body-cols > #directions-panel { --stack-panel-width: 60%; }
+.starling.has-panel-stack .body-cols > #news-panel { --stack-panel-width: 60%; }
+.starling.has-panel-stack .body-cols > #mkt-panel { --stack-panel-width: 60%; }
+.starling.has-panel-stack .body-cols > #reddit-panel { --stack-panel-width: 60%; }
+.starling.has-panel-stack .body-cols > #yt-panel { --stack-panel-width: 62%; }
+.starling.has-panel-stack .body-cols > #cal-panel { --stack-panel-width: 58%; }
+.starling.has-panel-stack .body-cols > #mail-panel { --stack-panel-width: 58%; }
+.starling.has-panel-stack .body-cols > #journal-panel { --stack-panel-width: 58%; }
+.starling.has-panel-stack .body-cols > #wiki-panel { --stack-panel-width: 55%; }
+.starling.has-panel-stack .body-cols > #browser-panel { --stack-panel-width: 63%; }
+
 /* Left column — row in normal mode: sphere left, chat right */
 .col-left {
   width: 100%; flex-shrink: 0;
