@@ -287,10 +287,25 @@ html, body {
   margin-left: 0 !important;
   transform: translateX(calc(var(--panel-stack-offset, 0) * -1px));
   pointer-events: none;
+  /* Keep layered panels readable despite translucent theme backgrounds. */
+  background-color: rgba(7, 10, 18, 0.88) !important;
+  backdrop-filter: blur(8px) saturate(110%);
+  -webkit-backdrop-filter: blur(8px) saturate(110%);
+  border-color: rgba(130, 170, 255, 0.18) !important;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.42);
+  transition: opacity 0.24s ease, filter 0.24s ease, box-shadow 0.24s ease;
 }
 
 .starling.has-panel-stack .body-cols > .panel-stack-top {
   pointer-events: auto;
+  opacity: 1;
+  filter: none;
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.55);
+}
+
+.starling.has-panel-stack .body-cols > .panel-stack-item:not(.panel-stack-top) {
+  opacity: 0.42;
+  filter: saturate(0.7) brightness(0.8);
 }
 
 .starling.has-panel-stack .body-cols > #weather-panel { --stack-panel-width: 58%; }
