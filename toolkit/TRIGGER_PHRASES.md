@@ -10,37 +10,43 @@ The first matching tool wins; unmatched input falls through to the LLM.
 | Priority | Tool | Notes |
 |----------|------|-------|
 | 1 | Toolkit confirm intercept | Active only while a toolkit confirm is pending; must be first |
-| 2 | Browser — close | Only when browser panel is open |
-| 3 | Wikipedia RAG — exit | Only when wiki panel is active |
-| 4 | Journal — in-mode routing | Only when journal dictation / interview is active |
-| 5 | Ideas — in-mode routing | Only when ideas capture mode is active |
-| 6 | Weather — close | Only when weather panel is open |
-| 7 | YouTube — close | |
-| 8 | Reddit — close | |
-| 9 | Mail inbox — close | Only when mail panel is open |
-| 10 | Dossier — exit | |
-| 11 | Toolkit Menu — open | Checked before dossier open to avoid conflicts |
-| 12 | Dossier — open | |
-| 13 | Wikipedia RAG — open | Requires **"local"** or **"offline"** keyword |
-| 14 | Journal — start | |
-| 15 | Journal — read / search | |
-| 16 | Timer | Checked before Time to avoid "timer" matching time patterns |
-| 17 | Date | Checked before Time — date phrases are more specific |
-| 18 | Time | |
-| 19 | Ideas Vault — capture | Both "idea/ideas" **and** "vault" must appear |
-| 20 | Ideas Vault — read / manage | Both "idea/ideas" **and** "vault" must appear |
-| 21 | Weather | |
-| 22 | Directions / Commute | Specific navigation vocabulary; checked near Weather before generic News |
-| 23 | Calendar | iCloud CalDAV; checked before Mail |
-| 24 | Mail inbox | IMAP fetch from Apple Mail |
-| 25 | Market / Stocks / Crypto | Checked before News — more specific domain vocabulary |
-| 26 | YouTube feed | Requires **"youtube feed"** — checked before Reddit and News |
-| 27 | Reddit social feed | Requires **"reddit social"** — checked before News |
-| 28 | Research Papers | Checked before News due to more specific scholarly vocabulary |
-| 29 | News | |
-| 30 | Browser — open | Requires **"browser"** keyword; Wikipedia lookup also requires **"browser"** |
-| 31 | Prompt Registry editor | Opens the prompt editor sub-view inside the menu panel |
-| 32 | LLM fallback | Anything unmatched |
+| 2 | Fuzzy confirm intercept | Active only while fuzzy "did you mean" confirmation is pending |
+| 3 | Browser — close | Only when browser panel is open |
+| 4 | Wikipedia RAG — exit/in-mode | While wiki panel is active, all input routes to wiki chat except exit phrases |
+| 5 | Journal — in-mode routing | Only when journal dictation / interview is active |
+| 6 | Ideas — in-mode routing | Only when ideas capture mode is active |
+| 7 | Research Papers — close | Only when papers panel is open |
+| 8 | News — close | Only when news panel is open |
+| 9 | Weather — close | Only when weather panel is open |
+| 10 | Directions — close | Only when directions panel is open |
+| 11 | YouTube — close | |
+| 12 | Reddit — close | |
+| 13 | Mail inbox — close | Only when mail panel is open |
+| 14 | Dossier — exit | |
+| 15 | Soul Panel — open | Voice trigger for viewing/editing `SOUL.md` |
+| 16 | Prompt Registry editor — open | Opens the prompt editor sub-view inside the menu panel |
+| 17 | Toolkit Menu — open | Checked before dossier open to avoid conflicts |
+| 18 | Dossier — open | |
+| 19 | Wikipedia RAG — open | Requires **"local"** or **"offline"** keyword |
+| 20 | Journal — start | |
+| 21 | Journal — read / search | |
+| 22 | Timer | Checked before Time to avoid "timer" matching time patterns |
+| 23 | Date | Checked before Time — date phrases are more specific |
+| 24 | Time | |
+| 25 | System Status | Voice summary of runtime health/telemetry |
+| 26 | Ideas Vault — capture | Both "idea/ideas" **and** "vault" must appear |
+| 27 | Ideas Vault — read / manage | Both "idea/ideas" **and** "vault" must appear |
+| 28 | Weather | |
+| 29 | Directions / Commute | Specific navigation vocabulary |
+| 30 | Calendar | iCloud CalDAV; checked before Mail |
+| 31 | Mail inbox | IMAP fetch from Apple Mail |
+| 32 | Market / Stocks / Crypto | Checked before News — more specific domain vocabulary |
+| 33 | YouTube feed | Requires **"youtube feed"** — checked before Reddit and News |
+| 34 | Reddit social feed | Requires **"reddit social"** — checked before News |
+| 35 | Research Papers | Checked before News due to scholarly vocabulary |
+| 36 | News | |
+| 37 | Browser — open | Requires **"browser"** keyword; Wikipedia lookup also requires **"browser"** |
+| 38 | LLM fallback | Anything unmatched |
 
 ---
 
@@ -499,7 +505,7 @@ mentions fall through to the LLM.
 
 ---
 
-## 13 · News
+## 14 · News
 
 Opens the news panel and delivers a spoken briefing. Defaults to world news.
 Saying a category keyword anywhere in the phrase selects that feed.
@@ -554,7 +560,7 @@ The category keyword maps to the feed as shown below.
 
 ---
 
-## 14 · Research Papers
+## 15 · Research Papers
 
 Opens the research papers panel and delivers a spoken briefing of recent papers for a topic.
 Topic extraction is conservative: if a topic is not clearly present, the tool does not trigger.
@@ -580,7 +586,7 @@ Topic extraction is conservative: if a topic is not clearly present, the tool do
 
 ---
 
-## 15 · Browser / Web Panel
+## 16 · Browser / Web Panel
 
 Opens an embedded browser panel (iframe) in the UI. The close phrase is checked at the
 highest priority whenever the panel is open. The open trigger fires last — after all other
@@ -589,7 +595,7 @@ tools — so that short phrases like `"search"` don't accidentally hijack longer
 Page text is extracted server-side and injected as LLM context, enabling on-page Q&A and
 summarisation.
 
-### Close (priority 2 — panel must be open)
+### Close (panel must be open)
 
 | Example phrase |
 |----------------|
@@ -599,11 +605,11 @@ summarisation.
 | `hide browser` · `hide the browser` |
 | `shut browser` · `shut the browser` |
 
-### Wikipedia lookup in browser (priority 25)
+### Wikipedia lookup in browser
 
 Extracts the topic and navigates to the English Wikipedia article in the browser panel.
 **Requires "browser" or "browser window" or "in browser" in the phrase.**  
-To query the local offline Wikipedia instead, use the **"local wiki"** / **"offline wikipedia"** triggers (priority 12).
+To query the local offline Wikipedia instead, use the **"local wiki"** / **"offline wikipedia"** triggers.
 
 | Example phrase | Topic resolved |
 |----------------|---------------|
@@ -614,7 +620,7 @@ To query the local offline Wikipedia instead, use the **"local wiki"** / **"offl
 | `wikipedia in browser for photosynthesis` | photosynthesis |
 | `search Wikipedia in the browser window for Alan Turing` | Alan Turing |
 
-### Open URL (priority 25)
+### Open URL
 
 Navigates directly to a given URL or bare domain.
 
@@ -624,7 +630,7 @@ Navigates directly to a given URL or bare domain.
 | `open browser example.com` | `https://example.com` |
 | `open browser news.ycombinator.com` | `https://news.ycombinator.com` |
 
-### Web search (priority 25)
+### Web search
 
 Opens a DuckDuckGo plain-HTML search (iframe-friendly).
 
@@ -686,19 +692,23 @@ frontend file. Add patterns to the appropriate array and update this document.
 | Date | `frontend/app.js` | `detectDateTrigger()` |
 | Time | `frontend/app.js` | `detectTimeTrigger()` |
 | Weather | `frontend/weather-panel.js` | `detectWeatherTrigger()` |
+| Directions / Commute | `frontend/directions-panel.js` | `detectDirectionsTrigger()` |
 | Market | `frontend/stocks-panel.js` | `detectMarketTrigger()` |
 | News | `frontend/news-panel.js` | `detectNewsTrigger()` |
+| Research Papers | `frontend/papers-panel.js` | `detectPapersTrigger()` |
 | Browser | `frontend/browser-panel.js` | `detectBrowserTrigger()` / `detectBrowserClose()` |
 | Ideas Vault | `frontend/ideas-panel.js` | `detectIdeaCaptureTrigger()` / `detectIdeaReadTrigger()` |
 | Voice Journal | `frontend/journal-panel.js` | `detectJournalStartTrigger()` / `detectJournalReadTrigger()` |
 | Wikipedia RAG | `frontend/wiki-panel.js` | `detectWikiTrigger()` / `detectWikiExitTrigger()` |
 | Calendar | `frontend/calendar-panel.js` | `detectCalendarTrigger()` |
 | Mail | `frontend/mail-panel.js` | `detectMailTrigger()` |
+| Soul Panel | `frontend/app.js` | inline soul regex in `_routeInput()` |
+| System Status | `frontend/system-panel.js` | `detectSystemStatusTrigger()` |
 | Prompt Editor | `frontend/app.js` | inline regex in `_routeInput()` |
 
 ---
 
-## 15 · Calendar
+## 17 · Calendar
 
 Opens the calendar panel and delivers a spoken briefing of today's and upcoming events.
 Fetches via CalDAV from iCloud. Requires an Apple ID and App-Specific Password
@@ -719,7 +729,7 @@ Fetches via CalDAV from iCloud. Requires an Apple ID and App-Specific Password
 
 ---
 
-## 16 · Mail (Apple Mail Inbox)
+## 18 · Mail (Apple Mail Inbox)
 
 Opens the mail panel and delivers a spoken inbox briefing. Fetches unread IMAP
 messages via `imap.mail.me.com:993`. Only FROM, SUBJECT, and DATE headers are
@@ -749,7 +759,7 @@ Requires an Apple ID and App-Specific Password configured in the toolkit login f
 | `open my email` |
 | `read my email` |
 
-### Close (priority 9 — checked before dossier exit)
+### Close (checked before dossier exit)
 
 | Example phrase |
 |----------------|
@@ -769,7 +779,24 @@ Requires an Apple ID and App-Specific Password configured in the toolkit login f
 
 ---
 
-## 26 · Prompt Registry Editor
+## 19 · Soul Panel / Soul File
+
+Opens the Soul panel so the current `SOUL.md` can be viewed or edited in-app.
+
+### Open
+
+Regex: `/\b(?:open|show|view|edit)\b.{0,20}\b(?:soul|soul\s+file|soul\s+editor)\b/i`
+
+| Example phrase |
+|----------------|
+| `open soul` |
+| `show soul` |
+| `view soul file` |
+| `edit soul` |
+
+---
+
+## 20 · Prompt Registry Editor
 
 Opens the Prompt Registry editor sub-view inside the menu panel.
 All registered LLM prompt strings can be viewed, edited, and reset here.
@@ -792,7 +819,7 @@ Regex: `/\b(?:open|show|edit)\b.{0,20}\bprompt(?:s)?\b.{0,20}\b(?:editor|registr
 
 ---
 
-## 27 · System Status (System Awareness)
+## 21 · System Status (System Awareness)
 
 Speaks a short summary of Starling's current runtime state: LLM/STT/TTS
 backends, available tools, boot duration, and GPU VRAM usage. Backed by

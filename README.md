@@ -1,4 +1,4 @@
-<div align="center">
+﻿<div align="center">
 
 # S.T.A.R.L.I.N.G.
 
@@ -39,7 +39,7 @@ Speech is transcribed with faster-whisper, reasoned over by a local LLM via llam
 - **RAG memory** — ChromaDB with BM25/vector fusion retrieval; drop `.md`/`.txt` files into `memory/input/` and ingest.
 - **Persistent soul** — an evolving personality file updated by a session-end "dream state" reflection pipeline.
 - **Self-awareness** — boot snapshot, tool inventory, live GPU/process telemetry, and a static system-prompt block so the assistant can describe its own state.
-- **Voice tool kit** — 15 self-contained voice tools (see [Voice Tools](#voice-tools)).
+- **Voice tool kit** — 17 self-contained voice tools (see [Voice Tools](#voice-tools)).
 
 ## Requirements
 
@@ -174,8 +174,7 @@ Slowdown sections are highlighted in yellow as estimated typical congestion zone
 
 Planning and implementation references:
 
-- [`plan/feature-commute-directions-1.md`](./plan/feature-commute-directions-1.md)
-- [`assets/archived/complete/DIRECTIONS.md`](./assets/archived/complete/DIRECTIONS.md)
+- Internal commute directions implementation notes
 
 ### Research Papers
 
@@ -190,8 +189,7 @@ Example phrases:
 
 Planning and implementation references:
 
-- [`plan/feature-research-papers-1.md`](./plan/feature-research-papers-1.md)
-- [`assets/archived/complete/PAPERS.md`](./assets/archived/complete/PAPERS.md)
+- Internal research papers implementation notes
 
 ## STARLING Soul
 
@@ -215,7 +213,7 @@ frontend/        UI — HTML/CSS/JS + Three.js sphere and tool panels
 backend/         FastAPI server — STT, TTS, LLM relays, RAG, tool routes, soul
   memory/        Runtime data — caches, JSON stores, ChromaDB, soul files
 assets/          Images, dossier data, cached Wikipedia, archived guides
-plan/            Implementation plans for upcoming features
+plan/            Internal planning documents (not checked in)
 toolkit/         Voice trigger reference and per-tool documentation
 scripts/         Setup, model download, launch/stop, integration test
 tests/           pytest suite
@@ -237,7 +235,7 @@ Core endpoints (FastAPI backend):
 | `/rag/ingest` | POST | Index documents in `memory/input/` (background task) |
 | `/rag/status` | GET | RAG status `{enabled, chunk_count, collection, embed_model}` |
 
-Tool endpoints (weather, news, stocks, journal, ideas, wiki, calendar, mail, reddit, youtube, soul) are documented in [`toolkit/README.md`](./toolkit/README.md).
+Tool endpoints (weather, directions, news, papers, stocks, journal, ideas, wiki, calendar, mail, reddit, youtube, soul, system) are documented in [`toolkit/README.md`](./toolkit/README.md).
 
 ```bash
 # Example: stream a chat response
@@ -272,3 +270,5 @@ See [`TODO.md`](./TODO.md) for the full enhancement list with links to implement
 *"At your service."*
 
 </div>
+
+

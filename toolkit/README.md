@@ -1,4 +1,4 @@
-# S.T.A.R.L.I.N.G. Toolkit
+﻿# S.T.A.R.L.I.N.G. Toolkit
 
 Voice-activated tool modules built into S.T.A.R.L.I.N.G. Each tool is a self-contained
 intercept in the voice dispatch chain — triggered before the LLM with no impact on the
@@ -12,23 +12,25 @@ See [`TRIGGER_PHRASES.md`](./TRIGGER_PHRASES.md) for the full voice command refe
 
 | # | Tool | Guide | Backend | Status |
 |---|---|---|---|---|
-| 1 | Time & Date | [`TIME.md`](../assets/archived/complete/TIME.md) | None | ✅ Done |
-| 2 | Timers | [`TIMER.md`](../assets/archived/complete/TIMER.md) | None | ✅ Done |
-| 3 | Weather | [`WEATHER.md`](../assets/archived/complete/WEATHER.md) | Open-Meteo (free, no key) | ✅ Done |
-| 4 | Drive Time / Commute | [`DIRECTIONS.md`](../assets/archived/complete/DIRECTIONS.md) | OpenRouteService (httpx, self-hostable / free key) | 🔲 Planned |
-| 5 | News Briefing | [`NEWS.md`](../assets/archived/complete/NEWS.md) | RSS / feedparser (free) | ✅ Done |
-| 6 | Research Papers | [`PAPERS.md`](../assets/archived/complete/PAPERS.md) | arXiv + Semantic Scholar (httpx/feedparser, no key) | 🔲 Planned |
-| 7 | Stocks & Crypto | [`STOCKS.md`](../assets/archived/complete/STOCKS.md) | yfinance (unofficial) | ✅ Done |
-| 8 | Wake Word & Interrupt | [`feature-wake-word-1.md`](../plan/feature-wake-word-1.md) | None | 🔲 Planned |
-| 9 | In-UI Browser Panel | [`WEBCALL.md`](../assets/archived/complete/WEBCALL.md) | None | ✅ Done |
-| 10 | Ideas Vault | [`IDEAS_TRACKER.md`](../assets/archived/complete/IDEAS_TRACKER.md) | Local JSON file | ✅ Done |
-| 11 | Voice Journal | [`JOURNAL.md`](../assets/archived/complete/JOURNAL.md) | Local JSON files | ✅ Done |
-| 12 | Wikipedia RAG | [`WIKIPEDIA.md`](../assets/archived/complete/WIKIPEDIA.md) | ChromaDB + fastembed | ✅ Done |
-| 13 | Reddit Social Feed | [`feature-reddit-social-1.md`](../assets/archived/feature-reddit-social-1.md) | Reddit JSON API (no auth) | ✅ Done |
-| 14 | YouTube Feed | [`feature-youtube-feed-1.md`](../assets/archived/feature-youtube-feed-1.md) | YouTube Atom RSS (no key) | ✅ Done |
-| 15 | Toolkit Menu | [`feature-toolkit-menu-1.md`](../plan/feature-toolkit-menu-1.md) | None (frontend only) | ✅ Done |
-| 16 | iCloud Calendar | [`CALENDAR.md`](../assets/archived/complete/CALENDAR.md) | CalDAV (stdlib only, Apple ID) | ✅ Done |
-| 17 | Apple Mail Inbox | [`feature-apple-mail-inbox-1.md`](../assets/archived/feature-apple-mail-inbox-1.md) | IMAP (stdlib only, Apple ID) | ✅ Done |
+| 1 | Time & Date | `TIME.md` | None | ✅ Done |
+| 2 | Timers | `TIMER.md` | None | ✅ Done |
+| 3 | Weather | `WEATHER.md` | Open-Meteo (free, no key) | ✅ Done |
+| 4 | Drive Time / Commute | `DIRECTIONS.md` | OpenRouteService (httpx, self-hostable / free key) | ✅ Done |
+| 5 | News Briefing | `NEWS.md` | RSS / feedparser (free) | ✅ Done |
+| 6 | Research Papers | `PAPERS.md` | arXiv + Semantic Scholar (httpx/feedparser, no key) | ✅ Done |
+| 7 | Stocks & Crypto | `STOCKS.md` | yfinance (unofficial) | ✅ Done |
+| 8 | Wake Word & Interrupt | `feature-wake-word-1.md` | None | 🔲 Planned |
+| 9 | In-UI Browser Panel | `WEBCALL.md` | None | ✅ Done |
+| 10 | Ideas Vault | `IDEAS_TRACKER.md` | Local JSON file | ✅ Done |
+| 11 | Voice Journal | `JOURNAL.md` | Local JSON files | ✅ Done |
+| 12 | Wikipedia RAG | `WIKIPEDIA.md` | ChromaDB + fastembed | ✅ Done |
+| 13 | Reddit Social Feed | `feature-reddit-social-1.md` | Reddit JSON API (no auth) | ✅ Done |
+| 14 | YouTube Feed | `feature-youtube-feed-1.md` | YouTube Atom RSS (no key) | ✅ Done |
+| 15 | Toolkit Menu | `feature-toolkit-menu-1.md` | None (frontend only) | ✅ Done |
+| 16 | iCloud Calendar | `CALENDAR.md` | CalDAV (stdlib only, Apple ID) | ✅ Done |
+| 17 | Apple Mail Inbox | `feature-apple-mail-inbox-1.md` | IMAP (stdlib only, Apple ID) | ✅ Done |
+| 18 | System Status | `feature-system-awareness-1.md` | Local runtime introspection (`/system/status`) | ✅ Done |
+| 19 | Soul Panel / Soul File | `feature-starling-soul-personality-1.md` | Local soul store (`backend/memory/soul/`) | ✅ Done |
 
 Tools dispatch in priority order — the first matching tool wins; unmatched input falls
 through to the LLM. See [`TRIGGER_PHRASES.md`](./TRIGGER_PHRASES.md) for the full ordering
@@ -41,37 +43,43 @@ reference.
 | Priority | Tool | Notes |
 |----------|------|-------|
 | 1 | Toolkit confirm intercept | Active only while a toolkit confirm is pending; must be first |
-| 2 | Browser — close | Only when browser panel is open |
-| 3 | Wikipedia RAG — exit | Only when wiki panel is active |
-| 4 | Journal — in-mode routing | Only when journal dictation / interview is active |
-| 5 | Ideas — in-mode routing | Only when ideas capture mode is active |
-| 6 | Weather — close | Only when weather panel is open |
-| 7 | YouTube — close | |
-| 8 | Reddit — close | |
-| 9 | Mail inbox — close | Only when mail panel is open |
-| 10 | Dossier — exit | |
-| 11 | Toolkit Menu — open | Checked before dossier open to avoid conflicts |
-| 12 | Dossier — open | |
-| 13 | Wikipedia RAG — open | Requires **"local"** or **"offline"** keyword |
-| 14 | Journal — start | |
-| 15 | Journal — read / search | |
-| 16 | Timer | Checked before Time to avoid "timer" matching time patterns |
-| 17 | Date | Checked before Time — date phrases are more specific |
-| 18 | Time | |
-| 19 | Ideas Vault — capture | Both "idea/ideas" **and** "vault" must appear |
-| 20 | Ideas Vault — read / manage | Both "idea/ideas" **and** "vault" must appear |
-| 21 | Weather | |
-| 22 | Directions | Specific navigation/commute vocabulary; checked near Weather before generic feeds |
-| 23 | Calendar | iCloud CalDAV; checked before Mail |
-| 24 | Mail inbox | IMAP fetch from Apple Mail |
-| 25 | Market / Stocks / Crypto | Checked before News — more specific domain vocabulary |
-| 26 | YouTube feed | Requires **"youtube feed"** — checked before Reddit and News |
-| 27 | Reddit social feed | Requires **"reddit social"** — checked before News |
-| 28 | Research Papers | Checked before News due to more specific scholarly vocabulary |
-| 29 | News | |
-| 30 | Browser — open | Requires **"browser"** keyword; Wikipedia also requires **"browser"** |
-| 31 | Prompt Registry editor | Opens the prompt editor sub-view inside the menu panel |
-| 32 | LLM fallback | Anything unmatched |
+| 2 | Fuzzy confirm intercept | Active only while fuzzy "did you mean" confirmation is pending |
+| 3 | Browser — close | Only when browser panel is open |
+| 4 | Wikipedia RAG — exit/in-mode | While wiki panel is active, all input routes to wiki chat except exit phrases |
+| 5 | Journal — in-mode routing | Only when journal dictation / interview is active |
+| 6 | Ideas — in-mode routing | Only when ideas capture mode is active |
+| 7 | Research Papers — close | Only when papers panel is open |
+| 8 | News — close | Only when news panel is open |
+| 9 | Weather — close | Only when weather panel is open |
+| 10 | Directions — close | Only when directions panel is open |
+| 11 | YouTube — close | |
+| 12 | Reddit — close | |
+| 13 | Mail inbox — close | Only when mail panel is open |
+| 14 | Dossier — exit | |
+| 15 | Soul Panel — open | Voice trigger for viewing/editing `SOUL.md` |
+| 16 | Prompt Registry editor — open | Opens the prompt editor sub-view inside the menu panel |
+| 17 | Toolkit Menu — open | Checked before dossier open to avoid conflicts |
+| 18 | Dossier — open | |
+| 19 | Wikipedia RAG — open | Requires **"local"** or **"offline"** keyword |
+| 20 | Journal — start | |
+| 21 | Journal — read / search | |
+| 22 | Timer | Checked before Time to avoid "timer" matching time patterns |
+| 23 | Date | Checked before Time — date phrases are more specific |
+| 24 | Time | |
+| 25 | System Status | Voice summary of runtime health/telemetry |
+| 26 | Ideas Vault — capture | Both "idea/ideas" **and** "vault" must appear |
+| 27 | Ideas Vault — read / manage | Both "idea/ideas" **and** "vault" must appear |
+| 28 | Weather | |
+| 29 | Directions | Specific navigation/commute vocabulary |
+| 30 | Calendar | iCloud CalDAV; checked before Mail |
+| 31 | Mail inbox | IMAP fetch from Apple Mail |
+| 32 | Market / Stocks / Crypto | Checked before News — more specific domain vocabulary |
+| 33 | YouTube feed | Requires **"youtube feed"** — checked before Reddit and News |
+| 34 | Reddit social feed | Requires **"reddit social"** — checked before News |
+| 35 | Research Papers | Checked before News due to scholarly vocabulary |
+| 36 | News | |
+| 37 | Browser — open | Requires **"browser"** keyword; Wikipedia also requires **"browser"** |
+| 38 | LLM fallback | Anything unmatched |
 
 ---
 
@@ -89,7 +97,7 @@ and an automatic LLM-spoken briefing. Subject data is loaded from
 
 ![S.T.A.R.L.I.N.G. Presentation Mode](../assets/images/presentation_mode_example.png)
 
-Implementation guide: [`RAG_IMPLEMENTATION.md`](../assets/archived/complete/RAG_IMPLEMENTATION.md)
+Implementation guide: `RAG_IMPLEMENTATION.md`
 
 ---
 
@@ -106,7 +114,7 @@ no LLM involved.
 
 ![S.T.A.R.L.I.N.G. Clock Panel](../assets/images/clock_example.png)
 
-Implementation guide: [`TIME.md`](../assets/archived/complete/TIME.md)
+Implementation guide: `TIME.md`
 
 ---
 
@@ -130,7 +138,7 @@ chime on completion.
 
 ![S.T.A.R.L.I.N.G. Timer Panel — complete](../assets/images/timer_example2.png)
 
-Implementation guide: [`TIMER.md`](../assets/archived/complete/TIMER.md)
+Implementation guide: `TIMER.md`
 
 ---
 
@@ -151,7 +159,45 @@ snapshots per location. The LLM delivers a spoken conditions summary.
 
 Configuration (`.env`): `WEATHER_LOCATION`, `WEATHER_UNITS`, `WEATHER_CACHE_FILE`, `WEATHER_DEFAULT_LABEL`
 
-Implementation guide: [`WEATHER.md`](../assets/archived/complete/WEATHER.md)
+Implementation guide: `WEATHER.md`
+
+---
+
+## Drive Time / Commute
+
+Opens the directions panel and fetches route duration + distance using OpenRouteService,
+with optional fallback support for OSRM. Supports driving (default), walking, and biking
+profiles based on spoken intent. The map view shows origin/destination, route geometry,
+and estimated slowdown zones derived from segment-speed heuristics.
+
+**Open triggers:**
+`"how long to drive to Logan Airport"` · `"what's my commute to the office"` · `"directions to South Station"` · `"walking time to the park"` · `"bike time to Cambridge"`
+
+**Close triggers:**
+`"close directions"` · `"close commute"` · `"close drive time"`
+
+Configuration (`.env`): `DIRECTIONS_HOME`, `DIRECTIONS_HTTP_TIMEOUT_S`, `DIRECTIONS_CACHE_SECONDS`, `DIRECTIONS_DEFAULT_PROFILE`, `DIRECTIONS_OSRM_FALLBACK`
+
+Implementation guide: `DIRECTIONS.md`
+
+---
+
+## Research Papers
+
+Opens the research papers panel and delivers a spoken briefing grounded in recent
+results from arXiv + Semantic Scholar (no API key). The tool extracts a spoken topic,
+applies a recency window (`today`, `week`, `month`, `year`, or `any`), merges and
+de-duplicates results, and provides a concise spoken summary.
+
+**Open triggers:**
+`"any new papers on graph neural networks this week"` · `"find recent research about retrieval augmented generation"` · `"what's new in reinforcement learning research"` · `"show me arxiv papers on diffusion models"`
+
+**Close triggers:**
+`"close papers"` · `"close research papers"`
+
+Configuration (`.env`): `PAPERS_DEFAULT_SINCE`, `PAPERS_CACHE_SECONDS`, `PAPERS_HTTP_TIMEOUT_S`, `PAPERS_LLM_LIMIT`, `PAPERS_MAX_RESULTS`, `PAPERS_SUMMARY_CHARS`
+
+Implementation guide: `PAPERS.md`
 
 ---
 
@@ -186,7 +232,7 @@ a category keyword anywhere in the phrase.
 
 Configuration (`.env`): `NEWS_FEEDS`, `NEWS_MAX_ITEMS`, `NEWS_CACHE_SECONDS`
 
-Implementation guide: [`NEWS.md`](../assets/archived/complete/NEWS.md)
+Implementation guide: `NEWS.md`
 
 ---
 
@@ -207,7 +253,7 @@ require **both** `idea`/`ideas` **and** `vault` to appear in the phrase.
 **Discard / clear triggers:**  
 `"discard the last idea from the vault"` · `"clear the ideas vault"` · `"delete all ideas from the vault"`
 
-Implementation guide: [`IDEAS_TRACKER.md`](../assets/archived/complete/IDEAS_TRACKER.md)
+Implementation guide: `IDEAS_TRACKER.md`
 
 ---
 
@@ -231,7 +277,7 @@ manual refresh. The LLM delivers a spoken briefing highlighting notable movers.
 
 Configuration (`.env`): `STOCKS_WATCHLIST`, `CRYPTO_WATCHLIST`, `STOCKS_CACHE_SECONDS`, `STOCKS_CURRENCY_SYMBOL`
 
-Implementation guide: [`STOCKS.md`](../assets/archived/complete/STOCKS.md)
+Implementation guide: `STOCKS.md`
 
 ---
 
@@ -256,7 +302,7 @@ arbitrary URLs, and DuckDuckGo searches.
 
 ![S.T.A.R.L.I.N.G. Browser Panel](../assets/images/web_example.png)
 
-Implementation guide: [`WEBCALL.md`](../assets/archived/complete/WEBCALL.md)
+Implementation guide: `WEBCALL.md`
 
 ---
 
@@ -272,7 +318,7 @@ interviewer mode and read-back / keyword search of saved entries.
 
 **Search triggers:** `search journal for [topic]` · `what did I write about [topic]`
 
-Implementation guide: [`JOURNAL.md`](../assets/archived/complete/JOURNAL.md)
+Implementation guide: `JOURNAL.md`
 
 ---
 
@@ -288,7 +334,7 @@ the phrase** to avoid conflict with the browser-panel Wikipedia lookup (which re
 **Exit triggers:** `exit wikipedia` · `close wiki` · `back to chat` · `go back` · `never mind`
 
 Configuration: run `python scripts/ingest_wikipedia.py` once to build the index.  
-Implementation guide: [`WIKIPEDIA.md`](../assets/archived/complete/WIKIPEDIA.md)
+Implementation guide: `WIKIPEDIA.md`
 
 ---
 
@@ -304,7 +350,7 @@ Yes / No confirmation available by voice or click. Confirm state auto-cancels af
 
 ![S.T.A.R.L.I.N.G. Toolkit Menu](../assets/images/toolkit_example.png)
 
-Implementation guide: [`plan/feature-toolkit-menu-1.md`](../plan/feature-toolkit-menu-1.md)
+Implementation guide: `feature-toolkit-menu-1.md`
 
 ---
 
@@ -323,7 +369,7 @@ ready. A settings panel lets you add or remove subreddits at runtime.
 
 Configuration (`.env`): `REDDIT_SUBREDDITS`, `REDDIT_LIMIT_PER_SUB`, `REDDIT_CACHE_SECONDS`, `REDDIT_SORT`
 
-Implementation guide: [`assets/archived/feature-reddit-social-1.md`](../assets/archived/feature-reddit-social-1.md)
+Implementation guide: Internal Reddit Social guide
 
 ---
 
@@ -343,7 +389,7 @@ A settings panel lets you add or remove channels at runtime.
 
 Configuration (`.env`): `YOUTUBE_CHANNELS`, `YOUTUBE_CACHE_SECONDS`, `YOUTUBE_SYNTHESIS_ENABLED`
 
-Implementation guide: [`assets/archived/feature-youtube-feed-1.md`](../assets/archived/feature-youtube-feed-1.md)
+Implementation guide: Internal YouTube Feed guide
 
 ---
 
@@ -362,7 +408,7 @@ Calendar data is disk-cached with a 1-hour TTL.
 
 Configuration (`.env`): `CALDAV_URL`, `CALDAV_USERNAME`, `CALDAV_PASSWORD`, `CALENDAR_CACHE_SECONDS`
 
-Implementation guide: [`CALENDAR.md`](../assets/archived/complete/CALENDAR.md)
+Implementation guide: `CALENDAR.md`
 
 ---
 
@@ -382,7 +428,33 @@ Results are in-memory cached with a 5-minute TTL.
 
 Configuration (`.env`): `IMAP_HOST`, `IMAP_PORT`, `IMAP_USERNAME`, `IMAP_PASSWORD`, `MAIL_MAX_UNREAD`, `MAIL_CACHE_SECONDS`
 
-Implementation guide: [`feature-apple-mail-inbox-1.md`](../assets/archived/feature-apple-mail-inbox-1.md)
+Implementation guide: `feature-apple-mail-inbox-1.md`
+
+---
+
+## System Status (System Awareness)
+
+Speaks a short runtime-health summary backed by `GET /system/status` and can also open
+the full SYSTEM STATUS panel from the menu. Reports active backends, tool inventory,
+boot duration, and live GPU/runtime telemetry.
+
+**Voice triggers:**
+`"system status"` · `"what's your status"` · `"how are you running"` · `"are you healthy"` · `"self diagnostic"`
+
+Implementation guide: `feature-system-awareness-1.md`
+
+---
+
+## Starling Soul
+
+The soul system maintains a persistent `SOUL.md` that is injected into LLM system prompts
+and can be reviewed/edited in the Soul Panel. During shutdown dream-state processing,
+Starling can evolve the soul file and archive previous versions.
+
+**Open triggers:**
+`"open soul"` · `"show soul"` · `"view soul file"` · `"edit soul"`
+
+Implementation guide: `feature-starling-soul-personality-1.md`
 
 ---
 
@@ -390,4 +462,6 @@ Implementation guide: [`feature-apple-mail-inbox-1.md`](../assets/archived/featu
 
 | Tool | Guide | Notes |
 |------|-------|-------|
-| Wake Word & Interrupt | [`feature-wake-word-1.md`](../plan/feature-wake-word-1.md) | Passive listener; say "Hey Starling" to activate without pressing mic |
+| Wake Word & Interrupt | `feature-wake-word-1.md` | Passive listener; say "Hey Starling" to activate without pressing mic |
+
+
