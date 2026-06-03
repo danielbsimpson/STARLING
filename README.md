@@ -64,7 +64,7 @@ Speech is transcribed with faster-whisper, reasoned over by a local LLM via llam
 ## Quickstart
 
 ```bash
-git clone https://github.com/danielbsimpson/llm-speech-UI.git
+git clone https://github.com/danielbsimpson/STARLING.git
 cd llm-speech-UI
 
 # 1. Create and activate a virtual environment
