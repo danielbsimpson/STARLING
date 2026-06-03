@@ -146,19 +146,20 @@ Each tool is a self-contained dispatch intercept — none modify the core chat p
 | 1 | Time & Date | None | ✅ |
 | 2 | Timers | None | ✅ |
 | 3 | Weather | Open-Meteo (free, no key) | ✅ |
-| 4 | Drive Time / Commute | OpenRouteService (hosted or self-hosted) | 🔲 Planned |
+| 4 | Drive Time / Commute | OpenRouteService (hosted or self-hosted) | ✅ |
 | 5 | News Briefing | RSS / feedparser | ✅ |
-| 6 | Stocks & Crypto | yfinance | ✅ |
-| 7 | In-UI Browser Panel | None | ✅ |
-| 8 | Ideas Vault | Local JSON | ✅ |
-| 9 | Voice Journal | Local JSON | ✅ |
-| 10 | Wikipedia RAG | ChromaDB + fastembed | ✅ |
-| 11 | Reddit Social Feed | Reddit JSON API | ✅ |
-| 12 | YouTube Feed | YouTube Atom RSS | ✅ |
-| 13 | Toolkit Menu | None (frontend) | ✅ |
-| 14 | iCloud Calendar | CalDAV (Apple ID) | ✅ |
-| 15 | Apple Mail Inbox | IMAP (Apple ID) | ✅ |
-| 16 | System Awareness | Local introspection | ✅ |
+| 6 | Research Papers | arXiv + Semantic Scholar (free, no key) | ✅ |
+| 7 | Stocks & Crypto | yfinance | ✅ |
+| 8 | In-UI Browser Panel | None | ✅ |
+| 9 | Ideas Vault | Local JSON | ✅ |
+| 10 | Voice Journal | Local JSON | ✅ |
+| 11 | Wikipedia RAG | ChromaDB + fastembed | ✅ |
+| 12 | Reddit Social Feed | Reddit JSON API | ✅ |
+| 13 | YouTube Feed | YouTube Atom RSS | ✅ |
+| 14 | Toolkit Menu | None (frontend) | ✅ |
+| 15 | iCloud Calendar | CalDAV (Apple ID) | ✅ |
+| 16 | Apple Mail Inbox | IMAP (Apple ID) | ✅ |
+| 17 | System Awareness | Local introspection | ✅ |
 | — | Wake Word & Interrupt | None | 🔲 Planned |
 
 See [`toolkit/README.md`](./toolkit/README.md) for screenshots and the full [trigger phrase reference](./toolkit/TRIGGER_PHRASES.md).
@@ -175,6 +176,22 @@ Planning and implementation references:
 
 - [`plan/feature-commute-directions-1.md`](./plan/feature-commute-directions-1.md)
 - [`assets/archived/complete/DIRECTIONS.md`](./assets/archived/complete/DIRECTIONS.md)
+
+### Research Papers
+
+Starling can answer paper-discovery requests like "any new papers on diffusion models this week" by querying free public arXiv and Semantic Scholar endpoints with no API key. The tool supports recency windows (`today`, `week`, `month`, `year`, `any`), merges and de-duplicates cross-source results, and speaks a concise briefing grounded in returned paper metadata.
+
+Example phrases:
+
+- `any new papers on graph neural networks this week`
+- `find recent research about retrieval augmented generation`
+- `what's new in reinforcement learning research`
+- `show me arxiv papers on diffusion models`
+
+Planning and implementation references:
+
+- [`plan/feature-research-papers-1.md`](./plan/feature-research-papers-1.md)
+- [`assets/archived/complete/PAPERS.md`](./assets/archived/complete/PAPERS.md)
 
 ## STARLING Soul
 

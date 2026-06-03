@@ -189,7 +189,7 @@ function _isKnownBlocked(url) {
 
 function _showPanel() {
   // Clear any active content-mode so the browser panel has full layout space
-  starlingEl.classList.remove('yt-mode', 'news-mode', 'reddit-mode', 'mkt-mode', 'weather-mode', 'pres-mode');
+  starlingEl.classList.remove('yt-mode', 'news-mode', 'papers-mode', 'reddit-mode', 'mkt-mode', 'weather-mode', 'pres-mode');
   starlingEl.classList.add('browser-mode');
 }
 

@@ -42,6 +42,11 @@ const FUZZY_TOOL_MAP = [
     minMatches: 1,
   },
   {
+    toolName: 'Papers',
+    fuzzyKeywords: ['paper', 'papers', 'research', 'arxiv', 'study', 'studies', 'preprint', 'publication'],
+    minMatches: 1,
+  },
+  {
     toolName: 'Stocks & Market',
     fuzzyKeywords: ['stocks', 'market', 'crypto', 'bitcoin', 'shares', 'equity', 'portfolio'],
     minMatches: 1,

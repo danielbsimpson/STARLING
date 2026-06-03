@@ -36,10 +36,11 @@ The first matching tool wins; unmatched input falls through to the LLM.
 | 25 | Market / Stocks / Crypto | Checked before News — more specific domain vocabulary |
 | 26 | YouTube feed | Requires **"youtube feed"** — checked before Reddit and News |
 | 27 | Reddit social feed | Requires **"reddit social"** — checked before News |
-| 28 | News | |
-| 29 | Browser — open | Requires **"browser"** keyword; Wikipedia lookup also requires **"browser"** |
-| 30 | Prompt Registry editor | Opens the prompt editor sub-view inside the menu panel |
-| 31 | LLM fallback | Anything unmatched |
+| 28 | Research Papers | Checked before News due to more specific scholarly vocabulary |
+| 29 | News | |
+| 30 | Browser — open | Requires **"browser"** keyword; Wikipedia lookup also requires **"browser"** |
+| 31 | Prompt Registry editor | Opens the prompt editor sub-view inside the menu panel |
+| 32 | LLM fallback | Anything unmatched |
 
 ---
 
@@ -553,7 +554,33 @@ The category keyword maps to the feed as shown below.
 
 ---
 
-## 14 · Browser / Web Panel
+## 14 · Research Papers
+
+Opens the research papers panel and delivers a spoken briefing of recent papers for a topic.
+Topic extraction is conservative: if a topic is not clearly present, the tool does not trigger.
+
+### Example triggers
+
+| Example phrase | Parsed result |
+|----------------|---------------|
+| `any new papers on graph neural networks this week` | topic: graph neural networks, since: week |
+| `find recent research about retrieval augmented generation` | topic: retrieval augmented generation, since: week |
+| `what's new in reinforcement learning research` | topic: reinforcement learning, since: week |
+| `show me arxiv papers on diffusion models this month` | topic: diffusion models, since: month |
+
+### Recency phrase mapping
+
+| Spoken phrase | `since` token |
+|---------------|---------------|
+| `today` | `today` |
+| `this week` | `week` |
+| `this month` | `month` |
+| `this year` | `year` |
+| omitted | `week` |
+
+---
+
+## 15 · Browser / Web Panel
 
 Opens an embedded browser panel (iframe) in the UI. The close phrase is checked at the
 highest priority whenever the panel is open. The open trigger fires last — after all other

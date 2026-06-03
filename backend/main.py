@@ -82,6 +82,7 @@ else:
 from weather import router as weather_router
 from directions import router as directions_router
 from news import router as news_router
+from papers import router as papers_router
 from stocks import router as stocks_router
 from browser import router as browser_router
 from ideas_routes import router as ideas_router
@@ -123,6 +124,7 @@ app.include_router(tts_router)
 app.include_router(weather_router)
 app.include_router(directions_router)
 app.include_router(news_router)
+app.include_router(papers_router)
 app.include_router(stocks_router)
 app.include_router(browser_router, prefix='/api')
 app.include_router(ideas_router)

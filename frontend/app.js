@@ -4,6 +4,7 @@ import { detectTimerTrigger, handleTimerTrigger, initTimerPanel, dismissTimerPan
 import { detectWeatherTrigger, openWeatherPanel, closeWeatherPanel, initWeatherPanel, isWeatherPanelOpen, getWeatherContext } from './weather-panel.js';
 import { detectDirectionsTrigger, openDirectionsPanel, closeDirectionsPanel, initDirectionsPanel, isDirectionsPanelOpen, getDirectionsContext } from './directions-panel.js';
 import { detectNewsTrigger, openNewsPanel, closeNewsPanel, initNewsPanel, isNewsPanelOpen, getActiveArticleContext } from './news-panel.js';
+import { detectPapersTrigger, openPapersPanel, closePapersPanel, initPapersPanel, isPapersPanelOpen, getPapersContext, getLastPapersQuery } from './papers-panel.js';
 import { detectRedditTrigger, openRedditPanel, closeRedditPanel, initRedditPanel, openRedditSettings } from './reddit-panel.js';
 import { detectYouTubeTrigger, openYouTubePanel, closeYouTubePanel, initYouTubePanel, openYouTubeSettings } from './youtube-panel.js';
 import { detectMarketTrigger, openMarketPanel, closeMarketPanel, openStockSettings, setSendToOllama as _setMktSendToOllama, setOnClose as _setMktOnClose } from './stocks-panel.js';
@@ -305,6 +306,15 @@ function exitNewsMode() {
   closeNewsPanel();
 }
 
+function enterPapersMode() {
+  starlingEl.classList.add('papers-mode');
+}
+
+function exitPapersMode() {
+  starlingEl.classList.remove('papers-mode');
+  closePapersPanel();
+}
+
 function enterMarketMode() {
   starlingEl.classList.add('mkt-mode');
   _injectPortfolioAnalystContext();
@@ -414,6 +424,9 @@ const TOOLKIT_MANIFEST_BLOCK =
 
   'News: delivers a spoken briefing from live RSS feeds across categories: tech, business, US, science, health, sports, entertainment, and world. ' +
   'Say "news briefing", "what\'s in the news", "tech news", "morning briefing", or "top headlines". ' +
+
+  'Research Papers: finds recent academic papers on a spoken topic using arXiv and Semantic Scholar, then delivers a spoken briefing. ' +
+  'Say "any new papers on [topic] this week", "find recent research about [topic]", or "show me arxiv papers on [topic]". ' +
 
   'Stocks and Market: shows a live market dashboard with equity and cryptocurrency prices, charts, and a spoken overview. ' +
   'Say "show me the market", "crypto prices", "bitcoin price", "show stocks", or "how are the markets". ' +
@@ -795,6 +808,16 @@ const TOOLKIT_REGISTRY = [
     openFn: () => { openNewsPanel(); enterNewsMode(); },
   },
   {
+    id: 'papers',
+    name: 'Research Papers',
+    description: 'Finds recent academic papers for a spoken topic using arXiv and Semantic Scholar and delivers a spoken briefing.',
+    ttsScript: 'The Research Papers tool finds recent academic papers on a topic and summarises the key results. Say: any new papers on diffusion models this week.',
+    phrases: ['any new papers on diffusion models this week', 'find recent research about retrieval augmented generation', 'show me arxiv papers on reinforcement learning'],
+    openFn: async () => {
+      enqueueSpeak('Which topic should I search? For example: recent papers on graph neural networks this week.');
+    },
+  },
+  {
     id: 'stocks',
     name: 'Stocks & Market',
     description: 'Displays a live market dashboard with equity and cryptocurrency prices, charts, and a spoken briefing.',
@@ -989,6 +1012,7 @@ const PANEL_STACK_CONFIG = [
   { key: 'weather-mode',    panelId: 'weather-panel' },
   { key: 'directions-mode', panelId: 'directions-panel' },
   { key: 'news-mode',       panelId: 'news-panel' },
+  { key: 'papers-mode',     panelId: 'papers-panel' },
   { key: 'mkt-mode',        panelId: 'mkt-panel' },
   { key: 'reddit-mode',     panelId: 'reddit-panel' },
   { key: 'yt-mode',         panelId: 'yt-panel' },
@@ -1587,6 +1611,7 @@ function dismissAllToolPanels() {
   closeWeatherPanel();
   closeDirectionsPanel();
   exitNewsMode();
+  exitPapersMode();
   exitMailMode();
   exitRedditMode();
   exitYouTubeMode();
@@ -3722,6 +3747,38 @@ async function _retriggerTool(toolName, originalTranscript) {
       return;
     }
 
+    case 'Papers': {
+      const lastQuery = getLastPapersQuery();
+      if (!lastQuery || !lastQuery.topic) {
+        enqueueSpeak('Which topic should I search for? Say, for example, recent papers on diffusion models this week.');
+        setState('idle');
+        return;
+      }
+
+      closeBrowserPanel();
+      setState('thinking');
+      const papersContext = await openPapersPanel(lastQuery);
+      if (papersContext) {
+        enterPapersMode();
+        await sendToOllama(
+          'Deliver a concise spoken research briefing based only on the papers in your context. ' +
+          'Summarise the three or four most relevant papers in one sentence each. ' +
+          'Mention first author and source naturally, mention recency, and never invent papers. ' +
+          'Keep the briefing under about forty-five seconds when spoken aloud.',
+          {
+            ephemeralMessages: [
+              { role: 'system', content: SYSTEM_PROMPT },
+              { role: 'system', content: `${_currentTimeContext()}\n${papersContext}` },
+            ],
+          }
+        );
+      } else {
+        await sendToOllama(`Tell the user no recent papers were found for ${lastQuery.topic}. One sentence.`);
+      }
+      fetchSystemStatus();
+      return;
+    }
+
     case 'Stocks & Market': {
       closeBrowserPanel();
       setState('thinking');
@@ -3980,10 +4037,22 @@ async function _routeInput(text) {  // ── Toolkit confirm intercept (positio
 
   // Keep news / weather panel open when the user wants to discuss;
   // dismiss all other overlapping tool panels.
-  if (isNewsPanelOpen() || isWeatherPanelOpen() || isDirectionsPanelOpen()) {
+  if (isNewsPanelOpen() || isPapersPanelOpen() || isWeatherPanelOpen() || isDirectionsPanelOpen()) {
     dismissNonNewsPanels();
   } else {
     dismissAllToolPanels();
+  }
+
+  // ── Papers: explicit close phrase while panel is open ─────────────────────
+  if (isPapersPanelOpen() && /\bclose\s+(?:the\s+)?(?:papers?|research\s+papers?)\b/i.test(text)) {
+    exitPapersMode();
+    appendMessage('user', text);
+    const ack = 'Research papers panel closed.';
+    const { txt: papersTxt } = appendMessage('assistant', ack);
+    enqueueSpeak(ack, () => { papersTxt.textContent = ack; });
+    setState('idle');
+    fetchSystemStatus();
+    return;
   }
 
   // ── News: explicit close phrase while panel is open ────────────────────────
@@ -4455,6 +4524,35 @@ async function _routeInput(text) {  // ── Toolkit confirm intercept (positio
     return;
   }
 
+  // ── Research papers trigger (checked before News) ─────────────────────────
+  const papersMatch = detectPapersTrigger(text);
+  if (papersMatch) {
+    logEvent('tool_dispatch', { tool: 'papers', trigger_phrase: text });
+    closeBrowserPanel();
+    setState('thinking');
+    appendMessage('user', text);
+    const papersContext = await openPapersPanel(papersMatch);
+    if (papersContext) {
+      enterPapersMode();
+      await sendToOllama(
+        'Deliver a concise spoken research briefing based only on the papers in your context. ' +
+        'Summarise the three or four most relevant papers in one sentence each. ' +
+        'Mention the first author and source naturally, mention recency, and never invent papers. ' +
+        'Keep the full briefing under about forty-five seconds when spoken aloud.',
+        {
+          ephemeralMessages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'system', content: `${_currentTimeContext()}\n${papersContext}` },
+          ],
+        }
+      );
+    } else {
+      await sendToOllama(`Tell the user no recent papers were found on ${papersMatch.topic}. One sentence.`);
+    }
+    fetchSystemStatus();
+    return;
+  }
+
   const newsCategory = detectNewsTrigger(text);
   if (newsCategory) {
     logEvent('tool_dispatch', { tool: 'news', trigger_phrase: text });
@@ -4598,9 +4696,10 @@ async function _routeInput(text) {  // ── Toolkit confirm intercept (positio
 
   // Inject currently-selected news article or open weather data as context
   const _newsArticleCtx  = isNewsPanelOpen()    ? getActiveArticleContext() : null;
+  const _papersCtx       = isPapersPanelOpen()  ? getPapersContext()        : null;
   const _weatherCtx      = isWeatherPanelOpen() ? getWeatherContext()       : null;
   const _directionsCtx   = isDirectionsPanelOpen() ? getDirectionsContext() : null;
-  const _combinedCtx = [_extraContext, _newsArticleCtx, _weatherCtx, _directionsCtx].filter(Boolean).join('\n\n') || null;
+  const _combinedCtx = [_extraContext, _newsArticleCtx, _papersCtx, _weatherCtx, _directionsCtx].filter(Boolean).join('\n\n') || null;
 
   await sendToOllama(text, _combinedCtx ? { extraContext: _combinedCtx } : {});
   fetchSystemStatus();
@@ -4865,6 +4964,7 @@ initDirectionsPanel({ enqueueSpeak, sendToOllama, interruptSpeech });
 initRedditPanel({ enqueueSpeak, sendToOllama, interruptSpeech });
 initYouTubePanel({ enqueueSpeak, sendToOllama, interruptSpeech });
 initNewsPanel({ enqueueSpeak, sendToOllama, interruptSpeech, onClose: exitNewsMode });
+initPapersPanel({ enqueueSpeak, sendToOllama, interruptSpeech });
 initToolkitPanel(TOOLKIT_REGISTRY);
 initSystemPanel();
 initLogDashboard();

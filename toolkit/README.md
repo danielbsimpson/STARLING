@@ -17,17 +17,18 @@ See [`TRIGGER_PHRASES.md`](./TRIGGER_PHRASES.md) for the full voice command refe
 | 3 | Weather | [`WEATHER.md`](../assets/archived/complete/WEATHER.md) | Open-Meteo (free, no key) | ✅ Done |
 | 4 | Drive Time / Commute | [`DIRECTIONS.md`](../assets/archived/complete/DIRECTIONS.md) | OpenRouteService (httpx, self-hostable / free key) | 🔲 Planned |
 | 5 | News Briefing | [`NEWS.md`](../assets/archived/complete/NEWS.md) | RSS / feedparser (free) | ✅ Done |
-| 6 | Stocks & Crypto | [`STOCKS.md`](../assets/archived/complete/STOCKS.md) | yfinance (unofficial) | ✅ Done |
-| 7 | Wake Word & Interrupt | [`feature-wake-word-1.md`](../plan/feature-wake-word-1.md) | None | 🔲 Planned |
-| 8 | In-UI Browser Panel | [`WEBCALL.md`](../assets/archived/complete/WEBCALL.md) | None | ✅ Done |
-| 9 | Ideas Vault | [`IDEAS_TRACKER.md`](../assets/archived/complete/IDEAS_TRACKER.md) | Local JSON file | ✅ Done |
-| 10 | Voice Journal | [`JOURNAL.md`](../assets/archived/complete/JOURNAL.md) | Local JSON files | ✅ Done |
-| 11 | Wikipedia RAG | [`WIKIPEDIA.md`](../assets/archived/complete/WIKIPEDIA.md) | ChromaDB + fastembed | ✅ Done |
-| 12 | Reddit Social Feed | [`feature-reddit-social-1.md`](../assets/archived/feature-reddit-social-1.md) | Reddit JSON API (no auth) | ✅ Done |
-| 13 | YouTube Feed | [`feature-youtube-feed-1.md`](../assets/archived/feature-youtube-feed-1.md) | YouTube Atom RSS (no key) | ✅ Done |
-| 14 | Toolkit Menu | [`feature-toolkit-menu-1.md`](../plan/feature-toolkit-menu-1.md) | None (frontend only) | ✅ Done |
-| 15 | iCloud Calendar | [`CALENDAR.md`](../assets/archived/complete/CALENDAR.md) | CalDAV (stdlib only, Apple ID) | ✅ Done |
-| 16 | Apple Mail Inbox | [`feature-apple-mail-inbox-1.md`](../assets/archived/feature-apple-mail-inbox-1.md) | IMAP (stdlib only, Apple ID) | ✅ Done |
+| 6 | Research Papers | [`PAPERS.md`](../assets/archived/complete/PAPERS.md) | arXiv + Semantic Scholar (httpx/feedparser, no key) | 🔲 Planned |
+| 7 | Stocks & Crypto | [`STOCKS.md`](../assets/archived/complete/STOCKS.md) | yfinance (unofficial) | ✅ Done |
+| 8 | Wake Word & Interrupt | [`feature-wake-word-1.md`](../plan/feature-wake-word-1.md) | None | 🔲 Planned |
+| 9 | In-UI Browser Panel | [`WEBCALL.md`](../assets/archived/complete/WEBCALL.md) | None | ✅ Done |
+| 10 | Ideas Vault | [`IDEAS_TRACKER.md`](../assets/archived/complete/IDEAS_TRACKER.md) | Local JSON file | ✅ Done |
+| 11 | Voice Journal | [`JOURNAL.md`](../assets/archived/complete/JOURNAL.md) | Local JSON files | ✅ Done |
+| 12 | Wikipedia RAG | [`WIKIPEDIA.md`](../assets/archived/complete/WIKIPEDIA.md) | ChromaDB + fastembed | ✅ Done |
+| 13 | Reddit Social Feed | [`feature-reddit-social-1.md`](../assets/archived/feature-reddit-social-1.md) | Reddit JSON API (no auth) | ✅ Done |
+| 14 | YouTube Feed | [`feature-youtube-feed-1.md`](../assets/archived/feature-youtube-feed-1.md) | YouTube Atom RSS (no key) | ✅ Done |
+| 15 | Toolkit Menu | [`feature-toolkit-menu-1.md`](../plan/feature-toolkit-menu-1.md) | None (frontend only) | ✅ Done |
+| 16 | iCloud Calendar | [`CALENDAR.md`](../assets/archived/complete/CALENDAR.md) | CalDAV (stdlib only, Apple ID) | ✅ Done |
+| 17 | Apple Mail Inbox | [`feature-apple-mail-inbox-1.md`](../assets/archived/feature-apple-mail-inbox-1.md) | IMAP (stdlib only, Apple ID) | ✅ Done |
 
 Tools dispatch in priority order — the first matching tool wins; unmatched input falls
 through to the LLM. See [`TRIGGER_PHRASES.md`](./TRIGGER_PHRASES.md) for the full ordering
@@ -66,10 +67,11 @@ reference.
 | 25 | Market / Stocks / Crypto | Checked before News — more specific domain vocabulary |
 | 26 | YouTube feed | Requires **"youtube feed"** — checked before Reddit and News |
 | 27 | Reddit social feed | Requires **"reddit social"** — checked before News |
-| 28 | News | |
-| 29 | Browser — open | Requires **"browser"** keyword; Wikipedia also requires **"browser"** |
-| 30 | Prompt Registry editor | Opens the prompt editor sub-view inside the menu panel |
-| 31 | LLM fallback | Anything unmatched |
+| 28 | Research Papers | Checked before News due to more specific scholarly vocabulary |
+| 29 | News | |
+| 30 | Browser — open | Requires **"browser"** keyword; Wikipedia also requires **"browser"** |
+| 31 | Prompt Registry editor | Opens the prompt editor sub-view inside the menu panel |
+| 32 | LLM fallback | Anything unmatched |
 
 ---
 
