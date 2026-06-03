@@ -1751,9 +1751,22 @@ function initSphere() {
   const canvas = document.getElementById('sphere-canvas');
   if (!canvas) return;
 
-  const RING_SIZE = 210;
+  const DEFAULT_RING_SIZE = 210;
+  function _readRingSize() {
+    const ringWrap = document.querySelector('.ring-wrap');
+    if (ringWrap) {
+      const rect = ringWrap.getBoundingClientRect();
+      if (rect.width > 0) return Math.round(rect.width);
+    }
+    const cssVar = getComputedStyle(document.documentElement).getPropertyValue('--sphere-size');
+    const parsed = parseFloat(cssVar);
+    if (Number.isFinite(parsed) && parsed > 0) return Math.round(parsed);
+    return DEFAULT_RING_SIZE;
+  }
+
+  let _ringSize = _readRingSize();
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-  renderer.setSize(RING_SIZE, RING_SIZE);
+  renderer.setSize(_ringSize, _ringSize);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   // Clear to fully transparent so neither the direct render nor the bloom
   // EffectComposer paints an opaque background. Without this the composer's
@@ -1781,7 +1794,7 @@ function initSphere() {
       composer  = new EffectComposer(renderer);
       composer.addPass(new RenderPass(scene, camera));
       bloomPass = new UnrealBloomPass(
-        new THREE.Vector2(RING_SIZE, RING_SIZE),
+        new THREE.Vector2(_ringSize, _ringSize),
         GLOW_CONFIG.bloomStrengthIdle,
         GLOW_CONFIG.bloomRadius,
         GLOW_CONFIG.bloomThreshold,
@@ -1881,13 +1894,14 @@ function initSphere() {
   function _applyFullscreenView() {
     const ringWrap = document.querySelector('.ring-wrap');
     if (!ringWrap) return;
+    _ringSize = _readRingSize();
     const w = window.innerWidth;
     const h = window.innerHeight;
     const rect = ringWrap.getBoundingClientRect();
     const rcx  = rect.left + rect.width / 2;
     const rcy  = rect.top  + rect.height / 2;
 
-    const ratio = h / RING_SIZE;
+    const ratio = h / _ringSize;
     const vFov  = THREE.MathUtils.radToDeg(
       2 * Math.atan(ratio * Math.tan(THREE.MathUtils.degToRad(_ORIG_FOV) / 2))
     );
@@ -1900,13 +1914,24 @@ function initSphere() {
   }
 
   function _restoreRingView() {
+    _ringSize = _readRingSize();
     camera.clearViewOffset();
     camera.fov    = _ORIG_FOV;
     camera.aspect = 1;
     camera.updateProjectionMatrix();
-    renderer.setSize(RING_SIZE, RING_SIZE);
-    if (_bloomEnabled && composer) composer.setSize(RING_SIZE, RING_SIZE); // TASK-011
+    renderer.setSize(_ringSize, _ringSize);
+    if (_bloomEnabled && composer) composer.setSize(_ringSize, _ringSize); // TASK-011
   }
+
+  function _syncRingRendererSize() {
+    if (_lifecycleStaged) {
+      _applyFullscreenView();
+      return;
+    }
+    _restoreRingView();
+  }
+
+  window.addEventListener('resize', _syncRingRendererSize);
 
 
 

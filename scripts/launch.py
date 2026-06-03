@@ -312,8 +312,9 @@ def _open_browser_when_ready(timeout: int = _UI_READY_TIMEOUT) -> None:
     The UI stays in its blue "INIT" state until the LLM reports ready.
     """
     url = f"http://localhost:{BACKEND_PORT}"
-    deadline = time.time() + timeout
-    while time.time() < deadline and not _shutting_down:
+    start_ts = time.time()
+    warned = False
+    while not _shutting_down:
         try:
             with urllib.request.urlopen(f"{url}/health", timeout=2) as resp:
                 if resp.status == 200:
@@ -322,9 +323,14 @@ def _open_browser_when_ready(timeout: int = _UI_READY_TIMEOUT) -> None:
                     return
         except Exception:
             pass  # backend not up yet — keep polling
-        time.sleep(0.5)
-    if not _shutting_down:
-        _err(f"Backend /health not reachable within {timeout}s — open {url} manually.")
+        elapsed = time.time() - start_ts
+        if not warned and elapsed >= timeout:
+            _err(
+                f"Backend /health still not reachable after {timeout}s. "
+                "Cold-start warm-up may still be running; continuing to wait and auto-open when ready."
+            )
+            warned = True
+        time.sleep(0.5 if not warned else 2.0)
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────

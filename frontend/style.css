@@ -19,6 +19,16 @@
   --g:    #f0f0f0;   /* light grey / near-white */
   --bg:   #0a0a0a;
   --text: #c8c8c8;
+
+  /* Responsive UI scale controls (Issue: core UI too small). */
+  --sphere-size: clamp(250px, 24vmin, 360px);
+  --hdr-system-size: clamp(0.62rem, 0.3vw + 0.56rem, 0.82rem);
+  --hdr-title-size: clamp(1.65rem, 1.1vw + 1.3rem, 2.55rem);
+  --hdr-subtitle-size: clamp(0.58rem, 0.25vw + 0.5rem, 0.8rem);
+  --metric-label-size: clamp(0.58rem, 0.22vw + 0.5rem, 0.74rem);
+  --metric-value-size: clamp(0.86rem, 0.35vw + 0.72rem, 1.15rem);
+  --menu-btn-size: clamp(0.58rem, 0.26vw + 0.5rem, 0.8rem);
+  --menu-btn-height: clamp(22px, 1.1vw + 16px, 30px);
 }
 
 html, body {
@@ -97,19 +107,19 @@ html, body {
 }
 .hdr-system {
   font-family: 'Share Tech Mono', monospace;
-  font-size: 9px; letter-spacing: 4px;
+  font-size: var(--hdr-system-size); letter-spacing: clamp(2px, 0.25vw + 1px, 4px);
   color: rgba(200,200,200,0.3); text-transform: uppercase; margin-bottom: 4px;
 }
 .hdr-name {
-  font-size: 22px; font-weight: 600; letter-spacing: 4px; color: var(--c);
+  font-size: var(--hdr-title-size); font-weight: 600; letter-spacing: clamp(2px, 0.3vw + 1px, 5px); color: var(--c);
   text-shadow: 0 0 28px rgba(200,200,200,0.15), 0 0 64px rgba(200,200,200,0.05);
 }
 .hdr-fullname {
   font-family: 'Share Tech Mono', monospace;
-  font-size: 8px; letter-spacing: 2.5px;
+  font-size: var(--hdr-subtitle-size); letter-spacing: clamp(1px, 0.18vw + 0.8px, 3px);
   color: rgba(200,200,200,0.22); text-transform: uppercase;
 }
-.hdr-stats { display: flex; gap: 20px; align-items: flex-end; }
+.hdr-stats { display: flex; gap: clamp(14px, 1vw + 10px, 28px); align-items: flex-end; }
 .stat { text-align: right; }
 
 /* ── Power button ────────────────────────────────────────────────────────── */
@@ -121,8 +131,8 @@ html, body {
   background: transparent;
   border: 1px solid rgba(200,200,200,0.2);
   color: rgba(200,200,200,0.45);
-  font-size: 9px; letter-spacing: 3px;
-  padding: 3px 7px; height: 20px;
+  font-size: var(--menu-btn-size); letter-spacing: clamp(1.5px, 0.2vw + 1px, 3px);
+  padding: 3px clamp(8px, 0.6vw + 5px, 12px); height: var(--menu-btn-height);
   border-radius: 2px; cursor: pointer;
   font-family: 'Share Tech Mono', monospace;
   transition: color 0.2s, border-color 0.2s, box-shadow 0.2s;
@@ -213,12 +223,12 @@ html, body {
 }
 .stat-lbl {
   font-family: 'Share Tech Mono', monospace;
-  font-size: 8px; letter-spacing: 2px;
+  font-size: var(--metric-label-size); letter-spacing: clamp(1px, 0.12vw + 0.6px, 2px);
   color: rgba(200,200,200,0.25); text-transform: uppercase; margin-bottom: 2px;
 }
 .stat-val {
   font-family: 'Share Tech Mono', monospace;
-  font-size: 12px; color: var(--g);
+  font-size: var(--metric-value-size); color: var(--g);
 }
 
 /* ── Two-column body layout ──────────────────────────────────────────────── */
@@ -546,7 +556,10 @@ html, body {
   position: relative; z-index: 1;
 }
 .ring-wrap {
-  position: relative; width: 210px; height: 210px; margin-bottom: 10px;
+  position: relative;
+  width: var(--sphere-size);
+  height: var(--sphere-size);
+  margin-bottom: clamp(10px, 1.3vmin, 18px);
 }
 
 /* ── Sphere canvas ───────────────────────────────────────────────────────── */
@@ -597,7 +610,7 @@ html, body {
    edge where the canvas ends. */
 .sphere-halo {
   position: absolute;
-  inset: -260px;          /* ~730 px glow field centred on the 210 px ring */
+  inset: calc(var(--sphere-size) * -1.24);
   border-radius: 50%;
   background: radial-gradient(
     circle at 50% 50%,

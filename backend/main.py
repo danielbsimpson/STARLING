@@ -34,6 +34,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+async def _run_non_blocking_startup_warmups() -> None:
+    """Run optional heavy warm-ups in the background after startup is live."""
+    import logging
+    _log = logging.getLogger(__name__)
+    loop = asyncio.get_running_loop()
+
+    try:
+        await asyncio.wait_for(
+            loop.run_in_executor(None, _wiki_load_index),
+            timeout=30.0,
+        )
+        _log.info("Wikipedia: startup warm-up complete")
+    except asyncio.TimeoutError:
+        _log.warning("Wikipedia: startup warm-up timed out (30s) — continuing in background")
+    except Exception as exc:
+        _log.warning(f"Wikipedia: startup warm-up failed (non-fatal) — {exc}")
+
+    try:
+        await asyncio.wait_for(
+            loop.run_in_executor(None, _memory_catchup),
+            timeout=30.0,
+        )
+        _log.info("Memory: startup catch-up complete")
+    except Exception:
+        pass  # best-effort: memory catch-up failure must never block startup
+
 import stt as _stt
 import tts as _tts
 from stt import router as stt_router
@@ -142,33 +169,12 @@ async def startup_event():
     except Exception as exc:
         _log.warning(f"system_state: boot snapshot/inventory failed (non-fatal) \u2014 {exc}")
     try:
-        # Run blocking model load in a thread so it doesn't block the event loop.
-        # The 30-second timeout ensures the server always finishes starting even if
-        # ChromaDB has a stale lock or any other blocking condition occurs.
-        loop = asyncio.get_running_loop()
-        await asyncio.wait_for(
-            loop.run_in_executor(None, _wiki_load_index),
-            timeout=30.0,
-        )
-        _log.info("Wikipedia: startup warm-up complete")
-    except asyncio.TimeoutError:
-        _log.warning("Wikipedia: startup warm-up timed out (30s) — server starting without warm index")
-    except Exception as exc:
-        _log.warning(f"Wikipedia: startup warm-up failed (non-fatal) — {exc}")
-    try:
-        loop = asyncio.get_running_loop()
-        await asyncio.wait_for(
-            loop.run_in_executor(None, _memory_catchup),
-            timeout=30.0,
-        )
-        _log.info("Memory: startup catch-up complete")
-    except Exception:
-        pass  # best-effort: memory catch-up failure must never block startup
-
-    try:
         system_state.mark_boot_complete()
     except Exception as exc:
         _log.warning(f"system_state: mark_boot_complete failed \u2014 {exc}")
+
+    # Keep /health responsive quickly by deferring heavyweight warm-ups.
+    asyncio.create_task(_run_non_blocking_startup_warmups())
 
 
 @app.on_event("shutdown")
