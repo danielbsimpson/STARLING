@@ -176,6 +176,8 @@ and estimated slowdown zones derived from segment-speed heuristics.
 **Close triggers:**
 `"close directions"` · `"close commute"` · `"close drive time"`
 
+![S.T.A.R.L.I.N.G. Directions Panel](../assets/images/commute_example.png)
+
 Configuration (`.env`): `DIRECTIONS_HOME`, `DIRECTIONS_HTTP_TIMEOUT_S`, `DIRECTIONS_CACHE_SECONDS`, `DIRECTIONS_DEFAULT_PROFILE`, `DIRECTIONS_OSRM_FALLBACK`
 
 Implementation guide: `DIRECTIONS.md`
@@ -288,8 +290,8 @@ extracts page text server-side via the backend, and injects it as LLM context so
 ask questions or request summaries about any open page. Supports Wikipedia lookups,
 arbitrary URLs, and DuckDuckGo searches.
 
-**Wikipedia triggers:**  
-`"look up [topic] on Wikipedia"` · `"search Wikipedia for [topic]"` · `"wikipedia about [topic]"` · `"wikipedia on [topic]"`
+**Wikipedia triggers (browser-qualified):**  
+`"browser wikipedia [topic]"` · `"browser window wikipedia [topic]"` · `"search [topic] on Wikipedia in browser"` · `"look up [topic] on Wikipedia in browser"`
 
 **Open URL triggers:**  
 `"open browser https://example.com"` · `"open browser example.com"`
@@ -317,6 +319,8 @@ interviewer mode and read-back / keyword search of saved entries.
 **Read triggers:** `show journal` · `open journal entries` · `journal history` · `read my last journal entry` · `today's journal entries`
 
 **Search triggers:** `search journal for [topic]` · `what did I write about [topic]`
+
+![S.T.A.R.L.I.N.G. Journal Panel](../assets/images/journal_example1.png)
 
 Implementation guide: `JOURNAL.md`
 
@@ -348,7 +352,7 @@ Yes / No confirmation available by voice or click. Confirm state auto-cancels af
 **Open triggers:**  
 `"show tools"` · `"open toolkit"` · `"tool menu"` · `"what tools do you have"` · `"show me your tools"`
 
-![S.T.A.R.L.I.N.G. Toolkit Menu](../assets/images/toolkit_example.png)
+![S.T.A.R.L.I.N.G. Toolkit Menu](../assets/images/menu_example.png)
 
 Implementation guide: `feature-toolkit-menu-1.md`
 
@@ -366,6 +370,8 @@ ready. A settings panel lets you add or remove subreddits at runtime.
 
 **Close triggers:**  
 `"close reddit"` · `"close social"`
+
+![S.T.A.R.L.I.N.G. Reddit Social Feed](../assets/images/reddit_example.png)
 
 Configuration (`.env`): `REDDIT_SUBREDDITS`, `REDDIT_LIMIT_PER_SUB`, `REDDIT_CACHE_SECONDS`, `REDDIT_SORT`
 
@@ -387,6 +393,10 @@ A settings panel lets you add or remove channels at runtime.
 **Close triggers:**  
 `"close youtube"` · `"close feed"`
 
+![S.T.A.R.L.I.N.G. YouTube Feed](../assets/images/youtube_example1.png)
+
+![S.T.A.R.L.I.N.G. YouTube Feed Video Modal](../assets/images/youtube_example2.png)
+
 Configuration (`.env`): `YOUTUBE_CHANNELS`, `YOUTUBE_CACHE_SECONDS`, `YOUTUBE_SYNTHESIS_ENABLED`
 
 Implementation guide: Internal YouTube Feed guide
@@ -405,6 +415,8 @@ Calendar data is disk-cached with a 1-hour TTL.
 
 **Refresh triggers:**  
 `"refresh my calendar"` · `"sync my calendar"` · `"update my calendar"`
+
+![S.T.A.R.L.I.N.G. Calendar Panel](../assets/images/ical_example.png)
 
 Configuration (`.env`): `CALDAV_URL`, `CALDAV_USERNAME`, `CALDAV_PASSWORD`, `CALENDAR_CACHE_SECONDS`
 
@@ -426,6 +438,8 @@ Results are in-memory cached with a 5-minute TTL.
 **Close triggers:**  
 `"close mail"` · `"close email"` · `"exit inbox"` · `"hide mail"`
 
+![S.T.A.R.L.I.N.G. Mail Panel](../assets/images/imail_example.png)
+
 Configuration (`.env`): `IMAP_HOST`, `IMAP_PORT`, `IMAP_USERNAME`, `IMAP_PASSWORD`, `MAIL_MAX_UNREAD`, `MAIL_CACHE_SECONDS`
 
 Implementation guide: `feature-apple-mail-inbox-1.md`
@@ -440,6 +454,8 @@ boot duration, and live GPU/runtime telemetry.
 
 **Voice triggers:**
 `"system status"` · `"what's your status"` · `"how are you running"` · `"are you healthy"` · `"self diagnostic"`
+
+![S.T.A.R.L.I.N.G. System Status Panel](../assets/images/systemStatus_example.png)
 
 Implementation guide: `feature-system-awareness-1.md`
 

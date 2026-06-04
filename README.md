@@ -39,7 +39,7 @@ Speech is transcribed with faster-whisper, reasoned over by a local LLM via llam
 - **RAG memory** — ChromaDB with BM25/vector fusion retrieval; drop `.md`/`.txt` files into `memory/input/` and ingest.
 - **Persistent soul** — an evolving personality file updated by a session-end "dream state" reflection pipeline.
 - **Self-awareness** — boot snapshot, tool inventory, live GPU/process telemetry, and a static system-prompt block so the assistant can describe its own state.
-- **Voice tool kit** — 17 self-contained voice tools (see [Voice Tools](#voice-tools)).
+- **Voice toolkit** — self-contained voice tools that run as pre-LLM dispatch intercepts (see [Voice Tools](#voice-tools)).
 
 ## Requirements
 
@@ -160,6 +160,7 @@ Each tool is a self-contained dispatch intercept — none modify the core chat p
 | 15 | iCloud Calendar | CalDAV (Apple ID) | ✅ |
 | 16 | Apple Mail Inbox | IMAP (Apple ID) | ✅ |
 | 17 | System Awareness | Local introspection | ✅ |
+| 18 | Starling Soul | Local soul store (`backend/memory/soul/`) | ✅ |
 | — | Wake Word & Interrupt | None | 🔲 Planned |
 
 See [`toolkit/README.md`](./toolkit/README.md) for screenshots and the full [trigger phrase reference](./toolkit/TRIGGER_PHRASES.md).
