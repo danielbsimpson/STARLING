@@ -8,16 +8,47 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
 
 def atomic_write_text(path: Path, content: str) -> None:
-    """Write text to `path` atomically via a `.tmp` intermediary."""
+    """Write text to `path` atomically via a unique temp file.
+
+    A fixed `<name>.tmp` file is not safe under concurrent writers and can
+    cause Windows `PermissionError` / partial-write races.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp") if path.suffix else path.with_suffix(".tmp")
-    tmp.write_text(content, encoding="utf-8")
-    os.replace(tmp, path)
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        dir=str(path.parent),
+        text=True,
+    )
+    tmp = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+            f.flush()
+            os.fsync(f.fileno())
+
+        # Transient file locks are common on Windows if another thread/process
+        # has just opened the destination file. Retry briefly before failing.
+        for attempt in range(6):
+            try:
+                os.replace(tmp, path)
+                break
+            except PermissionError:
+                if attempt == 5:
+                    raise
+                time.sleep(0.03 * (attempt + 1))
+    finally:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def atomic_write_json(path: Path, data: Any, *, indent: int = 2) -> None:

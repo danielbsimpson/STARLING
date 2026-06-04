@@ -834,6 +834,7 @@ async def get_portfolio_analysis(force: bool = Query(False)):
         "market_open": market_open,
     }
 
+@router.get("/stocks")
 async def get_stocks():
     """Return live price data grouped by watchlist; backward-compat flat 'tickers' + 'llm_context' included."""
     _t0 = time.time()

@@ -89,6 +89,11 @@ _WIKI_RE = re.compile(
     re.IGNORECASE,
 )
 
+_WIKI_DOMAIN_RE = re.compile(
+    r'^https?://(?:[a-z]{2,3}\.)?wikipedia\.org(?:/|$)',
+    re.IGNORECASE,
+)
+
 
 async def _fetch_wikipedia(lang: str, title: str) -> str:
     """Use the MediaWiki API to fetch plain-text article content.
@@ -120,6 +125,31 @@ async def _fetch_wikipedia(lang: str, title: str) -> str:
     return await asyncio.get_running_loop().run_in_executor(None, _sync)
 
 
+async def _fetch_wikipedia_page_text(url: str) -> tuple[str, str]:
+    """Fetch a Wikipedia page via requests and return extracted text + final URL.
+
+    Wikimedia may reject some clients based on bot policy. For Wikipedia domains,
+    use requests in a worker thread with an identifying User-Agent.
+    """
+
+    def _sync() -> tuple[str, str]:
+        resp = _requests.get(
+            url,
+            headers={
+                'User-Agent': _WIKI_UA,
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Cache-Control': 'no-cache',
+            },
+            timeout=15,
+            allow_redirects=True,
+        )
+        resp.raise_for_status()
+        return _extract_text(resp.text), str(resp.url)
+
+    return await asyncio.get_running_loop().run_in_executor(None, _sync)
+
+
 @router.get('/browser/page-text')
 async def fetch_page_text(url: str):
     """Fetch a URL server-side and return clean page text for LLM context."""
@@ -134,15 +164,17 @@ async def fetch_page_text(url: str):
     })
 
     try:
-        async with httpx.AsyncClient(
-            timeout=15,
-            follow_redirects=True,
-        ) as client:
-            wiki = _WIKI_RE.match(url)
-            if wiki:
-                raw = await _fetch_wikipedia(wiki.group('lang'), wiki.group('title'))
-                final_url = url
-            else:
+        wiki = _WIKI_RE.match(url)
+        if wiki:
+            raw = await _fetch_wikipedia(wiki.group('lang'), wiki.group('title'))
+            final_url = url
+        elif _WIKI_DOMAIN_RE.match(url):
+            raw, final_url = await _fetch_wikipedia_page_text(url)
+        else:
+            async with httpx.AsyncClient(
+                timeout=15,
+                follow_redirects=True,
+            ) as client:
                 resp = await client.get(url, headers=_BROWSER_HEADERS)
                 resp.raise_for_status()
                 raw       = _extract_text(resp.text)

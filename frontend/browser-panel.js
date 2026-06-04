@@ -87,7 +87,8 @@ export function detectBrowserTrigger(transcript) {
   const wikiMatch = t.match(/\bbrowser(?:\s+window)?\s+(?:wikipedia|wiki)\s+(?:(?:for|on|about|search(?:\s+for)?)\s+)?(.+)/i)
                  || t.match(/(?:search|look up|open|find)\s+(.+?)\s+on\s+wikipedia\s+in(?:\s+the)?\s+browser(?:\s+window)?/i)
                  || t.match(/(?:wikipedia|wiki)\s+in(?:\s+the)?\s+browser(?:\s+window)?\s+(?:for|on|about)?\s*(.+)/i)
-                 || t.match(/(?:search|look up)\s+wikipedia\s+in(?:\s+the)?\s+browser(?:\s+window)?\s+(?:for\s+)?(.+)/i);
+                 || t.match(/(?:search|look up)\s+wikipedia\s+in(?:\s+the)?\s+browser(?:\s+window)?\s+(?:for\s+)?(.+)/i)
+                 || t.match(/\bbrowse\s+(?:wikipedia|wiki)\s+(?:(?:for|on|about)\s+)?(.+)/i);
   if (wikiMatch) {
     const topic = (wikiMatch[1] || '').trim();
     if (!topic) return null;
