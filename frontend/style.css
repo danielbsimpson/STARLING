@@ -240,7 +240,7 @@ html, body {
 
 /* ── Panel stack layering (Issue: panel crowding) ────────────────────────── */
 .starling.has-panel-stack .body-cols {
-  overflow: hidden;
+  overflow: visible;
 }
 
 .starling.has-panel-stack .col-left {
@@ -422,7 +422,7 @@ html, body {
   justify-content: flex-start;
   padding-top: 16px;
   transform: none;
-  overflow: hidden;
+  overflow: visible;
 }
 .starling.pres-mode .col-left .ring-section {
   width: auto;
@@ -790,12 +790,6 @@ html, body {
   position: relative; z-index: 1;
   display: flex; flex-direction: column;
   /* no bottom margin — footer lives outside the column */
-}
-/* Fade at top */
-.chat-panel::before {
-  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 28px;
-  background: linear-gradient(to bottom, rgba(10,10,10,0.95), transparent);
-  pointer-events: none; z-index: 2;
 }
 .chat-inner {
   flex: 1; min-height: 0; overflow-y: auto;
@@ -6342,6 +6336,24 @@ a.papers-item-title:hover {
 }
 .starling.wiki-mode .col-left .ring-section {
   width: 100%;
+}
+
+/* Keep Starling's halo unbounded across all toolkit modes so light does not
+   hard-cut at panel column edges. */
+.starling.pres-mode .col-left,
+.starling.weather-mode .col-left,
+.starling.directions-mode .col-left,
+.starling.news-mode .col-left,
+.starling.papers-mode .col-left,
+.starling.reddit-mode .col-left,
+.starling.yt-mode .col-left,
+.starling.mkt-mode .col-left,
+.starling.browser-mode .col-left,
+.starling.cal-mode .col-left,
+.starling.mail-mode .col-left,
+.starling.journal-mode .col-left,
+.starling.wiki-mode .col-left {
+  overflow: visible;
 }
 
 /* ── Wiki panel internal layout ─────────────────────────────────────────── */
