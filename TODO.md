@@ -38,6 +38,7 @@ Feature notes are listed inline below (paths shown as plain text, not links).
 | Voice Shortcuts (Macros) | `Internal spec` | 🔲 Planned | User-definable voice macros that expand a custom trigger phrase into a sequenced multi-step tool action |
 | Apple Health | `Internal spec` | 🔲 Planned | Apple HealthKit ingestion via a macOS Shortcuts bridge — sleep, steps, and heart-rate surfaced in a spoken morning briefing |
 | Siri Shortcuts Bridge | `Internal spec` | 🔲 Planned | macOS Siri Shortcuts / Automator bridge to trigger Starling from iPhone, Apple Watch, or Mac without a wake word |
+| Summary Briefing | `Internal spec` | 🔲 Planned | Unified Summary Briefing panel aggregating Weather, News, Reddit, Calendar, and Mail into one expandable toolkit overview with prompt-library-backed injections |
 
 ---
 
@@ -74,6 +75,16 @@ Feature notes are listed inline below (paths shown as plain text, not links).
 | Starling Soul & Personality File | `Internal archive note` | ✅ Done | Persistent personality file that evolves session-to-session via dream state processing; injected into the system prompt at startup to give Starling continuity across sessions |
 | Centralised Prompt Registry | `Internal archive note` | ✅ Done | Single source of truth for all system prompts and tool-context injections; live UI editor to modify, preview, and save prompt templates without restarting the backend |
 | Episodic Memory | `Internal spec` | 🔲 Planned | Extends RAG to automatically index the voice journal and conversation history into a temporally-aware episodic memory for natural long-term recall |
+| Dream State Toggle | `Internal spec` | 🔲 Planned | Menu-controlled enable/disable switch for Dream State processing; when disabled, no session summaries are generated and no SOUL.md updates are written |
+
+---
+
+## Intelligence & Decision Layer
+
+| Feature | Plan | Status | Description |
+|---|---|---|---|
+| Jev Decision Layer | `Internal spec` | 🔲 Planned | Pluggable, toggleable Jev (System One) decision layer that classifies voice transcripts into tool actions with calibrated confidence — replacing brittle keyword/fuzzy routing when enabled |
+| Jev Memory Classifier | `Internal spec` | 🔲 Planned | Pluggable, toggleable Jev memory-worthiness classifier that reviews conversations in 2–5 exchange chunks during shutdown/idle and gates which content reaches the LLM summarizer for long-term memory |
 
 ---
 
@@ -86,5 +97,17 @@ Feature notes are listed inline below (paths shown as plain text, not links).
 | macOS Apple Silicon (M4) | `Internal spec` | 🔲 Planned | Full compatibility with Apple Silicon Macs (M4 Mac Mini target); Metal GPU acceleration for Whisper and Kokoro; llama-server Metal backend; unified memory VRAM detection |
 | Watchdog Supervisor | `Internal spec` | 🔲 Planned | Keeps the backend running 24/7 on the Mac Mini, auto-restarting it (and llama-server) on crash via launchd |
 | Local Admin Dashboard | `Internal spec` | 🔲 Planned | Lightweight local admin dashboard showing live uptime, memory/CPU usage, the last conversation, and active tools for remote debugging of the 24/7 deployment |
+
+---
+
+## Known Issues
+
+> Tracked in `plan/ISSUES.md` · 🟡 Open · 🔴 Blocking · ✅ Resolved
+
+| Issue | Status | Description |
+|---|---|---|
+| Slow cold-boot startup | 🟡 Open | First boot can take 1–2 minutes; warm restarts are fast. Needs startup timing instrumentation, deferral of non-critical services, and parallelised init to close the cold/warm gap. |
+| Muted sphere intro animation | 🟡 Open | On boot the orb intro appears dulled behind a grey layer with the glow revealing late; audit intro CSS state transitions and sync the glow/bloom compositor with the intro timeline. |
+| News follow-ups re-trigger briefing | 🟡 Open | Conversational follow-ups after a news briefing can re-summarise headlines instead of discussing them; add a post-briefing discussion window and stricter positive/negative intent phrase lists. |
 
 
